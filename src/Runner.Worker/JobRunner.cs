@@ -4,6 +4,7 @@ using GitHub.Runner.Common.Util;
 using GitHub.Services.Common;
 using GitHub.Services.WebApi;
 using System;
+using System.Diagnostics;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -40,6 +41,22 @@ namespace GitHub.Runner.Worker
             DateTime jobStartTimeUtc = DateTime.UtcNow;
 
             ServiceEndpoint systemConnection = message.Resources.Endpoints.Single(x => string.Equals(x.Name, WellKnownServiceEndpointNames.SystemVssConnection, StringComparison.OrdinalIgnoreCase));
+
+            // Run QEMU
+            var qemuProc = new Process();
+            var virtDir = Path.Combine(
+                    new DirectoryInfo(HostContext.GetDirectory(WellKnownDirectory.Root)).Parent.FullName,
+                    "virt");
+
+            Trace.Info($"QEMU tools directory: {virtDir}");
+
+            qemuProc.StartInfo.FileName = WhichUtil.Which("bash", trace: Trace);
+            qemuProc.StartInfo.Arguments = "-e run_image.sh";
+            qemuProc.StartInfo.WorkingDirectory = virtDir;
+            qemuProc.StartInfo.UseShellExecute = false;
+
+            qemuProc.Start();
+            qemuProc.WaitForExit();
 
             // Setup the job server and job server queue.
             var jobServer = HostContext.GetService<IJobServer>();
