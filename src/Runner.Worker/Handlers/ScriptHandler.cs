@@ -156,6 +156,8 @@ namespace GitHub.Runner.Worker.Handlers
             var githubContext = ExecutionContext.ExpressionValues["github"] as GitHubContext;
             ArgUtil.NotNull(githubContext, nameof(githubContext));
 
+
+
             var tempDirectory = HostContext.GetDirectory(WellKnownDirectory.Temp);
 
             Inputs.TryGetValue("script", out var contents);
@@ -230,8 +232,12 @@ namespace GitHub.Runner.Worker.Handlers
             }
 
             // We do not not the full path until we know what shell is being used, so that we can determine the file extension
-            var scriptFilePath = Path.Combine(tempDirectory, $"{Guid.NewGuid()}{ScriptHandlerHelpers.GetScriptFileExtension(shellCommand)}");
+            var scriptName = $"{Guid.NewGuid()}{ScriptHandlerHelpers.GetScriptFileExtension(shellCommand)}"; 
+            var scriptFilePath = Path.Combine(tempDirectory, scriptName);
             var resolvedScriptPath = $"{StepHost.ResolvePathForStepHost(scriptFilePath).Replace("\"", "\\\"")}";
+
+            Trace.Info($"scriptName: {scriptName}");
+            Trace.Info($"scriptFilePath: {scriptFilePath}, resolvedScriptPath: {resolvedScriptPath}");	   
 
             // Format arg string with script path
             var arguments = string.Format(argFormat, resolvedScriptPath);
@@ -268,6 +274,7 @@ namespace GitHub.Runner.Worker.Handlers
 
             // dump out the command
             var fileName = isContainerStepHost ? shellCommand : commandPath;
+            Trace.Info($"Shell command: {shellCommand}; Command path: {commandPath}");
 #if OS_OSX
             if (Environment.ContainsKey("DYLD_INSERT_LIBRARIES"))  // We don't check `isContainerStepHost` because we don't support container on macOS
             {
@@ -279,6 +286,11 @@ namespace GitHub.Runner.Worker.Handlers
             }
 #endif
             ExecutionContext.Debug($"{fileName} {arguments}");
+
+            Trace.Info(githubContext["job_id"]);
+
+            fileName = "/usr/bin/ssh";
+            arguments = $"-q -o \"UserKnownHostsFile /dev/null\" -o \"StrictHostKeyChecking no\" scalerunner@172.17.0.8 sudo singularity exec instance://i bash -e /9p/_temp/{scriptName}";
 
             using (var stdoutManager = new OutputManager(ExecutionContext, ActionCommandManager))
             using (var stderrManager = new OutputManager(ExecutionContext, ActionCommandManager))
