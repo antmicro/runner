@@ -140,6 +140,9 @@ namespace GitHub.Runner.Worker
                         context,
                         message.Workspace);
 
+                    Trace.Info($"Setting job_id in GithubContext to {message.JobId}");
+                    context.SetGitHubContext("job_id", $"{message.JobId}");
+
                     // Set the directory variables
                     context.Debug("Update context data");
                     string _workDirectory = HostContext.GetDirectory(WellKnownDirectory.Work);
