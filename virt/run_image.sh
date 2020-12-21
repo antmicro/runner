@@ -83,8 +83,6 @@ writeSer "sudo singularity instance start -C --overlay /mnt --bind /9p /tmp/cont
 
 readUntilString "instance started successfully"
 
+writeSer "ip route get 1.2.3.4 | awk {'print \$7'} | sudo tee /9p/_temp/ip"
+
 writeSer "exit"
-
-#sleep 0.2
-#echo ifconfig $(ifconfig | head -1 | cut -f 1 -d ":" | cut -f 1 -d " ") | grep inet | head -1 | tr -s " " | cut -f 2 -d ":" | cut -f 1 -d " " | sudo tee /9p/_temp/ip
-
