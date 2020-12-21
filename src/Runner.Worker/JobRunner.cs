@@ -47,6 +47,8 @@ namespace GitHub.Runner.Worker
             var virtDir = Path.Combine(
                     new DirectoryInfo(HostContext.GetDirectory(WellKnownDirectory.Root)).Parent.FullName,
                     "virt");
+            var virtIpPath = Path.Combine(HostContext.GetDirectory(WellKnownDirectory.Work), "ip");
+            string virtIp;
 
             Trace.Info($"QEMU tools directory: {virtDir}");
 
@@ -56,7 +58,19 @@ namespace GitHub.Runner.Worker
             qemuProc.StartInfo.UseShellExecute = false;
 
             qemuProc.Start();
+            Trace.Info($"Started QEMU with PID {qemuProc.Id}");
             qemuProc.WaitForExit();
+            Trace.Info("QEMU is ready.");
+
+            using (StreamReader reader = new StreamReader(new FileStream(virtIpPath, FileMode.Open)))
+            {
+                virtIp = reader.ReadLine();
+            }
+
+            message.Variables["system.qemuDir"] = virtDir;
+            message.Variables["system.qemuIp"] = virtIp;
+
+            Trace.Info($"QEMU IP: {virtIp}");
 
             // Setup the job server and job server queue.
             var jobServer = HostContext.GetService<IJobServer>();

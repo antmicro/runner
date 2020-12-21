@@ -83,6 +83,6 @@ writeSer "sudo singularity instance start -C --overlay /mnt --bind /9p /tmp/cont
 
 readUntilString "instance started successfully"
 
-writeSer "ip route get 1.2.3.4 | awk {'print \$7'} | sudo tee /9p/_temp/ip"
+writeSer "ip route get 1.2.3.4 | awk {'print \$7'} | sudo tee /9p/ip"
 
 writeSer "exit"

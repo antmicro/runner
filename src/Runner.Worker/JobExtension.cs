@@ -143,6 +143,12 @@ namespace GitHub.Runner.Worker
                     Trace.Info($"Setting job_id in GithubContext to {message.JobId}");
                     context.SetGitHubContext("job_id", $"{message.JobId}");
 
+                    Trace.Info($"Setting qemu_dir in GithubContext to {message.Variables["system.qemuDir"].Value}");
+                    context.SetGitHubContext("qemu_dir", $"{message.Variables["system.qemuDir"].Value}");
+
+                    Trace.Info($"Setting qemu_ip in GithubContext to {message.Variables["system.qemuIp"].Value}");
+                    context.SetGitHubContext("qemu_ip", $"{message.Variables["system.qemuIp"].Value}");
+
                     // Set the directory variables
                     context.Debug("Update context data");
                     string _workDirectory = HostContext.GetDirectory(WellKnownDirectory.Work);
