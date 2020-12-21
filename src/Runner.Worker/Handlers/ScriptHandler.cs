@@ -289,8 +289,10 @@ namespace GitHub.Runner.Worker.Handlers
 
             Trace.Info(githubContext["job_id"]);
 
+            var sshIp = githubContext["qemu_ip"];
+
             fileName = "/usr/bin/ssh";
-            arguments = $"-q -o \"UserKnownHostsFile /dev/null\" -o \"StrictHostKeyChecking no\" scalerunner@172.17.0.8 sudo singularity exec instance://i bash -e /9p/_temp/{scriptName}";
+            arguments = $"-q -o \"UserKnownHostsFile /dev/null\" -o \"StrictHostKeyChecking no\" scalerunner@{sshIp} sudo singularity exec instance://i bash -e /9p/_temp/{scriptName}";
 
             using (var stdoutManager = new OutputManager(ExecutionContext, ActionCommandManager))
             using (var stderrManager = new OutputManager(ExecutionContext, ActionCommandManager))
