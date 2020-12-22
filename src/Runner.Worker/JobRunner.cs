@@ -50,7 +50,7 @@ namespace GitHub.Runner.Worker
             var virtIpPath = Path.Combine(HostContext.GetDirectory(WellKnownDirectory.Work), "ip");
             var virtPidPath = Path.Combine(virtDir, "work", "qemu.pid");
             var virtFileReadSuccess = true;
-            string virtIp = "", virtPid = "";
+            string virtIp = "172.17.0.2", virtPid = "";
 
             Trace.Info($"QEMU tools directory: {virtDir}");
 
@@ -66,10 +66,11 @@ namespace GitHub.Runner.Worker
 
             try
             {
-                using (StreamReader reader = new StreamReader(new FileStream(virtIpPath, FileMode.Open)))
-                {
-                    virtIp = reader.ReadLine();
-                }
+                // TODO: IMPLEMENT THIS PROPERLY ONCE MULTITHREADING IS IN PLACE!
+                //using (StreamReader reader = new StreamReader(new FileStream(virtIpPath, FileMode.Open)))
+                //{
+                //    virtIp = reader.ReadLine();
+                //}
 
                 using (StreamReader reader = new StreamReader(new FileStream(virtPidPath, FileMode.Open)))
                 {
@@ -82,6 +83,17 @@ namespace GitHub.Runner.Worker
                 Trace.Error(e.ToString());
                 virtFileReadSuccess = false;
 
+            }
+
+            if (virtIp == "")
+            {
+                Trace.Error("virtIp is an empty string!");
+                
+            }
+
+            if (virtPid == "")
+            {
+                Trace.Error("virtPid is an empty string!");
             }
 
             message.Variables["system.qemuDir"] = virtDir;
