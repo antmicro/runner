@@ -30,3 +30,5 @@ src/Runner.Sdk/BuildConstants.cs
 #virt work
 virt/work/*
 !virt/work/.gitkeep
+
+**/*.swp
