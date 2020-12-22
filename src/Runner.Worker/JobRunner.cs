@@ -48,7 +48,9 @@ namespace GitHub.Runner.Worker
                     new DirectoryInfo(HostContext.GetDirectory(WellKnownDirectory.Root)).Parent.FullName,
                     "virt");
             var virtIpPath = Path.Combine(HostContext.GetDirectory(WellKnownDirectory.Work), "ip");
-            string virtIp;
+            var virtPidPath = Path.Combine(virtDir, "work", "qemu.pid");
+            var virtFileReadSuccess = true;
+            string virtIp = "", virtPid = "";
 
             Trace.Info($"QEMU tools directory: {virtDir}");
 
@@ -58,13 +60,28 @@ namespace GitHub.Runner.Worker
             qemuProc.StartInfo.UseShellExecute = false;
 
             qemuProc.Start();
-            Trace.Info($"Started QEMU with PID {qemuProc.Id}");
+            Trace.Info($"Starting QEMU with start script PID {qemuProc.Id}");
             qemuProc.WaitForExit();
             Trace.Info("QEMU is ready.");
 
-            using (StreamReader reader = new StreamReader(new FileStream(virtIpPath, FileMode.Open)))
+            try
             {
-                virtIp = reader.ReadLine();
+                using (StreamReader reader = new StreamReader(new FileStream(virtIpPath, FileMode.Open)))
+                {
+                    virtIp = reader.ReadLine();
+                }
+
+                using (StreamReader reader = new StreamReader(new FileStream(virtPidPath, FileMode.Open)))
+                {
+                    virtPid = reader.ReadLine();
+                }
+            }
+            catch (IOException e)
+            {
+                Trace.Error("Reading QEMU work files failed, consult the exception below.");
+                Trace.Error(e.ToString());
+                virtFileReadSuccess = false;
+
             }
 
             message.Variables["system.qemuDir"] = virtDir;
@@ -96,6 +113,12 @@ namespace GitHub.Runner.Worker
                 Trace.Info("Starting the job execution context.");
                 jobContext.Start();
                 var githubContext = jobContext.ExpressionValues["github"] as GitHubContext;
+
+                if (!virtFileReadSuccess)
+                {
+                    jobContext.Error("Starting QEMU failed!");
+                    return await CompleteJobAsync(jobServer, jobContext, message, TaskResult.Failed);
+                }
 
                 if (!JobPassesSecurityRestrictions(jobContext))
                 {
@@ -219,11 +242,22 @@ namespace GitHub.Runner.Worker
             }
             finally
             {
+                Trace.Info("Entering finally block.");
                 if (runnerShutdownRegistration != null)
                 {
                     runnerShutdownRegistration.Value.Dispose();
                     runnerShutdownRegistration = null;
                 }
+
+                var killProc = new Process();
+                killProc.StartInfo.FileName = WhichUtil.Which("kill", trace: Trace);
+                killProc.StartInfo.Arguments = virtPid;
+                killProc.StartInfo.WorkingDirectory = virtDir;
+                killProc.StartInfo.UseShellExecute = false;
+
+                Trace.Info($"Killing QEMU with PID {virtPid}");
+                killProc.Start();
+                killProc.WaitForExit();
 
                 await ShutdownQueue(throwOnFailure: false);
             }
