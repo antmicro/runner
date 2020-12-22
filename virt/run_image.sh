@@ -15,8 +15,11 @@ RANDOM_MAC=$(printf '00-60-2F-%02X-%02X-%02X\n' $((RANDOM%256)) $((RANDOM%256)) 
 SHARE_PATH=$(realpath ../_layout/_work/)
 
 Q=$WORKDIR/qemu
+Q2=$WORKDIR/qemu_mon
 SIN=$Q.in
 SOUT=$Q.out
+MIN=$Q2.in
+MOUT=$Q2.out
 
 readUntilString() {
 	echo "Reading serial until: $1"
@@ -50,7 +53,7 @@ mkdir -p $SHARE_PATH
 
 fallocate -l $OVERLAY_SIZE $OVERLAY_IMG
 
-mkfifo $SIN $SOUT || true
+mkfifo $SIN $SOUT $MIN $MOUT || true
 
 qemu-system-x86_64 \
 	-kernel $WORKDIR/bzImage-2020-12-17--14-22-23 \
@@ -67,6 +70,7 @@ qemu-system-x86_64 \
 	-fsdev local,id=share_dev,path=$SHARE_PATH,security_model=none \
 	-device virtio-9p-pci,fsdev=share_dev,mount_tag=share_mount \
 	-serial pipe:$Q \
+	-monitor pipe:$Q2 \
 	-pidfile $Q.pid \
 	-display none \
 	-daemonize \
