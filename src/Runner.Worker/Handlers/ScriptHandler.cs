@@ -307,15 +307,16 @@ namespace GitHub.Runner.Worker.Handlers
                 StepHost.ErrorDataReceived += stderrManager.OnDataReceived;
 
                 var input = Channel.CreateBounded<string>(new BoundedChannelOptions(1) { SingleReader = true, SingleWriter = true });
+                string exportStanzas = "";
 
                 foreach (var e in Environment)                 
                 {
-                    var exportStr = $"export {e.Key}={e.Value}";
+                    var exportStr = $"export {e.Key}={e.Value};";
                     Trace.Info(exportStr);
-                    input.Writer.TryWrite(exportStr);
+                    exportStanzas += exportStr;
                 }
 
-                input.Writer.TryWrite(contents);
+                input.Writer.TryWrite(exportStanzas+contents);
 
                 StepHost.StandardInChannel = input;
 
