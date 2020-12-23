@@ -21,6 +21,8 @@ namespace GitHub.Runner.Worker.Handlers
         event EventHandler<ProcessDataReceivedEventArgs> OutputDataReceived;
         event EventHandler<ProcessDataReceivedEventArgs> ErrorDataReceived;
 
+        public Channel<string> StandardInChannel { get; set; }
+
         string ResolvePathForStepHost(string path);
 
         Task<string> DetermineNodeRuntimeVersion(IExecutionContext executionContext);
@@ -52,6 +54,8 @@ namespace GitHub.Runner.Worker.Handlers
     {
         public event EventHandler<ProcessDataReceivedEventArgs> OutputDataReceived;
         public event EventHandler<ProcessDataReceivedEventArgs> ErrorDataReceived;
+
+        public Channel<string> StandardInChannel { get; set; }
 
         public string ResolvePathForStepHost(string path)
         {
@@ -85,7 +89,7 @@ namespace GitHub.Runner.Worker.Handlers
                                                          requireExitCodeZero: requireExitCodeZero,
                                                          outputEncoding: outputEncoding,
                                                          killProcessOnCancel: killProcessOnCancel,
-                                                         redirectStandardIn: null,
+                                                         redirectStandardIn: StandardInChannel,
                                                          inheritConsoleHandler: inheritConsoleHandler,
                                                          cancellationToken: cancellationToken);
             }
@@ -98,6 +102,8 @@ namespace GitHub.Runner.Worker.Handlers
         public string PrependPath { get; set; }
         public event EventHandler<ProcessDataReceivedEventArgs> OutputDataReceived;
         public event EventHandler<ProcessDataReceivedEventArgs> ErrorDataReceived;
+
+        public Channel<string> StandardInChannel { get; set; }
 
         public string ResolvePathForStepHost(string path)
         {

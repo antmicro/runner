@@ -2,6 +2,7 @@
 using System.IO;
 using System.Text;
 using System.Threading.Tasks;
+using System.Threading.Channels;
 using System.Linq;
 using GitHub.DistributedTask.Pipelines.ContextData;
 using GitHub.Runner.Common;
@@ -175,6 +176,8 @@ namespace GitHub.Runner.Worker.Handlers
                 }
             }
             var workspaceDir = githubContext["workspace"] as StringContextData;
+            Trace.Info($"Workspace from githubContext is {workspaceDir}");
+            Trace.Info($"Working directory from Inputs is {workingDirectory}");
             workingDirectory = Path.Combine(workspaceDir, workingDirectory ?? string.Empty);
 
             string shell = null;
@@ -254,8 +257,11 @@ namespace GitHub.Runner.Worker.Handlers
             // Don't add a BOM. It causes the script to fail on some operating systems (e.g. on Ubuntu 14).
             var encoding = new UTF8Encoding(false);
 #endif
-            // Script is written to local path (ie host) but executed relative to the StepHost, which may be a container
-            File.WriteAllText(scriptFilePath, contents, encoding);
+            // Script is written to local path (ie host) but executed relative to the StepHost, which may be a containe
+            if (isContainerStepHost)
+            {
+                File.WriteAllText(scriptFilePath, contents, encoding);
+            }
 
             // Prepend PATH
             AddPrependPathToEnvironment();
@@ -292,13 +298,18 @@ namespace GitHub.Runner.Worker.Handlers
             var sshIp = githubContext["qemu_ip"];
 
             fileName = "/usr/bin/ssh";
-            arguments = $"-q -o \"UserKnownHostsFile /dev/null\" -o \"StrictHostKeyChecking no\" scalerunner@{sshIp} sudo singularity exec instance://i bash -e /9p/_temp/{scriptName}";
+            arguments = $"-q -o \"UserKnownHostsFile /dev/null\" -o \"StrictHostKeyChecking no\" scalerunner@{sshIp} sudo singularity exec instance://i bash";
 
             using (var stdoutManager = new OutputManager(ExecutionContext, ActionCommandManager))
             using (var stderrManager = new OutputManager(ExecutionContext, ActionCommandManager))
             {
                 StepHost.OutputDataReceived += stdoutManager.OnDataReceived;
                 StepHost.ErrorDataReceived += stderrManager.OnDataReceived;
+
+                var input = Channel.CreateBounded<string>(new BoundedChannelOptions(1) { SingleReader = true, SingleWriter = true });
+                input.Writer.TryWrite(contents);
+
+                StepHost.StandardInChannel = input;
 
                 // Execute
                 int exitCode = await StepHost.ExecuteAsync(workingDirectory: StepHost.ResolvePathForStepHost(workingDirectory),
@@ -317,6 +328,8 @@ namespace GitHub.Runner.Worker.Handlers
                     ExecutionContext.Error($"Process completed with exit code {exitCode}.");
                     ExecutionContext.Result = TaskResult.Failed;
                 }
+
+                StepHost.StandardInChannel = null;
             }
         }
     }
