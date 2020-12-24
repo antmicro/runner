@@ -1,6 +1,7 @@
 ﻿using System;
 using System.IO;
 using System.Text;
+using System.Collections.Generic;
 using System.Threading.Tasks;
 using System.Threading.Channels;
 using System.Linq;
@@ -314,12 +315,20 @@ namespace GitHub.Runner.Worker.Handlers
                 var input = Channel.CreateBounded<string>(new BoundedChannelOptions(1) { SingleReader = true, SingleWriter = true });
                 string exportStanzas = $"cd {changeContainerDir};";
 
+                List<string> ignoreEnv = new List<string> 
+                        { "GITHUB_WORKSPACE", "GITHUB_PATH", "RUNNER_TEMP", "GITHUB_EVENT_PATH", "RUNNER_TOOL_CACHE", "RUNNER_WORKSPACE", "GITHUB_ENV" };
+
                 foreach (var e in Environment)                 
                 {
-                    var exportStr = $"export {e.Key}={e.Value};";
-                    Trace.Info(exportStr);
-                    exportStanzas += exportStr;
+                    if (!ignoreEnv.Contains(e.Key))
+                    {
+                        var exportStr = $"export {e.Key}={e.Value};";
+                        Trace.Info(exportStr);
+                        exportStanzas += exportStr;
+                    }
                 }
+
+                exportStanzas += $"export GITHUB_WORKSPACE={changeContainerDir};";
 
                 input.Writer.TryWrite(exportStanzas+contents);
 
