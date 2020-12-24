@@ -12,7 +12,7 @@ OVERLAY_SIZE=$((FREE_SPACE / 2))
 DUMMY_DISK=$WORKDIR/small.img
 SSH_PUB_KEY=$HOME/.ssh/id_rsa
 RANDOM_MAC=$(printf '00-60-2F-%02X-%02X-%02X\n' $((RANDOM%256)) $((RANDOM%256)) $((RANDOM%256)))
-SHARE_PATH=$(realpath ../_layout/_work/)
+SHARE_PATH=$(realpath ../_layout/_work/)/$1
 
 Q=$WORKDIR/qemu
 Q2=$WORKDIR/qemu_mon

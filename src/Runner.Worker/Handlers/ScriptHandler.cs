@@ -178,6 +178,7 @@ namespace GitHub.Runner.Worker.Handlers
             var workspaceDir = githubContext["workspace"] as StringContextData;
             Trace.Info($"Workspace from githubContext is {workspaceDir}");
             Trace.Info($"Working directory from Inputs is {workingDirectory}");
+            var workingDirectoryOriginal = $"{workingDirectory}";
             workingDirectory = Path.Combine(workspaceDir, workingDirectory ?? string.Empty);
 
             string shell = null;
@@ -300,6 +301,10 @@ namespace GitHub.Runner.Worker.Handlers
             fileName = "/usr/bin/ssh";
             arguments = $"-q -o \"UserKnownHostsFile /dev/null\" -o \"StrictHostKeyChecking no\" scalerunner@{sshIp} sudo singularity exec -e instance://i bash";
 
+            var changeContainerDir = Path.Combine("/9p", 
+                    workingDirectoryOriginal ?? string.Empty);
+            Trace.Info($"Singularity directory: {changeContainerDir}");
+
             using (var stdoutManager = new OutputManager(ExecutionContext, ActionCommandManager))
             using (var stderrManager = new OutputManager(ExecutionContext, ActionCommandManager))
             {
@@ -307,7 +312,7 @@ namespace GitHub.Runner.Worker.Handlers
                 StepHost.ErrorDataReceived += stderrManager.OnDataReceived;
 
                 var input = Channel.CreateBounded<string>(new BoundedChannelOptions(1) { SingleReader = true, SingleWriter = true });
-                string exportStanzas = "";
+                string exportStanzas = $"cd {changeContainerDir};";
 
                 foreach (var e in Environment)                 
                 {

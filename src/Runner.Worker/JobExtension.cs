@@ -148,6 +148,9 @@ namespace GitHub.Runner.Worker
 
                     Trace.Info($"Setting qemu_ip in GithubContext to {message.Variables["system.qemuIp"].Value}");
                     context.SetGitHubContext("qemu_ip", $"{message.Variables["system.qemuIp"].Value}");
+                    
+                    Trace.Info($"Setting container_workspace in GithubContext to {message.Variables["system.containerWorkspace"].Value}");
+                    context.SetGitHubContext("container_workspace", $"{message.Variables["system.containerWorkspace"].Value}");
 
                     // Set the directory variables
                     context.Debug("Update context data");
