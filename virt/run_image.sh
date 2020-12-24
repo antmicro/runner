@@ -82,7 +82,7 @@ readUntilString "Welcome to Buildroot"
 writeSer "scalerunner"
 writeSer "scalerunner"
 writeSer "sudo bash -c \"mke2fs /dev/sdd;mount /dev/sdd /mnt;mkdir /9p;mount -t 9p -o trans=virtio,version=9p2000.L share_mount /9p\""
-writeSer "sudo singularity instance start -C --overlay /mnt --bind /9p /tmp/container.sif i"
+writeSer "sudo singularity instance start -C -e --overlay /mnt --bind /9p /tmp/container.sif i"
 
 readUntilString "instance started successfully"
 

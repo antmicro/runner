@@ -298,7 +298,7 @@ namespace GitHub.Runner.Worker.Handlers
             var sshIp = githubContext["qemu_ip"];
 
             fileName = "/usr/bin/ssh";
-            arguments = $"-q -o \"UserKnownHostsFile /dev/null\" -o \"StrictHostKeyChecking no\" scalerunner@{sshIp} sudo singularity exec instance://i bash";
+            arguments = $"-q -o \"UserKnownHostsFile /dev/null\" -o \"StrictHostKeyChecking no\" scalerunner@{sshIp} sudo singularity exec -e instance://i bash";
 
             using (var stdoutManager = new OutputManager(ExecutionContext, ActionCommandManager))
             using (var stderrManager = new OutputManager(ExecutionContext, ActionCommandManager))
