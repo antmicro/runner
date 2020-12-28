@@ -56,7 +56,7 @@ fallocate -l $OVERLAY_SIZE $OVERLAY_IMG
 mkfifo $SIN $SOUT $MIN $MOUT || true
 
 qemu-system-x86_64 \
-	-kernel $WORKDIR/bzImage-2020-12-17--14-22-23 \
+	-kernel $WORKDIR/bzImage-2020-12-24--22-09-40 \
 	-m 4G -append "console=ttyS0" -enable-kvm -smp $(nproc) -cpu host \
 	-drive format=raw,file=$SIF_FILE \
 	-drive format=raw,file.filename=$DUMMY_DISK,file.locking=off,file.driver=file \
@@ -82,10 +82,10 @@ readUntilString "Welcome to Buildroot"
 writeSer "scalerunner"
 writeSer "scalerunner"
 writeSer "sudo bash -c \"mke2fs /dev/sdd;mount /dev/sdd /mnt;mkdir /9p;mount -t 9p -o trans=virtio,version=9p2000.L share_mount /9p\""
-writeSer "sudo singularity instance start -C -e --overlay /mnt --bind /9p /tmp/container.sif i"
+writeSer "sudo singularity instance start -C -e --dns 8.8.8.8 --overlay /mnt --bind /9p /tmp/container.sif i"
 
 readUntilString "instance started successfully"
 
-writeSer "ip route get 1.2.3.4 | awk {'print \$7'} | sudo tee /9p/ip"
+#writeSer "ip route get 1.2.3.4 | awk {'print \$7'} | sudo tee /9p/ip"
 
 writeSer "exit"
