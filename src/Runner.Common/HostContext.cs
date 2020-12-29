@@ -278,36 +278,37 @@ namespace GitHub.Runner.Common
         public string GetConfigFile(WellKnownConfigFile configFile)
         {
             string path;
+            string instanceNumber = Environment.GetEnvironmentVariable("GH_RUNNER_NUM");
             switch (configFile)
             {
                 case WellKnownConfigFile.Runner:
                     path = Path.Combine(
                         GetDirectory(WellKnownDirectory.Root),
-                        ".runner");
+                        $".runner_{instanceNumber}");
                     break;
 
                 case WellKnownConfigFile.Credentials:
                     path = Path.Combine(
                         GetDirectory(WellKnownDirectory.Root),
-                        ".credentials");
+                        $".credentials_{instanceNumber}");
                     break;
 
                 case WellKnownConfigFile.MigratedCredentials:
                     path = Path.Combine(
                         GetDirectory(WellKnownDirectory.Root),
-                        ".credentials_migrated");
+                        $".credentials_migrated_{instanceNumber}");
                     break;
 
                 case WellKnownConfigFile.RSACredentials:
                     path = Path.Combine(
                         GetDirectory(WellKnownDirectory.Root),
-                        ".credentials_rsaparams");
+                        $".credentials_rsaparams_{instanceNumber}");
                     break;
 
                 case WellKnownConfigFile.Service:
                     path = Path.Combine(
                         GetDirectory(WellKnownDirectory.Root),
-                        ".service");
+                        $".service_{instanceNumber}");
                     break;
 
                 case WellKnownConfigFile.CredentialStore:
@@ -318,26 +319,26 @@ namespace GitHub.Runner.Common
 #else
                     path = Path.Combine(
                         GetDirectory(WellKnownDirectory.Root),
-                        ".credential_store");
+                        $".credential_store_{instanceNumber}");
 #endif
                     break;
 
                 case WellKnownConfigFile.Certificates:
                     path = Path.Combine(
                         GetDirectory(WellKnownDirectory.Root),
-                        ".certificates");
+                        $".certificates_{instanceNumber}");
                     break;
 
                 case WellKnownConfigFile.Options:
                     path = Path.Combine(
                         GetDirectory(WellKnownDirectory.Root),
-                        ".options");
+                        $".options_{instanceNumber}");
                     break;
 
                 case WellKnownConfigFile.SetupInfo:
                     path = Path.Combine(
                         GetDirectory(WellKnownDirectory.Root),
-                        ".setup_info");
+                        $".setup_info_{instanceNumber}");
                     break;
 
                 default:
