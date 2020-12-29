@@ -1,6 +1,7 @@
 using GitHub.Runner.Listener.Configuration;
 using GitHub.Runner.Common.Util;
 using System;
+using System.IO;
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
@@ -16,6 +17,7 @@ namespace GitHub.Runner.Listener
         private readonly CommandLineParser _parser;
         private readonly IPromptManager _promptManager;
         private readonly Tracing _trace;
+        private readonly string instanceNumber = Environment.GetEnvironmentVariable("GH_RUNNER_NUM");
 
         private readonly string[] validCommands =
         {
@@ -166,7 +168,7 @@ namespace GitHub.Runner.Listener
             return GetArgOrPrompt(
                 name: Constants.Runner.CommandLine.Args.Name,
                 description: "Enter the name of runner:",
-                defaultValue: Environment.MachineName ?? "myrunner",
+                defaultValue: $"{Environment.MachineName}_{instanceNumber}" ?? "myrunner",
                 validator: Validators.NonEmptyValidator);
         }
 
@@ -230,7 +232,7 @@ namespace GitHub.Runner.Listener
         public string GetWindowsLogonAccount(string defaultValue, string descriptionMsg)
         {
             return GetArgOrPrompt(
-                name: Constants.Runner.CommandLine.Args.WindowsLogonAccount,
+                    name: Constants.Runner.CommandLine.Args.WindowsLogonAccount,
                 description: descriptionMsg,
                 defaultValue: defaultValue,
                 validator: Validators.NTAccountValidator);
@@ -250,7 +252,7 @@ namespace GitHub.Runner.Listener
             return GetArgOrPrompt(
                 name: Constants.Runner.CommandLine.Args.Work,
                 description: "Enter name of work folder:",
-                defaultValue: Constants.Path.WorkDirectory,
+                defaultValue: $"{Constants.Path.WorkDirectory}_{instanceNumber}",
                 validator: Validators.NonEmptyValidator);
         }
 
