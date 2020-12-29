@@ -417,11 +417,14 @@ namespace GitHub.Runner.Listener
                                 HostContext.WritePerfCounter("StartingWorkerProcess");
                                 var assemblyDirectory = HostContext.GetDirectory(WellKnownDirectory.Bin);
                                 string workerFileName = Path.Combine(assemblyDirectory, _workerProcessName);
+                                var workerEnv = new Dictionary<string, string>(){
+                                    {"GH_RUNNER_NUM", Environment.GetEnvironmentVariable("GH_RUNNER_NUM")},
+                                };
                                 workerProcessTask = processInvoker.ExecuteAsync(
                                     workingDirectory: assemblyDirectory,
                                     fileName: workerFileName,
                                     arguments: "spawnclient " + pipeHandleOut + " " + pipeHandleIn,
-                                    environment: null,
+                                    environment: workerEnv,
                                     requireExitCodeZero: false,
                                     outputEncoding: null,
                                     killProcessOnCancel: true,

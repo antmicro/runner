@@ -45,14 +45,16 @@ namespace GitHub.Runner.Worker
 
             // Run QEMU
             var qemuProc = new Process();
+            var instanceNumber = Environment.GetEnvironmentVariable("GH_RUNNER_NUM");
             var virtDir = Path.Combine(
                     new DirectoryInfo(HostContext.GetDirectory(WellKnownDirectory.Root)).Parent.FullName,
                     "virt");
-            var virtIpPath = Path.Combine(HostContext.GetDirectory(WellKnownDirectory.Work), "ip");
-            var virtPidPath = Path.Combine(virtDir, "work", "qemu.pid");
+            var virtPidPath = Path.Combine(virtDir, "work", $"{instanceNumber}_qemu.pid");
             var virtFileReadSuccess = true;
             var ghJson = message.ContextData["github"].ToJToken();
-            string virtIp = "172.17.0.2", virtPid = "";
+            string virtIp = $"172.17.{instanceNumber}.2", virtPid = "";
+
+            Trace.Info($"Runner instance: {instanceNumber}");
 
             Trace.Info($"QEMU tools directory: {virtDir}");
 
@@ -70,7 +72,7 @@ namespace GitHub.Runner.Worker
             Trace.Info($"WorkspaceDirectory: {WorkspaceDirectory}");
 
             qemuProc.StartInfo.FileName = WhichUtil.Which("bash", trace: Trace);
-            qemuProc.StartInfo.Arguments = $"-e run_image.sh {WorkspaceDirectory}";
+            qemuProc.StartInfo.Arguments = $"-e run_image.sh -n {instanceNumber} -r {WorkspaceDirectory}";
             qemuProc.StartInfo.WorkingDirectory = virtDir;
             qemuProc.StartInfo.UseShellExecute = false;
 
@@ -81,12 +83,6 @@ namespace GitHub.Runner.Worker
 
             try
             {
-                // TODO: IMPLEMENT THIS PROPERLY ONCE MULTITHREADING IS IN PLACE!
-                //using (StreamReader reader = new StreamReader(new FileStream(virtIpPath, FileMode.Open)))
-                //{
-                //    virtIp = reader.ReadLine();
-                //}
-
                 using (StreamReader reader = new StreamReader(new FileStream(virtPidPath, FileMode.Open)))
                 {
                     virtPid = reader.ReadLine();
