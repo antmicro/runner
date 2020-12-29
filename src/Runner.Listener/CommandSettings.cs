@@ -165,11 +165,7 @@ namespace GitHub.Runner.Listener
 
         public string GetRunnerName()
         {
-            return GetArgOrPrompt(
-                name: Constants.Runner.CommandLine.Args.Name,
-                description: "Enter the name of runner:",
-                defaultValue: $"{Environment.MachineName}_{instanceNumber}" ?? "myrunner",
-                validator: Validators.NonEmptyValidator);
+            return $"{Environment.MachineName}_{instanceNumber}";
         }
 
         public string GetRunnerGroupName(string defaultPoolName = null)
@@ -249,11 +245,7 @@ namespace GitHub.Runner.Listener
 
         public string GetWork()
         {
-            return GetArgOrPrompt(
-                name: Constants.Runner.CommandLine.Args.Work,
-                description: "Enter name of work folder:",
-                defaultValue: $"{Constants.Path.WorkDirectory}_{instanceNumber}",
-                validator: Validators.NonEmptyValidator);
+            return $"{Constants.Path.WorkDirectory}_{instanceNumber}";
         }
 
         public string GetMonitorSocketAddress()
