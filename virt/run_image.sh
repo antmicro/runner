@@ -4,12 +4,21 @@ set -e
 
 cd $(dirname $0)
 
-if [ -z "$1" ]
-then
-    echo "No argument supplied!"
-fi
-
-PREFIX=$1
+while getopts ":n:r:" o; do
+    case "${o}" in
+        n)
+            PREFIX=${OPTARG}
+            ;;
+        r)
+            SHARE_SUFFIX=${OPTARG}
+            ;;
+        *)
+            echo "Provide all arguments!"
+            exit 1
+            ;;
+    esac
+done
+shift $((OPTIND-1))
 
 WORKDIR=$(realpath work)
 OVERLAY_IMG=$WORKDIR/${PREFIX}_overlay.img
@@ -18,7 +27,7 @@ FREE_SPACE=$(df -B1 . | tail -n +2 | awk '{ print $4 "\t" }')
 OVERLAY_SIZE=5G
 DUMMY_DISK=$WORKDIR/small.img
 SSH_PUB_KEY=$HOME/.ssh/id_rsa
-SHARE_PATH=$(realpath ../_layout/_work/)/$1
+SHARE_PATH=$(realpath ../_layout)/_work_${PREFIX}/${SHARE_SUFFIX}
 
 TAP=tap${PREFIX}
 
@@ -28,6 +37,9 @@ SIN=$Q.in
 SOUT=$Q.out
 MIN=$Q2.in
 MOUT=$Q2.out
+
+echo "Instance number:  ${PREFIX}"
+echo "Share path:       ${SHARE_PATH}"
 
 readUntilString() {
 	echo "Reading serial until: $1"
