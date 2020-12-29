@@ -137,10 +137,7 @@ namespace GitHub.Runner.Listener
         //
         public bool GetReplace()
         {
-            return TestFlagOrPrompt(
-                name: Constants.Runner.CommandLine.Flags.Replace,
-                description: "Would you like to replace the existing runner? (Y/N)",
-                defaultValue: false);
+            return true;
         }
 
         public bool GetRunAsService()
