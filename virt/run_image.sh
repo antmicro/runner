@@ -4,18 +4,26 @@ set -e
 
 cd $(dirname $0)
 
+if [ -z "$1" ]
+then
+    echo "No argument supplied!"
+fi
+
+PREFIX=$1
+
 WORKDIR=$(realpath work)
-OVERLAY_IMG=$WORKDIR/overlay.img
+OVERLAY_IMG=$WORKDIR/${PREFIX}_overlay.img
 SIF_FILE=$WORKDIR/debian10.sif
 FREE_SPACE=$(df -B1 . | tail -n +2 | awk '{ print $4 "\t" }')
-OVERLAY_SIZE=$((FREE_SPACE / 2))
+OVERLAY_SIZE=5G
 DUMMY_DISK=$WORKDIR/small.img
 SSH_PUB_KEY=$HOME/.ssh/id_rsa
-RANDOM_MAC=$(printf '00-60-2F-%02X-%02X-%02X\n' $((RANDOM%256)) $((RANDOM%256)) $((RANDOM%256)))
 SHARE_PATH=$(realpath ../_layout/_work/)/$1
 
-Q=$WORKDIR/qemu
-Q2=$WORKDIR/qemu_mon
+TAP=tap${PREFIX}
+
+Q=$WORKDIR/${PREFIX}_qemu
+Q2=$WORKDIR/${PREFIX}_qemu_mon
 SIN=$Q.in
 SOUT=$Q.out
 MIN=$Q2.in
@@ -58,11 +66,11 @@ mkfifo $SIN $SOUT $MIN $MOUT || true
 qemu-system-x86_64 \
 	-kernel $WORKDIR/bzImage-2020-12-24--22-09-40 \
 	-m 4G -append "console=ttyS0" -enable-kvm -smp $(nproc) -cpu host \
-	-drive format=raw,file=$SIF_FILE \
+	-drive format=raw,file.filename=$SIF_FILE,file.locking=off,file.driver=file \
 	-drive format=raw,file.filename=$DUMMY_DISK,file.locking=off,file.driver=file \
 	-drive format=raw,file.filename=$DUMMY_DISK,file.locking=off,file.driver=file \
 	-drive format=raw,file=$OVERLAY_IMG \
-	-nic tap,ifname=tap0,script=no,downscript=no,model=virtio-net-pci \
+	-nic tap,ifname=$TAP,script=no,downscript=no,model=virtio-net-pci \
 	-smbios type=1,manufacturer=Antmicro,product="Antmicro Compute Engine",version="" \
 	-smbios type=2,manufacturer=Antmicro,product="Antmicro Compute Engine",version="" \
 	-smbios type=11,value="set_hostname scalenode-github" \
