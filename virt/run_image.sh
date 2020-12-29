@@ -66,9 +66,9 @@ mkfifo $SIN $SOUT $MIN $MOUT || true
 qemu-system-x86_64 \
 	-kernel $WORKDIR/bzImage-2020-12-24--22-09-40 \
 	-m 4G -append "console=ttyS0" -enable-kvm -smp $(nproc) -cpu host \
-	-drive format=raw,file.filename=$SIF_FILE,file.locking=off,file.driver=file \
-	-drive format=raw,file.filename=$DUMMY_DISK,file.locking=off,file.driver=file \
-	-drive format=raw,file.filename=$DUMMY_DISK,file.locking=off,file.driver=file \
+	-drive format=raw,file.filename=$SIF_FILE,file.locking=off,file.driver=file,snapshot=on \
+	-drive format=raw,file.filename=$DUMMY_DISK,file.locking=off,file.driver=file,snapshot=on \
+	-drive format=raw,file.filename=$DUMMY_DISK,file.locking=off,file.driver=file,snapshot=on \
 	-drive format=raw,file=$OVERLAY_IMG \
 	-nic tap,ifname=$TAP,script=no,downscript=no,model=virtio-net-pci \
 	-smbios type=1,manufacturer=Antmicro,product="Antmicro Compute Engine",version="" \
