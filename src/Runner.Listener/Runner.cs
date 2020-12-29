@@ -33,6 +33,16 @@ namespace GitHub.Runner.Listener
             _term = HostContext.GetService<ITerminal>();
         }
 
+        public bool NumberProvided()
+        {
+            if (Environment.GetEnvironmentVariable(Constants.InstanceNumberVariable) == null)
+            {
+                _term.WriteError($"Please set the {Constants.InstanceNumberVariable} variable!");
+                return false;
+            }
+            return true;
+        }
+
         public async Task<int> ExecuteCommand(CommandSettings command)
         {
             try
@@ -76,6 +86,11 @@ namespace GitHub.Runner.Listener
                 // Unattended configure mode will not prompt for args if not supplied and error on any missing or invalid value.
                 if (command.Configure)
                 {
+                    if (!NumberProvided())
+                    {
+                        return Constants.Runner.ReturnCode.TerminatedError;
+                    }
+
                     try
                     {
                         await configManager.ConfigureAsync(command);
@@ -158,6 +173,11 @@ namespace GitHub.Runner.Listener
                 // Run runner
                 if (command.Run) // this line is current break machine provisioner.
                 {
+                    if (!NumberProvided())
+                    {
+                        return Constants.Runner.ReturnCode.TerminatedError;
+                    }
+
                     // Error if runner not configured.
                     if (!configManager.IsConfigured())
                     {

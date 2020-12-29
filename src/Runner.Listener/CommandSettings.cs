@@ -17,7 +17,7 @@ namespace GitHub.Runner.Listener
         private readonly CommandLineParser _parser;
         private readonly IPromptManager _promptManager;
         private readonly Tracing _trace;
-        private readonly string instanceNumber = Environment.GetEnvironmentVariable("GH_RUNNER_NUM");
+        private readonly string instanceNumber = Environment.GetEnvironmentVariable(Constants.InstanceNumberVariable);
 
         private readonly string[] validCommands =
         {

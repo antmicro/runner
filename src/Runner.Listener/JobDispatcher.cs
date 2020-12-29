@@ -418,7 +418,7 @@ namespace GitHub.Runner.Listener
                                 var assemblyDirectory = HostContext.GetDirectory(WellKnownDirectory.Bin);
                                 string workerFileName = Path.Combine(assemblyDirectory, _workerProcessName);
                                 var workerEnv = new Dictionary<string, string>(){
-                                    {"GH_RUNNER_NUM", Environment.GetEnvironmentVariable("GH_RUNNER_NUM")},
+                                    {Constants.InstanceNumberVariable, Environment.GetEnvironmentVariable(Constants.InstanceNumberVariable)},
                                 };
                                 workerProcessTask = processInvoker.ExecuteAsync(
                                     workingDirectory: assemblyDirectory,

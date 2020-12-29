@@ -45,7 +45,7 @@ namespace GitHub.Runner.Worker
 
             // Run QEMU
             var qemuProc = new Process();
-            var instanceNumber = Environment.GetEnvironmentVariable("GH_RUNNER_NUM");
+            var instanceNumber = Environment.GetEnvironmentVariable(Constants.InstanceNumberVariable);
             var virtDir = Path.Combine(
                     new DirectoryInfo(HostContext.GetDirectory(WellKnownDirectory.Root)).Parent.FullName,
                     "virt");
