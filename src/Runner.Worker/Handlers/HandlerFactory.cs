@@ -45,17 +45,14 @@ namespace GitHub.Runner.Worker.Handlers
 
             // Create the handler.
             IHandler handler;
-            if (data.ExecutionType == ActionExecutionType.Container)
-            {
-                handler = HostContext.CreateService<IContainerActionHandler>();
-                (handler as IContainerActionHandler).Data = data as ContainerActionExecutionData;
-            }
-            else if (data.ExecutionType == ActionExecutionType.NodeJS)
+            if (data.ExecutionType == ActionExecutionType.NodeJS)
             {
                 handler = HostContext.CreateService<INodeScriptActionHandler>();
                 (handler as INodeScriptActionHandler).Data = data as NodeJSActionExecutionData;
             }
-            else if (data.ExecutionType == ActionExecutionType.Script)
+            else if (data.ExecutionType == ActionExecutionType.Script ||
+                    data.ExecutionType == ActionExecutionType.Container
+                    )
             {
                 handler = HostContext.CreateService<IScriptHandler>();
                 (handler as IScriptHandler).Data = data as ScriptActionExecutionData;

@@ -149,14 +149,14 @@ namespace GitHub.Runner.Worker
             }
 
             // Setup container stephost for running inside the container.
-            if (ExecutionContext.Global.Container != null)
-            {
-                // Make sure required container is already created.
-                ArgUtil.NotNullOrEmpty(ExecutionContext.Global.Container.ContainerId, nameof(ExecutionContext.Global.Container.ContainerId));
-                var containerStepHost = HostContext.CreateService<IContainerStepHost>();
-                containerStepHost.Container = ExecutionContext.Global.Container;
-                stepHost = containerStepHost;
-            }
+            //if (ExecutionContext.Global.Container != null)
+            //{
+            //    // Make sure required container is already created.
+            //    ArgUtil.NotNullOrEmpty(ExecutionContext.Global.Container.ContainerId, nameof(ExecutionContext.Global.Container.ContainerId));
+            //    var containerStepHost = HostContext.CreateService<IContainerStepHost>();
+            //    containerStepHost.Container = ExecutionContext.Global.Container;
+            //    stepHost = containerStepHost;
+            //}
 
             // Setup File Command Manager
             var fileCommandManager = HostContext.CreateService<IFileCommandManager>();

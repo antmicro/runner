@@ -232,21 +232,21 @@ namespace GitHub.Runner.Worker
                     preJobSteps.AddRange(prepareResult.ContainerSetupSteps);
 
                     // Add start-container steps, record and stop-container steps
-                    if (jobContext.Global.Container != null || jobContext.Global.ServiceContainers.Count > 0)
-                    {
-                        var containerProvider = HostContext.GetService<IContainerOperationProvider>();
-                        var containers = new List<Container.ContainerInfo>();
-                        if (jobContext.Global.Container != null)
-                        {
-                            containers.Add(jobContext.Global.Container);
-                        }
-                        containers.AddRange(jobContext.Global.ServiceContainers);
+                    //if (jobContext.Global.Container != null || jobContext.Global.ServiceContainers.Count > 0)
+                    //{
+                    //    var containerProvider = HostContext.GetService<IContainerOperationProvider>();
+                    //    var containers = new List<Container.ContainerInfo>();
+                    //    if (jobContext.Global.Container != null)
+                    //    {
+                    //        containers.Add(jobContext.Global.Container);
+                    //    }
+                    //    containers.AddRange(jobContext.Global.ServiceContainers);
 
-                        preJobSteps.Add(new JobExtensionRunner(runAsync: containerProvider.StartContainersAsync,
-                                                                          condition: $"{PipelineTemplateConstants.Success}()",
-                                                                          displayName: "Initialize containers",
-                                                                          data: (object)containers));
-                    }
+                    //    preJobSteps.Add(new JobExtensionRunner(runAsync: containerProvider.StartContainersAsync,
+                    //                                                      condition: $"{PipelineTemplateConstants.Success}()",
+                    //                                                      displayName: "Initialize containers",
+                    //                                                      data: (object)containers));
+                    //}
 
                     // Add action steps
                     foreach (var step in message.Steps)
