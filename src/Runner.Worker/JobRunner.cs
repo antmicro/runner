@@ -50,9 +50,8 @@ namespace GitHub.Runner.Worker
                     new DirectoryInfo(HostContext.GetDirectory(WellKnownDirectory.Root)).Parent.FullName,
                     "virt");
             var virtPidPath = Path.Combine(virtDir, "work", $"{instanceNumber}_qemu.pid");
-            var virtFileReadSuccess = true;
             var ghJson = message.ContextData["github"].ToJToken();
-            string virtIp = $"172.17.{instanceNumber}.2", virtPid = "", jobContainer = $"{message.JobContainer}";
+            string virtIp = $"172.17.{instanceNumber}.2", virtPid = "";
 
             Trace.Info($"Runner instance: {instanceNumber}");
 
@@ -60,59 +59,16 @@ namespace GitHub.Runner.Worker
 
             Trace.Info($"Job container: {message.JobContainer}");
 
-            if (String.IsNullOrEmpty(jobContainer))
-            {
-                jobContainer = "debian-buster";
-            }
-
             var repoFullName = $"{message.ContextData["github"].ToJToken()["repository"]}";
             var repoName = repoFullName.Substring(repoFullName.LastIndexOf('/') + 1);
             Trace.Info($"Full repo name: {repoFullName}");
             Trace.Info($"Repo name: {repoName}");
 
-            // TODO: This will eventually be changed and must be changed in the file below as well!
-            // https://dev.antmicro.com/git/repositories/github-actions-runner/blob/master/src/Runner.Worker/TrackingConfig.cs#L61
             var PipelineDirectory = repoName.ToString(CultureInfo.InvariantCulture);
             var WorkspaceDirectory = Path.Combine(PipelineDirectory, repoName);
 
             Trace.Info($"PipelineDirectory: {PipelineDirectory}");
             Trace.Info($"WorkspaceDirectory: {WorkspaceDirectory}");
-
-            qemuProc.StartInfo.FileName = WhichUtil.Which("bash", trace: Trace);
-            qemuProc.StartInfo.Arguments = $"-e run_image.sh -n {instanceNumber} -r {WorkspaceDirectory} -s {jobContainer}";
-            qemuProc.StartInfo.WorkingDirectory = virtDir;
-            qemuProc.StartInfo.UseShellExecute = false;
-
-            qemuProc.Start();
-            Trace.Info($"Starting QEMU with start script PID {qemuProc.Id}");
-            qemuProc.WaitForExit();
-            Trace.Info("QEMU is ready.");
-
-            try
-            {
-                using (StreamReader reader = new StreamReader(new FileStream(virtPidPath, FileMode.Open)))
-                {
-                    virtPid = reader.ReadLine();
-                }
-            }
-            catch (IOException e)
-            {
-                Trace.Error("Reading QEMU work files failed, consult the exception below.");
-                Trace.Error(e.ToString());
-                virtFileReadSuccess = false;
-
-            }
-
-            if (virtIp == "")
-            {
-                Trace.Error("virtIp is an empty string!");
-                
-            }
-
-            if (virtPid == "")
-            {
-                Trace.Error("virtPid is an empty string!");
-            }
 
             message.Variables["system.qemuDir"] = virtDir;
             message.Variables["system.qemuIp"] = virtIp;
@@ -145,8 +101,34 @@ namespace GitHub.Runner.Worker
                 jobContext.Start();
                 var githubContext = jobContext.ExpressionValues["github"] as GitHubContext;
 
-                if (!virtFileReadSuccess)
+                var templateEval = jobContext.ToPipelineTemplateEvaluator();
+                var container = templateEval.EvaluateJobContainer(message.JobContainer, jobContext.ExpressionValues, jobContext.ExpressionFunctions);
+
+                Trace.Info($"Container: ${container}");
+
+                var jobContainerFile = container.Image.Replace(":", "_");
+
+                qemuProc.StartInfo.FileName = WhichUtil.Which("bash", trace: Trace);
+                qemuProc.StartInfo.Arguments = $"-e run_image.sh -n {instanceNumber} -r {WorkspaceDirectory} -s {jobContainerFile}";
+                qemuProc.StartInfo.WorkingDirectory = virtDir;
+                qemuProc.StartInfo.UseShellExecute = false;
+
+                qemuProc.Start();
+                Trace.Info($"Starting QEMU with start script PID {qemuProc.Id}");
+                qemuProc.WaitForExit();
+                Trace.Info("QEMU is ready.");
+
+                try
                 {
+                    using (StreamReader reader = new StreamReader(new FileStream(virtPidPath, FileMode.Open)))
+                    {
+                        virtPid = reader.ReadLine();
+                    }
+                }
+                catch (IOException e)
+                {
+                    Trace.Error("Reading QEMU work files failed, consult the exception below.");
+                    Trace.Error(e.ToString());
                     jobContext.Error("Starting QEMU failed!");
                     return await CompleteJobAsync(jobServer, jobContext, message, TaskResult.Failed);
                 }
