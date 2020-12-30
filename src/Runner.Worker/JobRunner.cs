@@ -52,11 +52,18 @@ namespace GitHub.Runner.Worker
             var virtPidPath = Path.Combine(virtDir, "work", $"{instanceNumber}_qemu.pid");
             var virtFileReadSuccess = true;
             var ghJson = message.ContextData["github"].ToJToken();
-            string virtIp = $"172.17.{instanceNumber}.2", virtPid = "";
+            string virtIp = $"172.17.{instanceNumber}.2", virtPid = "", jobContainer = $"{message.JobContainer}";
 
             Trace.Info($"Runner instance: {instanceNumber}");
 
             Trace.Info($"QEMU tools directory: {virtDir}");
+
+            Trace.Info($"Job container: {message.JobContainer}");
+
+            if (String.IsNullOrEmpty(jobContainer))
+            {
+                jobContainer = "debian-buster";
+            }
 
             var repoFullName = $"{message.ContextData["github"].ToJToken()["repository"]}";
             var repoName = repoFullName.Substring(repoFullName.LastIndexOf('/') + 1);
@@ -72,7 +79,7 @@ namespace GitHub.Runner.Worker
             Trace.Info($"WorkspaceDirectory: {WorkspaceDirectory}");
 
             qemuProc.StartInfo.FileName = WhichUtil.Which("bash", trace: Trace);
-            qemuProc.StartInfo.Arguments = $"-e run_image.sh -n {instanceNumber} -r {WorkspaceDirectory}";
+            qemuProc.StartInfo.Arguments = $"-e run_image.sh -n {instanceNumber} -r {WorkspaceDirectory} -s {jobContainer}";
             qemuProc.StartInfo.WorkingDirectory = virtDir;
             qemuProc.StartInfo.UseShellExecute = false;
 

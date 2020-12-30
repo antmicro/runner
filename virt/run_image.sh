@@ -4,13 +4,16 @@ set -e
 
 cd $(dirname $0)
 
-while getopts ":n:r:" o; do
+while getopts ":n:r:s:" o; do
     case "${o}" in
         n)
             PREFIX=${OPTARG}
             ;;
         r)
             SHARE_SUFFIX=${OPTARG}
+            ;;
+        s)
+            CONTAINER=${OPTARG}
             ;;
         *)
             echo "Provide all arguments!"
@@ -22,7 +25,7 @@ shift $((OPTIND-1))
 
 WORKDIR=$(realpath work)
 OVERLAY_IMG=$WORKDIR/${PREFIX}_overlay.img
-SIF_FILE=$WORKDIR/debian10.sif
+SIF_FILE=$WORKDIR/sif/$CONTAINER.sif
 FREE_SPACE=$(df -B1 . | tail -n +2 | awk '{ print $4 "\t" }')
 OVERLAY_SIZE=5G
 DUMMY_DISK=$WORKDIR/small.img
