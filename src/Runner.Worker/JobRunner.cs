@@ -104,9 +104,11 @@ namespace GitHub.Runner.Worker
                 var templateEval = jobContext.ToPipelineTemplateEvaluator();
                 var container = templateEval.EvaluateJobContainer(message.JobContainer, jobContext.ExpressionValues, jobContext.ExpressionFunctions);
 
-                Trace.Info($"Container: ${container}");
+                Trace.Info($"Container: ${container.Image}");
 
                 var jobContainerFile = container.Image.Replace(":", "_");
+
+                Trace.Info($"ContainerFile: {jobContainerFile}");
 
                 qemuProc.StartInfo.FileName = WhichUtil.Which("bash", trace: Trace);
                 qemuProc.StartInfo.Arguments = $"-e run_image.sh -n {instanceNumber} -r {WorkspaceDirectory} -s {jobContainerFile}";
