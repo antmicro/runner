@@ -27,7 +27,7 @@ WORKDIR=$(realpath work)
 OVERLAY_IMG=$WORKDIR/${PREFIX}_overlay.img
 SIF_FILE=$WORKDIR/sif/$CONTAINER.sif
 FREE_SPACE=$(df -B1 . | tail -n +2 | awk '{ print $4 "\t" }')
-OVERLAY_SIZE=5G
+OVERLAY_SIZE=30G
 DUMMY_DISK=$WORKDIR/small.img
 SSH_PUB_KEY=$HOME/.ssh/id_rsa
 SHARE_PATH=$(realpath ../_layout)/_work_${PREFIX}/${SHARE_SUFFIX}
@@ -79,8 +79,8 @@ fallocate -l $OVERLAY_SIZE $OVERLAY_IMG
 mkfifo $SIN $SOUT $MIN $MOUT || true
 
 qemu-system-x86_64 \
-	-kernel $WORKDIR/bzImage-2020-12-24--22-09-40 \
-	-m 4G -append "console=ttyS0" -enable-kvm -smp $(nproc) -cpu host \
+	-kernel $WORKDIR/bzImage-2021-01-04--12-34-20 \
+	-m 20G -append "console=ttyS0" -enable-kvm -smp 4 -cpu host \
 	-drive format=raw,file.filename=$SIF_FILE,file.locking=off,file.driver=file,snapshot=on \
 	-drive format=raw,file.filename=$DUMMY_DISK,file.locking=off,file.driver=file,snapshot=on \
 	-drive format=raw,file.filename=$DUMMY_DISK,file.locking=off,file.driver=file,snapshot=on \
@@ -90,7 +90,7 @@ qemu-system-x86_64 \
 	-smbios type=2,manufacturer=Antmicro,product="Antmicro Compute Engine",version="" \
 	-smbios type=11,value="set_hostname scalenode-github" \
 	-smbios type=11,value="inject_key scalerunner:'$(cat ${SSH_PUB_KEY}.pub)'" \
-	-fsdev local,id=share_dev,path=$SHARE_PATH,security_model=none \
+	-fsdev local,id=share_dev,path=$SHARE_PATH,security_model=mapped-file \
 	-device virtio-9p-pci,fsdev=share_dev,mount_tag=share_mount \
 	-serial pipe:$Q \
 	-monitor pipe:$Q2 \
@@ -104,7 +104,7 @@ readUntilString "Welcome to Buildroot"
 
 writeSer "scalerunner"
 writeSer "scalerunner"
-writeSer "sudo bash -c \"mke2fs /dev/sdd;mount /dev/sdd /mnt;mkdir /9p;mount -t 9p -o trans=virtio,version=9p2000.L share_mount /9p\""
+writeSer "sudo bash -c \"mke2fs /dev/sdd;mount /dev/sdd /mnt;mkdir /9p;mount -t 9p -o trans=virtio,version=9p2000.L,msize=124288,cache=none share_mount /9p\""
 writeSer "sudo singularity instance start -C -e --dns 8.8.8.8 --overlay /mnt --bind /9p /tmp/container.sif i"
 
 readUntilString "instance started successfully"
