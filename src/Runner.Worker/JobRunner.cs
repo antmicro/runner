@@ -114,11 +114,31 @@ namespace GitHub.Runner.Worker
                 qemuProc.StartInfo.Arguments = $"-e run_image.sh -n {instanceNumber} -r {WorkspaceDirectory} -s {jobContainerFile}";
                 qemuProc.StartInfo.WorkingDirectory = virtDir;
                 qemuProc.StartInfo.UseShellExecute = false;
+                qemuProc.StartInfo.RedirectStandardError = true;
+                qemuProc.StartInfo.RedirectStandardOutput = true;
 
                 qemuProc.Start();
                 Trace.Info($"Starting QEMU with start script PID {qemuProc.Id}");
+
+                using (StreamReader qemuOut = qemuProc.StandardOutput)
+                {
+                    Trace.Info(qemuOut.ReadToEnd());
+                }
+
                 qemuProc.WaitForExit();
                 Trace.Info("QEMU is ready.");
+
+                if (qemuProc.ExitCode != 0)
+                {
+                    var qemuNonZeroExitCode = "QEMU starter exited with non-zero exit code!";
+                    Trace.Info(qemuNonZeroExitCode);
+                    jobContext.Error(qemuNonZeroExitCode);
+
+                    using (StreamReader qemuErr = qemuProc.StandardError)
+                    {
+                        Trace.Info(qemuErr.ReadToEnd());
+                    }
+                }
 
                 try
                 {
