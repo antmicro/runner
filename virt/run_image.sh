@@ -27,7 +27,7 @@ WORKDIR=$(realpath work)
 OVERLAY_IMG=$WORKDIR/${PREFIX}_overlay.img
 SIF_FILE=$WORKDIR/sif/$CONTAINER.sif
 FREE_SPACE=$(df -B1 . | tail -n +2 | awk '{ print $4 "\t" }')
-OVERLAY_SIZE=30G
+OVERLAY_SIZE=70G
 DUMMY_DISK=$WORKDIR/small.img
 SSH_PUB_KEY=$HOME/.ssh/id_rsa
 SHARE_PATH=$(realpath ../_layout)/_work_${PREFIX}/${SHARE_SUFFIX}
@@ -58,6 +58,17 @@ readUntilString() {
 writeSer() {
 	echo $1 > $SIN
 	sleep 0.2
+}
+
+sshSend() {
+    echo $@
+    /usr/bin/ssh -q \
+        -o "UserKnownHostsFile /dev/null" \
+        -o "StrictHostKeyChecking no" \
+        scalerunner@172.17.$PREFIX.2 << EOF
+sudo -s
+$@
+EOF
 }
 
 if [ -f "$OVERLAY_IMG" ]; then
@@ -102,13 +113,8 @@ qemu-system-x86_64 \
 
 readUntilString "Welcome to Buildroot"
 
-writeSer "scalerunner"
-writeSer "scalerunner"
-writeSer "sudo bash -c \"mke2fs /dev/sdd;mount /dev/sdd /mnt;mkdir /9p;mount -t 9p -o trans=virtio,version=9p2000.L,msize=124288,cache=none share_mount /9p\""
-writeSer "sudo singularity instance start -C -e --dns 8.8.8.8 --overlay /mnt --bind /9p /tmp/container.sif i"
-
-readUntilString "instance started successfully"
-
-#writeSer "ip route get 1.2.3.4 | awk {'print \$7'} | sudo tee /9p/ip"
-
-writeSer "exit"
+sshSend "mke2fs /dev/sdd"
+sshSend "mount /dev/sdd /mnt"
+sshSend "mkdir /9p /mnt/1 /mnt/2"
+sshSend "mount -t 9p -o trans=virtio,version=9p2000.L,msize=124288,cache=none share_mount /9p"
+sshSend "singularity instance start -C -e --dns 8.8.8.8 --overlay /mnt/1 --bind /9p,/mnt/2:/root /tmp/container.sif i"
