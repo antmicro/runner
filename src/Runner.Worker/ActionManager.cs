@@ -655,7 +655,7 @@ namespace GitHub.Runner.Worker
                     }
                     break;
                 }
-                catch (Exception ex)
+                catch (Exception ex) when (!executionContext.CancellationToken.IsCancellationRequested) // Do not retry if the run is canceled.
                 {
                     if (attempt < 3)
                     {
@@ -670,7 +670,18 @@ namespace GitHub.Runner.Worker
                     }
                     else
                     {
-                        throw new WebApi.FailedToResolveActionDownloadInfoException("Failed to resolve action download info.", ex);
+                        // Some possible cases are:
+                        // * Repo is rate limited
+                        // * Repo or tag doesn't exist, or isn't public
+                        if (ex is WebApi.UnresolvableActionDownloadInfoException)
+                        {
+                            throw;
+                        }
+                        else
+                        {
+                            // This exception will be traced as an infrastructure failure
+                            throw new WebApi.FailedToResolveActionDownloadInfoException("Failed to resolve action download info.", ex);
+                        }
                     }
                 }
             }
