@@ -45,6 +45,7 @@ namespace GitHub.Runner.Worker
 
             // Run QEMU
             var qemuProc = new Process();
+            var sshfsProc = new Process();
             var instanceNumber = Environment.GetEnvironmentVariable(Constants.InstanceNumberVariable);
             var virtDir = Path.Combine(
                     new DirectoryInfo(HostContext.GetDirectory(WellKnownDirectory.Root)).Parent.FullName,
@@ -111,11 +112,18 @@ namespace GitHub.Runner.Worker
                 Trace.Info($"ContainerFile: {jobContainerFile}");
 
                 qemuProc.StartInfo.FileName = WhichUtil.Which("bash", trace: Trace);
-                qemuProc.StartInfo.Arguments = $"-e run_image.sh -n {instanceNumber} -r {WorkspaceDirectory} -s {jobContainerFile}";
+                qemuProc.StartInfo.Arguments = $"-e run_image.sh -n {instanceNumber} -s {jobContainerFile}";
                 qemuProc.StartInfo.WorkingDirectory = virtDir;
                 qemuProc.StartInfo.UseShellExecute = false;
                 qemuProc.StartInfo.RedirectStandardError = true;
                 qemuProc.StartInfo.RedirectStandardOutput = true;
+
+                sshfsProc.StartInfo.FileName = WhichUtil.Which("bash", trace: Trace);
+                sshfsProc.StartInfo.Arguments = $"sshfs.sh {instanceNumber} {WorkspaceDirectory}";
+                sshfsProc.StartInfo.WorkingDirectory = virtDir;
+                sshfsProc.StartInfo.UseShellExecute = false;
+                sshfsProc.StartInfo.RedirectStandardError = true;
+                sshfsProc.StartInfo.RedirectStandardOutput = true;
 
                 qemuProc.Start();
                 Trace.Info($"Starting QEMU with start script PID {qemuProc.Id}");
@@ -138,6 +146,8 @@ namespace GitHub.Runner.Worker
                     {
                         Trace.Info(qemuErr.ReadToEnd());
                     }
+
+                    return await CompleteJobAsync(jobServer, jobContext, message, TaskResult.Failed);
                 }
 
                 try
@@ -152,6 +162,31 @@ namespace GitHub.Runner.Worker
                     Trace.Error("Reading QEMU work files failed, consult the exception below.");
                     Trace.Error(e.ToString());
                     jobContext.Error("Starting QEMU failed!");
+                    return await CompleteJobAsync(jobServer, jobContext, message, TaskResult.Failed);
+                }
+
+                Trace.Info($"Mounting {WorkspaceDirectory} via sshfs...");
+                sshfsProc.Start();
+
+                using (StreamReader sshfsOut = sshfsProc.StandardOutput)
+                {
+                    Trace.Info(sshfsOut.ReadToEnd());
+                }
+
+                sshfsProc.WaitForExit();
+
+                if (sshfsProc.ExitCode != 0)
+                {
+                    string sshfsError;
+                    using (StreamReader sshfsErr = sshfsProc.StandardError)
+                    {
+                        sshfsError = sshfsErr.ReadToEnd();
+                    }
+
+                    Trace.Error($"sshfs started exited with {sshfsProc.ExitCode}");
+                    Trace.Error(sshfsError);
+                    jobContext.Error($"sshfs: exit code {sshfsProc.ExitCode}, err {sshfsError}");
+
                     return await CompleteJobAsync(jobServer, jobContext, message, TaskResult.Failed);
                 }
 
@@ -284,11 +319,35 @@ namespace GitHub.Runner.Worker
                     runnerShutdownRegistration = null;
                 }
 
+                var umountProc = new Process();
+                umountProc.StartInfo.FileName = WhichUtil.Which("bash", trace: Trace);
+                umountProc.StartInfo.Arguments = $"-e sshfs.sh {instanceNumber} {WorkspaceDirectory}";
+                umountProc.StartInfo.WorkingDirectory = virtDir;
+                umountProc.StartInfo.UseShellExecute = false;
+                umountProc.StartInfo.RedirectStandardError = true;
+                umountProc.StartInfo.RedirectStandardOutput = true;
+                
                 var killProc = new Process();
                 killProc.StartInfo.FileName = WhichUtil.Which("kill", trace: Trace);
                 killProc.StartInfo.Arguments = virtPid;
                 killProc.StartInfo.WorkingDirectory = virtDir;
                 killProc.StartInfo.UseShellExecute = false;
+
+                Trace.Info($"Unmouting sshfs from {WorkspaceDirectory}");
+                umountProc.Start();
+                umountProc.WaitForExit();
+
+                if (umountProc.ExitCode != 0)
+                {
+                    string umountError;
+                    using (StreamReader umountErr = umountProc.StandardError)
+                    {
+                        umountError = umountErr.ReadToEnd();
+                    }
+
+                    Trace.Error(umountError);
+                    jobContext.Error(umountError);
+                }
 
                 Trace.Info($"Killing QEMU with PID {virtPid}");
                 killProc.Start();

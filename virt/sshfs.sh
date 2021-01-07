@@ -6,10 +6,10 @@ IP=172.17.$1.2
 SHARE_PATH=$(realpath ../_layout)/_work_$1/$2
 REMOTE_PATH="scalerunner@$IP:/mnt/2/work"
 
+mkdir -p $SHARE_PATH
+
 mountpoint -q $SHARE_PATH
 MOUNT_STATUS=$?
-
-set -e
 
 if [ $MOUNT_STATUS -eq 1 ]; then
     echo "Mounting $REMOTE_PATH at $SHARE_PATH"

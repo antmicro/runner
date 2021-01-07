@@ -302,7 +302,7 @@ namespace GitHub.Runner.Worker.Handlers
             fileName = "/usr/bin/ssh";
             arguments = $"-q -o \"UserKnownHostsFile /dev/null\" -o \"StrictHostKeyChecking no\" scalerunner@{sshIp} sudo singularity exec -e instance://i bash";
 
-            var changeContainerDir = Path.Combine("/9p", 
+            var changeContainerDir = Path.Combine("/root/work", 
                     workingDirectoryOriginal ?? string.Empty);
             Trace.Info($"Singularity directory: {changeContainerDir}");
 
