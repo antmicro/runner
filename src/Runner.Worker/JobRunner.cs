@@ -50,9 +50,8 @@ namespace GitHub.Runner.Worker
             var virtDir = Path.Combine(
                     new DirectoryInfo(HostContext.GetDirectory(WellKnownDirectory.Root)).Parent.FullName,
                     "virt");
-            var virtPidPath = Path.Combine(virtDir, "work", $"{instanceNumber}_qemu.pid");
             var ghJson = message.ContextData["github"].ToJToken();
-            string virtIp = $"172.17.{instanceNumber}.2", virtPid = "";
+            string virtIp = $"172.17.{instanceNumber}.2";
 
             Trace.Info($"Runner instance: {instanceNumber}");
 
@@ -112,7 +111,7 @@ namespace GitHub.Runner.Worker
                 Trace.Info($"ContainerFile: {jobContainerFile}");
 
                 qemuProc.StartInfo.FileName = WhichUtil.Which("bash", trace: Trace);
-                qemuProc.StartInfo.Arguments = $"-e run_image.sh -n {instanceNumber} -s {jobContainerFile}";
+                qemuProc.StartInfo.Arguments = $"run_image.sh -n {instanceNumber} -s {jobContainerFile}";
                 qemuProc.StartInfo.WorkingDirectory = virtDir;
                 qemuProc.StartInfo.UseShellExecute = false;
                 qemuProc.StartInfo.RedirectStandardError = true;
@@ -124,6 +123,10 @@ namespace GitHub.Runner.Worker
                 sshfsProc.StartInfo.UseShellExecute = false;
                 sshfsProc.StartInfo.RedirectStandardError = true;
                 sshfsProc.StartInfo.RedirectStandardOutput = true;
+
+                // Setup TEMP directories
+                _tempDirectoryManager = HostContext.GetService<ITempDirectoryManager>();
+                _tempDirectoryManager.InitializeTempDirectory(jobContext);
 
                 qemuProc.Start();
                 Trace.Info($"Starting QEMU with start script PID {qemuProc.Id}");
@@ -138,7 +141,7 @@ namespace GitHub.Runner.Worker
 
                 if (qemuProc.ExitCode != 0)
                 {
-                    var qemuNonZeroExitCode = "QEMU starter exited with non-zero exit code!";
+                    var qemuNonZeroExitCode = $"QEMU starter exited with non-zero exit code: {qemuProc.ExitCode}";
                     Trace.Info(qemuNonZeroExitCode);
                     jobContext.Error(qemuNonZeroExitCode);
 
@@ -150,20 +153,7 @@ namespace GitHub.Runner.Worker
                     return await CompleteJobAsync(jobServer, jobContext, message, TaskResult.Failed);
                 }
 
-                try
-                {
-                    using (StreamReader reader = new StreamReader(new FileStream(virtPidPath, FileMode.Open)))
-                    {
-                        virtPid = reader.ReadLine();
-                    }
-                }
-                catch (IOException e)
-                {
-                    Trace.Error("Reading QEMU work files failed, consult the exception below.");
-                    Trace.Error(e.ToString());
-                    jobContext.Error("Starting QEMU failed!");
-                    return await CompleteJobAsync(jobServer, jobContext, message, TaskResult.Failed);
-                }
+
 
                 Trace.Info($"Mounting {WorkspaceDirectory} via sshfs...");
                 sshfsProc.Start();
@@ -243,10 +233,6 @@ namespace GitHub.Runner.Worker
                 Directory.CreateDirectory(toolsDirectory);
                 jobContext.SetRunnerContext("tool_cache", toolsDirectory);
 
-                // Setup TEMP directories
-                _tempDirectoryManager = HostContext.GetService<ITempDirectoryManager>();
-                _tempDirectoryManager.InitializeTempDirectory(jobContext);
-
                 // Get the job extension.
                 Trace.Info("Getting job extension.");
                 IJobExtension jobExtension = HostContext.CreateService<IJobExtension>();
@@ -317,6 +303,21 @@ namespace GitHub.Runner.Worker
                 {
                     runnerShutdownRegistration.Value.Dispose();
                     runnerShutdownRegistration = null;
+                }
+
+                string virtPid = "", virtPidPath = Path.Combine(virtDir, "work", $"{instanceNumber}_qemu.pid");
+
+                try
+                {
+                    using (StreamReader reader = new StreamReader(new FileStream(virtPidPath, FileMode.Open)))
+                    {
+                        virtPid = reader.ReadLine();
+                    }
+                }
+                catch (IOException e)
+                {
+                    Trace.Error("Reading QEMU work files failed, consult the exception below.");
+                    Trace.Error(e.ToString());
                 }
 
                 var umountProc = new Process();

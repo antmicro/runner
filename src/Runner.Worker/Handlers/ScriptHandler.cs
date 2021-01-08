@@ -318,6 +318,11 @@ namespace GitHub.Runner.Worker.Handlers
                 List<string> ignoreEnv = new List<string> 
                         { "GITHUB_WORKSPACE", "GITHUB_PATH", "RUNNER_TEMP", "GITHUB_EVENT_PATH", "RUNNER_TOOL_CACHE", "RUNNER_WORKSPACE", "GITHUB_ENV" };
 
+                var envCmdDir = "_runner_file_commands/";
+                var remoteEnvDir = "/9p";
+                var ghEnv = $"{remoteEnvDir}/{Environment["GITHUB_ENV"].Split(envCmdDir)[1]}";
+                var ghPath = $"{remoteEnvDir}/{Environment["GITHUB_PATH"].Split(envCmdDir)[1]}";
+
                 foreach (var e in Environment)                 
                 {
                     if (!ignoreEnv.Contains(e.Key))
@@ -329,6 +334,8 @@ namespace GitHub.Runner.Worker.Handlers
                 }
 
                 exportStanzas += $"export GITHUB_WORKSPACE={changeContainerDir};";
+                exportStanzas += $"export GITHUB_ENV={ghEnv};";
+                exportStanzas += $"export GITHUB_PATH={ghPath};";
 
                 input.Writer.TryWrite(exportStanzas+contents);
 

@@ -27,6 +27,7 @@ FREE_SPACE=$(df -B1 . | tail -n +2 | awk '{ print $4 "\t" }')
 OVERLAY_SIZE=70G
 DUMMY_DISK=$WORKDIR/small.img
 SSH_PUB_KEY=$HOME/.ssh/id_rsa
+SHARE_PATH=$(realpath ../_layout)/_work_${PREFIX}/_temp/_runner_file_commands
 
 TAP=tap${PREFIX}
 
@@ -79,6 +80,8 @@ if [ ! -f "$DUMMY_DISK" ]; then
 	fallocate -l 1MB $DUMMY_DISK
 fi
 
+mkdir -p $SHARE_PATH
+
 fallocate -l $OVERLAY_SIZE $OVERLAY_IMG
 
 mkfifo $SIN $SOUT $MIN $MOUT || true
@@ -95,6 +98,8 @@ qemu-system-x86_64 \
 	-smbios type=2,manufacturer=Antmicro,product="Antmicro Compute Engine",version="" \
 	-smbios type=11,value="set_hostname scalenode-github" \
 	-smbios type=11,value="inject_key scalerunner:'$(cat ${SSH_PUB_KEY}.pub)'" \
+        -fsdev local,id=share_dev,path=$SHARE_PATH,security_model=mapped-file \
+        -device virtio-9p-pci,fsdev=share_dev,mount_tag=share_mount \
 	-serial pipe:$Q \
 	-monitor pipe:$Q2 \
 	-pidfile $Q.pid \
@@ -105,7 +110,9 @@ qemu-system-x86_64 \
 
 readUntilString "Welcome to Buildroot"
 
+sshSend "mkdir -p /9p"
 sshSend "mke2fs /dev/sdd"
 sshSend "mount /dev/sdd /mnt"
-sshSend "mkdir -p /mnt/1 /mnt/2/work"
-sshSend "singularity instance start -C -e --dns 8.8.8.8 --overlay /mnt/1 --bind /mnt/2:/root /tmp/container.sif i"
+sshSend "mkdir -p /mnt/1 /mnt/2/work /mnt/3"
+sshSend "mount -t 9p -o trans=virtio,version=9p2000.L,msize=124288,cache=none share_mount /9p"
+sshSend "singularity instance start -C -e --dns 8.8.8.8 --overlay /mnt/1 --bind /mnt/2:/root,/9p /tmp/container.sif i"
