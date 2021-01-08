@@ -96,7 +96,7 @@ qemu-system-x86_64 \
 	-nic tap,ifname=$TAP,script=no,downscript=no,model=virtio-net-pci \
 	-smbios type=1,manufacturer=Antmicro,product="Antmicro Compute Engine",version="" \
 	-smbios type=2,manufacturer=Antmicro,product="Antmicro Compute Engine",version="" \
-	-smbios type=11,value="set_hostname scalenode-github" \
+	-smbios type=11,value="set_hostname scalenode-github-$PREFIX" \
 	-smbios type=11,value="inject_key scalerunner:'$(cat ${SSH_PUB_KEY}.pub)'" \
         -fsdev local,id=share_dev,path=$SHARE_PATH,security_model=mapped-file \
         -device virtio-9p-pci,fsdev=share_dev,mount_tag=share_mount \
