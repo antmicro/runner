@@ -110,6 +110,8 @@ qemu-system-x86_64 \
 
 readUntilString "Welcome to Buildroot"
 
+until nc -vzw 2 172.17.$PREFIX.2 22; do sleep 2; done
+
 sshSend "mkdir -p /9p"
 sshSend "mke2fs /dev/sdd"
 sshSend "mount /dev/sdd /mnt"
