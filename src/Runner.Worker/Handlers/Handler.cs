@@ -159,6 +159,7 @@ namespace GitHub.Runner.Worker.Handlers
             var containerStepHost = StepHost as ContainerStepHost;
             if (containerStepHost != null)
             {
+                Trace.Info("AddPrependPathToEnvironment running in containerStepHost");
                 containerStepHost.PrependPath = prepend;
             }
             else

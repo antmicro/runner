@@ -266,7 +266,10 @@ namespace GitHub.Runner.Worker.Handlers
             }
 
             // Prepend PATH
-            AddPrependPathToEnvironment();
+            //AddPrependPathToEnvironment();
+            
+            string prepend = string.Join(Path.PathSeparator.ToString(), ExecutionContext.Global.PrependPath.Reverse<string>());
+            Trace.Info($"Prepend: {prepend}");
 
             // expose context to environment
             foreach (var context in ExecutionContext.ExpressionValues)
@@ -322,6 +325,7 @@ namespace GitHub.Runner.Worker.Handlers
                 var remoteEnvDir = "/9p";
                 var ghEnv = $"{remoteEnvDir}/{Environment["GITHUB_ENV"].Split(envCmdDir)[1]}";
                 var ghPath = $"{remoteEnvDir}/{Environment["GITHUB_PATH"].Split(envCmdDir)[1]}";
+                var pathSuffix = "${PATH:+:${PATH}}";
 
                 foreach (var e in Environment)                 
                 {
@@ -336,6 +340,7 @@ namespace GitHub.Runner.Worker.Handlers
                 exportStanzas += $"export GITHUB_WORKSPACE={changeContainerDir};";
                 exportStanzas += $"export GITHUB_ENV={ghEnv};";
                 exportStanzas += $"export GITHUB_PATH={ghPath};";
+                exportStanzas += $"export PATH={prepend}{pathSuffix};";
 
                 input.Writer.TryWrite(exportStanzas+contents);
 
