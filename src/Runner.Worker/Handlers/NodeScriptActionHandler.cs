@@ -1,7 +1,9 @@
 ﻿using System.IO;
 using System.Text;
+using System.Diagnostics;
 using System.Threading.Tasks;
 using GitHub.Runner.Common;
+using GitHub.Runner.Common.Util;
 using GitHub.Runner.Sdk;
 using GitHub.DistributedTask.WebApi;
 using Pipelines = GitHub.DistributedTask.Pipelines;
@@ -67,6 +69,43 @@ namespace GitHub.Runner.Worker.Handlers
             else if (stage == ActionRunStage.Post)
             {
                 target = Data.Post;
+            }
+
+            var actionName = ActionDirectory.Split("_actions/")[1];
+
+            Trace.Info($"Stage: {stage}, target: {target}, action dir: {ActionDirectory}, action name: {actionName}");
+
+            if (actionName == "actions/upload-artifact/v2")
+            {
+                var instanceNumber = System.Environment.GetEnvironmentVariable(Constants.InstanceNumberVariable);
+                var virtDir = Path.Combine(new DirectoryInfo(HostContext.GetDirectory(WellKnownDirectory.Root)).Parent.FullName, "virt");
+
+                var symFix = new Process();
+                symFix.StartInfo.FileName = WhichUtil.Which("bash", trace: Trace);
+                symFix.StartInfo.Arguments = $"symlink_resolve.sh {instanceNumber}";
+                symFix.StartInfo.WorkingDirectory = virtDir;
+                symFix.StartInfo.UseShellExecute = false;
+                symFix.StartInfo.RedirectStandardError = true;
+                symFix.StartInfo.RedirectStandardOutput = true;
+
+                symFix.Start();
+                Trace.Info($"Starting ${symFix.StartInfo.Arguments} with PID {symFix.Id}");
+
+                Trace.Info($"{symFix.StartInfo.Arguments} stdout:");
+                using (StreamReader o = symFix.StandardOutput)
+                {
+                    Trace.Info("\n"+o.ReadToEnd()+"\n");
+                }
+
+                Trace.Info($"{symFix.StartInfo.Arguments} stderr:");
+                using (StreamReader o = symFix.StandardError)
+                {
+                    Trace.Info("\n"+o.ReadToEnd()+"\n");
+                }
+
+                symFix.WaitForExit();
+
+                Trace.Info($"{symFix.StartInfo.Arguments} exit code: {symFix.ExitCode}");
             }
 
             ArgUtil.NotNullOrEmpty(target, nameof(target));
