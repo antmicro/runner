@@ -331,7 +331,7 @@ namespace GitHub.Runner.Worker.Handlers
                 {
                     if (!ignoreEnv.Contains(e.Key))
                     {
-                        var exportStr = $"export {e.Key}={e.Value};";
+                        var exportStr = $"export {e.Key}=\"{e.Value}\";";
                         Trace.Info(exportStr);
                         exportStanzas += exportStr;
                     }
