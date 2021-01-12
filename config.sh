@@ -19,6 +19,8 @@ done
 
 cd _layout
 
+num=`expr $num - 1`
+
 for i in $(seq 0 $num); do
     GH_RUNNER_NUM=$i ./config.sh --url $url --token $token --unattended
 done

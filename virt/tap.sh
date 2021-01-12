@@ -7,7 +7,7 @@ C='-m comment --comment qemu'
 RANGE=172.17.0.2,172.17.0.100
 WAN_IP=$(ip -f inet addr show $WAN | sed -En -e 's/.*inet ([0-9.]+).*/\1/p')
 RUNNING_USER=$(whoami)
-END=$1
+END=`expr $1 - 1`
 DARGS=()
 
 _term() {
