@@ -2,7 +2,7 @@
 
 set -e
 
-WAN=$(/sbin/route -n | grep ^0.0.0.0 | awk '{ print $8 "\t" }')
+WAN=$(route -n | grep ^0.0.0.0 | awk '{ print $8 "\t" }')
 C='-m comment --comment qemu'
 RANGE=172.17.0.2,172.17.0.100
 WAN_IP=$(ip -f inet addr show $WAN | sed -En -e 's/.*inet ([0-9.]+).*/\1/p')
@@ -12,7 +12,7 @@ DARGS=()
 
 _term() {
 	echo "Caught signal!"
-	/sbin/iptables-save | grep -v "qemu" | /sbin/iptables-restore
+	iptables-save | grep -v "qemu" | iptables-restore
 	kill $(cat /var/run/dnsmasq-qemu.pid)
         for i in $(seq 0 $END); do ip link delete tap$i; done
 	echo "Killing $!"
@@ -38,18 +38,18 @@ do
 
     echo "tap gw:		$GW"
 
-    /usr/bin/ip tuntap add dev $TAP mode tap
-    /usr/bin/ip a a $GW/24 dev $TAP
-    /usr/bin/ip link set dev $TAP up
+    ip tuntap add dev $TAP mode tap
+    ip a a $GW/24 dev $TAP
+    ip link set dev $TAP up
 
-    /sbin/iptables -t nat -A POSTROUTING -o $WAN -j MASQUERADE --random $C
-    /sbin/iptables -A FORWARD -i $TAP -o $WAN -j ACCEPT $C
-    /sbin/iptables -A FORWARD -i $WAN -o $TAP -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT $C
+    iptables -t nat -A POSTROUTING -o $WAN -j MASQUERADE --random $C
+    iptables -A FORWARD -i $TAP -o $WAN -j ACCEPT $C
+    iptables -A FORWARD -i $WAN -o $TAP -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT $C
 done
 
 echo "Taps created."
 
-/usr/sbin/dnsmasq \
+dnsmasq \
 	--strict-order \
 	--except-interface=lo \
 	--conf-file="" \
