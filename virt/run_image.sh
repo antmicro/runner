@@ -4,6 +4,22 @@ set -e
 
 cd $(dirname $0)
 
+OVERLAY_SIZE=10G
+CPU_COUNT=2
+RAM=2G
+SPECS_FILE="../.vm_specs"
+
+if [ -f "$SPECS_FILE" ]; then
+    echo "Using VM specs file."
+    source $SPECS_FILE
+else
+    echo "VM specs file not found, using preset values."
+fi
+
+echo "Overlay size:     $OVERLAY_SIZE"
+echo "vCPU count:       $CPU_COUNT"
+echo "RAM:              $RAM"
+
 while getopts ":n:r:s:" o; do
     case "${o}" in
         n)
@@ -24,7 +40,6 @@ WORKDIR=$(realpath work)
 OVERLAY_IMG=$WORKDIR/${PREFIX}_overlay.img
 SIF_FILE=$WORKDIR/sif/$CONTAINER.sif
 FREE_SPACE=$(df -B1 . | tail -n +2 | awk '{ print $4 "\t" }')
-OVERLAY_SIZE=70G
 DUMMY_DISK=$WORKDIR/small.img
 SSH_PUB_KEY=$HOME/.ssh/id_rsa
 SHARE_PATH=$(realpath ../_layout)/_work_${PREFIX}/_temp/_runner_file_commands
@@ -88,7 +103,7 @@ mkfifo $SIN $SOUT $MIN $MOUT || true
 
 qemu-system-x86_64 \
 	-kernel $WORKDIR/bzImage-2021-01-04--12-34-20 \
-	-m 20G -append "console=ttyS0" -enable-kvm -smp 4 -cpu host \
+	-m $RAM -append "console=ttyS0" -enable-kvm -smp $CPU_COUNT -cpu host \
 	-drive format=raw,file.filename=$SIF_FILE,file.locking=off,file.driver=file,snapshot=on \
 	-drive format=raw,file.filename=$DUMMY_DISK,file.locking=off,file.driver=file,snapshot=on \
 	-drive format=raw,file.filename=$DUMMY_DISK,file.locking=off,file.driver=file,snapshot=on \
