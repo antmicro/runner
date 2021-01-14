@@ -104,10 +104,8 @@ namespace GitHub.Runner.Worker
                 var templateEval = jobContext.ToPipelineTemplateEvaluator();
                 var container = templateEval.EvaluateJobContainer(message.JobContainer, jobContext.ExpressionValues, jobContext.ExpressionFunctions);
                 
-                IExecutionContext qemuCtx = jobContext.CreateChild(Guid.NewGuid(), "Set up QEMU", "QEMU_Init", null, null);
+                IExecutionContext qemuCtx = jobContext.CreateChild(Guid.NewGuid(), "Set up VM", "VM_Init", null, null);
                 qemuCtx.Start();
-                qemuCtx.Output("Starting QEMU...");
-
 
                 Trace.Info($"Container: ${container.Image}");
 
@@ -152,7 +150,7 @@ namespace GitHub.Runner.Worker
 
                 if (qemuProc.ExitCode != 0)
                 {
-                    var qemuNonZeroExitCode = $"QEMU starter exited with non-zero exit code: {qemuProc.ExitCode}";
+                    var qemuNonZeroExitCode = $"VM starter exited with non-zero exit code: {qemuProc.ExitCode}";
                     qemuCtx.Output(qemuNonZeroExitCode);
                     Trace.Info(qemuNonZeroExitCode);
                     jobContext.Error(qemuNonZeroExitCode);
