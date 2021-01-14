@@ -16,9 +16,15 @@ After grabbing all runtime dependencies, run `cd src && ./dev.sh layout Debug &&
 This will build the runner software from sources.
 After the compilation has finished, the resulting binaries can be found in the `_layout` directory.
 
-The last (albeit optional) step of this procedure is installing the systemd units.
+The recommended way of running this software in the production is by using the systemd units which first have to be generated and installed.
 In order to do that, run `./install_systemd_services.sh`.
 Please be advised that this will assume absolute paths to this repository so if you ever decide to move it elsewhere, make sure to run the script again.
+
+The next step is defining the parameters of virtual machines which will be spawned.
+Simply copy the `.vm_specs.example` to `.vm_specs` and adjust the parameters accordingly.
+
+The last step is registering the runner in a repository.
+To do this, run `./config.sh --url https://github.com/$REPOSITORY_ORG/$REPOSITORY_NAME --token $TOKEN --num $SLOTS` with `$TOKEN` being the registration token found in the **Actions** tab in the repository settings and `$SLOTS` being the number of runner slots to allocate.
 
 ## Starting the runner
 
@@ -31,6 +37,6 @@ Next, run `SCALE=<number of slots> supervisord -n -c supervisord.conf`.
 
 ### systemd
 
-First set up networking by running `sudo systemctl start gha-taps@$N` replacing `$N` with the number of interfaces you'd like to create.
+First set up networking by running `sudo systemctl start gha-taps@$SLOTS` replacing `$SLOTS` with the number of interfaces you'd like to create.
 
-Then, start the runner by running `sudo systemctl start gha-main@$N` replacing `$N` with the number of runner slots you'd like to allocate.
+Then, start the runner by running `sudo systemctl start gha-main@$SLOTS` replacing `$SLOTS` with the number of runner slots you'd like to allocate.
