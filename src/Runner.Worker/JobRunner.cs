@@ -138,7 +138,12 @@ namespace GitHub.Runner.Worker
 
                 using (StreamReader qemuOut = qemuProc.StandardOutput)
                 {
-                    Trace.Info(qemuOut.ReadToEnd());
+                    string line;
+                    while((line = qemuOut.ReadLine()) != null)
+                    {
+                        qemuCtx.Output(line);
+                        Trace.Info(line);
+                    }
                 }
 
                 qemuProc.WaitForExit();
@@ -148,12 +153,18 @@ namespace GitHub.Runner.Worker
                 if (qemuProc.ExitCode != 0)
                 {
                     var qemuNonZeroExitCode = $"QEMU starter exited with non-zero exit code: {qemuProc.ExitCode}";
+                    qemuCtx.Output(qemuNonZeroExitCode);
                     Trace.Info(qemuNonZeroExitCode);
                     jobContext.Error(qemuNonZeroExitCode);
 
                     using (StreamReader qemuErr = qemuProc.StandardError)
                     {
-                        Trace.Info(qemuErr.ReadToEnd());
+                        string line;
+                        while((line = qemuErr.ReadLine()) != null)
+                        {
+                            qemuCtx.Output(line);
+                            Trace.Info(line);
+                        }
                     }
 
                     return await CompleteJobAsync(jobServer, jobContext, message, TaskResult.Failed);
