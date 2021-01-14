@@ -103,11 +103,14 @@ mkfifo $SIN $SOUT $MIN $MOUT || true
 
 qemu-system-x86_64 \
 	-kernel $WORKDIR/bzImage-2021-01-04--12-34-20 \
-	-m $RAM -append "console=ttyS0" -enable-kvm -smp $CPU_COUNT -cpu host \
+	-m $RAM -append "console=ttyS0" -enable-kvm -smp $CPU_COUNT \
 	-drive format=raw,file.filename=$SIF_FILE,file.locking=off,file.driver=file,snapshot=on \
 	-drive format=raw,file.filename=$DUMMY_DISK,file.locking=off,file.driver=file,snapshot=on \
 	-drive format=raw,file.filename=$DUMMY_DISK,file.locking=off,file.driver=file,snapshot=on \
-	-drive format=raw,file=$OVERLAY_IMG \
+	-drive format=raw,file.filename=$DUMMY_DISK,file.locking=off,file.driver=file,snapshot=on,if=virtio \
+	-drive format=raw,file.filename=$DUMMY_DISK,file.locking=off,file.driver=file,snapshot=on,if=virtio \
+	-drive format=raw,file.filename=$DUMMY_DISK,file.locking=off,file.driver=file,snapshot=on,if=virtio \
+	-drive format=raw,file=$OVERLAY_IMG,if=virtio \
 	-nic tap,ifname=$TAP,script=no,downscript=no,model=virtio-net-pci \
 	-smbios type=1,manufacturer=Antmicro,product="Antmicro Compute Engine",version="" \
 	-smbios type=2,manufacturer=Antmicro,product="Antmicro Compute Engine",version="" \
@@ -119,6 +122,7 @@ qemu-system-x86_64 \
 	-monitor pipe:$Q2 \
 	-pidfile $Q.pid \
 	-display none \
+	-vga none \
 	-daemonize \
 	--enable-kvm
 
@@ -128,8 +132,8 @@ readUntilString "Welcome to Buildroot"
 until nc -vzw 2 172.17.$PREFIX.2 22; do sleep 2; done
 
 sshSend "mkdir -p /9p"
-sshSend "mke2fs /dev/sdd"
-sshSend "mount /dev/sdd /mnt"
+sshSend "mke2fs /dev/vdd"
+sshSend "mount /dev/vdd /mnt"
 sshSend "mkdir -p /mnt/1 /mnt/2/work /mnt/3"
 sshSend "mount -t 9p -o trans=virtio,version=9p2000.L,msize=124288,cache=none share_mount /9p"
 sshSend "singularity instance start -C -e --dns 8.8.8.8 --overlay /mnt/1 --bind /mnt/2:/root,/9p /tmp/container.sif i"
