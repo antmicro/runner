@@ -1,26 +1,36 @@
-<p align="center">
-  <img src="docs/res/github-graph.png">
-</p>
-
 # GitHub Actions Runner
 
-[![Actions Status](https://github.com/actions/runner/workflows/Runner%20CI/badge.svg)](https://github.com/actions/runner/actions)
-[![Runner E2E Test](https://github.com/actions/runner/workflows/Runner%20E2E%20Test/badge.svg)](https://github.com/actions/runner/actions)
+This repository contains the code of [GitHub Actions Runner](https://github.com/actions/runner.git) modified to spawn QEMU instances with Singularity containers and to perform run steps within them.
 
-The runner is the application that runs a job from a GitHub Actions workflow. It is used by GitHub Actions in the [hosted virtual environments](https://github.com/actions/virtual-environments), or you can [self-host the runner](https://help.github.com/en/actions/automating-your-workflow-with-github-actions/about-self-hosted-runners) in your own environment.
+## Installation
 
-## Get Started
+This software has been tested to work on Debian Buster and Bullseye.
 
-For more information about installing and using self-hosted runners, see [Adding self-hosted runners](https://help.github.com/en/actions/automating-your-workflow-with-github-actions/adding-self-hosted-runners) and [Using self-hosted runners in a workflow](https://help.github.com/en/actions/automating-your-workflow-with-github-actions/using-self-hosted-runners-in-a-workflow)
+As a prerequisite step, please run `sudo dpkg --set-selections < requirements.dpkg && sudo apt-get dselect-upgrade` to install most of the required dependencies.
 
-Runner releases:
+The installation of QEMU was intentionally left out from the aforementioned command.
+This is because you may want to build QEMU from sources or install a custom package.
+If not, simply running `sudo apt -qqy install qemu-system-x86` will suffice.
 
-![win](docs/res/win_sm.png) [Pre-reqs](docs/start/envwin.md) | [Download](https://github.com/actions/runner/releases)  
+After grabbing all runtime dependencies, run `cd src && ./dev.sh layout Debug && cd -`.
+This will build the runner software from sources.
+After the compilation has finished, the resulting binaries can be found in the `_layout` directory.
 
-![macOS](docs/res/apple_sm.png)  [Pre-reqs](docs/start/envosx.md) | [Download](https://github.com/actions/runner/releases)  
+The last (albeit optional) step of this procedure is installing the systemd units.
+In order to do that, run `./install_systemd_services.sh`.
+Please be advised that this will assume absolute paths to this repository so if you ever decide to move it elsewhere, make sure to run the script again.
 
-![linux](docs/res/linux_sm.png)  [Pre-reqs](docs/start/envlinux.md) | [Download](https://github.com/actions/runner/releases)
+## Starting the runner
 
-## Contribute
+### Manual method
 
-We accept contributions in the form of issues and pull requests.  [Read more here](docs/contribute.md) before contributing.
+In order to start the runner manually, first start the `tap.sh` script providing the number of interfaces to create, e.g. `./tap.sh 4`.
+This script is blocking so it's advised to run it in a terminal multiplexer.
+
+Next, run `SCALE=<number of slots> supervisord -n -c supervisord.conf`.
+
+### systemd
+
+First set up networking by running `sudo systemctl start gha-taps@$N` replacing `$N` with the number of interfaces you'd like to create.
+
+Then, start the runner by running `sudo systemctl start gha-main@$N` replacing `$N` with the number of runner slots you'd like to allocate.
