@@ -71,6 +71,19 @@ namespace GitHub.Runner.Worker.Handlers
                 target = Data.Post;
             }
 
+            ArgUtil.NotNullOrEmpty(target, nameof(target));
+            target = Path.Combine(ActionDirectory, target);
+            ArgUtil.File(target, nameof(target));
+
+            // Resolve the working directory.
+            string workingDirectory = ExecutionContext.GetGitHubContext("workspace");
+            if (string.IsNullOrEmpty(workingDirectory))
+            {
+                workingDirectory = HostContext.GetDirectory(WellKnownDirectory.Work);
+            }
+
+            Trace.Info($"workspace: {workingDirectory}");
+
             var actionName = ActionDirectory.Split("_actions/")[1];
 
             Trace.Info($"Stage: {stage}, target: {target}, action dir: {ActionDirectory}, action name: {actionName}");
@@ -79,6 +92,18 @@ namespace GitHub.Runner.Worker.Handlers
             {
                 var instanceNumber = System.Environment.GetEnvironmentVariable(Constants.InstanceNumberVariable);
                 var virtDir = Path.Combine(new DirectoryInfo(HostContext.GetDirectory(WellKnownDirectory.Root)).Parent.FullName, "virt");
+
+                var tempDir = HostContext.GetDirectory(WellKnownDirectory.Temp);
+
+                var sargraphStop = new Process();
+                sargraphStop.StartInfo.FileName = WhichUtil.Which("bash", trace: Trace);
+                sargraphStop.StartInfo.Arguments = $"ssh.sh {instanceNumber} --sargraph-stop";
+                sargraphStop.StartInfo.WorkingDirectory = virtDir;
+                sargraphStop.StartInfo.UseShellExecute = false;
+                sargraphStop.StartInfo.RedirectStandardError = true;
+                sargraphStop.StartInfo.RedirectStandardOutput = true;
+
+                sargraphStop.Start();
 
                 var symFix = new Process();
                 symFix.StartInfo.FileName = WhichUtil.Which("bash", trace: Trace);
@@ -103,20 +128,18 @@ namespace GitHub.Runner.Worker.Handlers
                     Trace.Info("\n"+o.ReadToEnd()+"\n");
                 }
 
+                var plotFile = Path.Combine(tempDir, "_runner_file_commands", "plot.svg");
+
                 symFix.WaitForExit();
+                sargraphStop.WaitForExit();
 
                 Trace.Info($"{symFix.StartInfo.Arguments} exit code: {symFix.ExitCode}");
-            }
+                Trace.Info($"{sargraphStop.StartInfo.Arguments} exit code: {sargraphStop.ExitCode}");
 
-            ArgUtil.NotNullOrEmpty(target, nameof(target));
-            target = Path.Combine(ActionDirectory, target);
-            ArgUtil.File(target, nameof(target));
-
-            // Resolve the working directory.
-            string workingDirectory = ExecutionContext.GetGitHubContext("workspace");
-            if (string.IsNullOrEmpty(workingDirectory))
-            {
-                workingDirectory = HostContext.GetDirectory(WellKnownDirectory.Work);
+                if (sargraphStop.ExitCode == 0)
+                {
+                    File.Copy(plotFile, Path.Combine(workingDirectory, "plot.svg"));
+                }
             }
 
             var nodeRuntimeVersion = await StepHost.DetermineNodeRuntimeVersion(ExecutionContext);
