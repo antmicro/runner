@@ -111,7 +111,7 @@ qemu-system-x86_64 \
 	-drive format=raw,file.filename=$DUMMY_DISK,file.locking=off,file.driver=file,snapshot=on,if=virtio \
 	-drive format=raw,file.filename=$DUMMY_DISK,file.locking=off,file.driver=file,snapshot=on,if=virtio \
 	-drive format=raw,file=$OVERLAY_IMG,if=virtio \
-	-nic tap,ifname=$TAP,script=no,downscript=no,model=virtio-net-pci \
+	-nic tap,ifname=$TAP,script=no,downscript=no,model=virtio-net-pci,vhost=on \
 	-smbios type=1,manufacturer=Antmicro,product="Antmicro Compute Engine",version="" \
 	-smbios type=2,manufacturer=Antmicro,product="Antmicro Compute Engine",version="" \
 	-smbios type=11,value="set_hostname scalenode-github-$PREFIX" \
