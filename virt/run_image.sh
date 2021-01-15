@@ -102,7 +102,8 @@ fallocate -l $OVERLAY_SIZE $OVERLAY_IMG
 mkfifo $SIN $SOUT $MIN $MOUT || true
 
 qemu-system-x86_64 \
-	-kernel $WORKDIR/bzImage-2021-01-04--12-34-20 \
+	-kernel $WORKDIR/bzImage-2021-01-14--21-34-05 \
+	-append "nox=1" \
 	-m $RAM -append "console=ttyS0" -enable-kvm -smp $CPU_COUNT \
 	-drive format=raw,file.filename=$SIF_FILE,file.locking=off,file.driver=file,snapshot=on \
 	-drive format=raw,file.filename=$DUMMY_DISK,file.locking=off,file.driver=file,snapshot=on \
