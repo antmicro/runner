@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Reflection;
 using System.Collections;
 using System.Collections.Generic;
 using System.Collections.Specialized;
@@ -933,7 +934,20 @@ namespace GitHub.Runner.Worker
         // Do not add a format string overload. See comment on ExecutionContext.Write().
         public static void Output(this IExecutionContext context, string message)
         {
-            context.Write(null, message);
+            string msg = "";
+            foreach(var p in typeof(WellKnownTags).GetFields(System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.Public))
+            {
+                var v = p.GetValue(null).ToString();
+                if (message.StartsWith(v))
+                {
+                    msg = message;
+                }
+                else
+                {
+                    msg = $"{DateTime.Now.ToString("hh:mm:ss")} {message}";
+                }
+            } 
+            context.Write(null, msg);
         }
 
         // Do not add a format string overload. See comment on ExecutionContext.Write().
@@ -1018,5 +1032,6 @@ namespace GitHub.Runner.Worker
         public static readonly string Error = "##[error]";
         public static readonly string Warning = "##[warning]";
         public static readonly string Debug = "##[debug]";
+        public static readonly string Group = "##[group]";
     }
 }
