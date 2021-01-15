@@ -101,6 +101,8 @@ fallocate -l $OVERLAY_SIZE $OVERLAY_IMG
 
 mkfifo $SIN $SOUT $MIN $MOUT || true
 
+cp ../sargraph/sargraph.py $SHARE_PATH
+
 qemu-system-x86_64 \
 	-kernel $WORKDIR/bzImage-2021-01-14--21-34-05 \
 	-append "nox=1" \
@@ -138,3 +140,5 @@ sshSend "mount /dev/vdd /mnt"
 sshSend "mkdir -p /mnt/1 /mnt/2/work /mnt/3"
 sshSend "mount -t 9p -o trans=virtio,version=9p2000.L,msize=124288,cache=none share_mount /9p"
 sshSend "singularity instance start -C -e --dns 8.8.8.8 --overlay /mnt/1 --bind /mnt/2:/root,/9p /tmp/container.sif i"
+sshSend "cp /9p/sargraph.py /usr/bin/sargraph"
+sshSend "cd /9p && SARGRAPH_OUTPUT_TYPE=svg sargraph chart start"

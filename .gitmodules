@@ -1,0 +1,3 @@
+[submodule "sargraph"]
+	path = sargraph
+	url = https://github.com/antmicro/sargraph
