@@ -88,6 +88,9 @@ namespace GitHub.Runner.Worker.Handlers
 
             Trace.Info($"Stage: {stage}, target: {target}, action dir: {ActionDirectory}, action name: {actionName}");
 
+            var jobName = System.Environment.GetEnvironmentVariable("GITHUB_JOB_FULL");
+            Trace.Info($"jobName: {jobName}");
+
             if (actionName == "actions/upload-artifact/v2")
             {
                 var instanceNumber = System.Environment.GetEnvironmentVariable(Constants.InstanceNumberVariable);
@@ -138,7 +141,7 @@ namespace GitHub.Runner.Worker.Handlers
 
                 if (sargraphStop.ExitCode == 0)
                 {
-                    File.Copy(plotFile, Path.Combine(workingDirectory, "plot.svg"));
+                    File.Copy(plotFile, Path.Combine(workingDirectory, $"plot_{jobName}.svg"));
                 }
             }
 

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Text.RegularExpressions;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
@@ -331,6 +332,8 @@ namespace GitHub.Runner.Listener
                 var term = HostContext.GetService<ITerminal>();
                 term.WriteLine($"{DateTime.UtcNow:u}: Running job: {message.JobDisplayName}");
 
+                var jobNameSanitized = Regex.Replace(message.JobDisplayName, @"[^0-9a-zA-Z]+", "_");
+
                 // first job request renew succeed.
                 TaskCompletionSource<int> firstJobRequestRenewed = new TaskCompletionSource<int>();
                 var notification = HostContext.GetService<IJobNotification>();
@@ -419,6 +422,7 @@ namespace GitHub.Runner.Listener
                                 string workerFileName = Path.Combine(assemblyDirectory, _workerProcessName);
                                 var workerEnv = new Dictionary<string, string>(){
                                     {Constants.InstanceNumberVariable, Environment.GetEnvironmentVariable(Constants.InstanceNumberVariable)},
+                                    {"GITHUB_JOB_FULL", jobNameSanitized},
                                 };
                                 workerProcessTask = processInvoker.ExecuteAsync(
                                     workingDirectory: assemblyDirectory,
