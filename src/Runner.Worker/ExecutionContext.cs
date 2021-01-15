@@ -33,6 +33,24 @@ namespace GitHub.Runner.Worker
         public static string Task = "Task";
     }
 
+    public class GhControlStrings
+    {
+        public static List<string> GetGhControlStrings()
+        {
+            var ret = new List<string>();
+            foreach(var p in typeof(WellKnownTags).GetFields(System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.Public))
+            {
+                ret.Add(p.GetValue(null).ToString());
+            }
+            return ret;
+        }
+    }
+
+    public interface IGhControlStrings
+    {
+        List<string> GhControlStrings { get; }
+    }
+
     [ServiceLocator(Default = typeof(ExecutionContext))]
     public interface IExecutionContext : IRunnerService
     {
@@ -935,18 +953,15 @@ namespace GitHub.Runner.Worker
         public static void Output(this IExecutionContext context, string message)
         {
             string msg = "";
-            foreach(var p in typeof(WellKnownTags).GetFields(System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.Public))
+            bool isGhControl = message.StartsWith(WellKnownTags.Group) || message.StartsWith(WellKnownTags.EndGroup);
+            if (isGhControl)
             {
-                var v = p.GetValue(null).ToString();
-                if (message.StartsWith(v))
-                {
-                    msg = message;
-                }
-                else
-                {
-                    msg = $"{DateTime.Now.ToString("hh:mm:ss")} {message}";
-                }
-            } 
+                msg = message;
+            }
+            else
+            {
+                msg = $"\u001b[32;1m{DateTime.Now.ToString("hh:mm:ss")}\u001b[0m | {message}";
+            }
             context.Write(null, msg);
         }
 
@@ -1033,5 +1048,6 @@ namespace GitHub.Runner.Worker
         public static readonly string Warning = "##[warning]";
         public static readonly string Debug = "##[debug]";
         public static readonly string Group = "##[group]";
+        public static readonly string EndGroup = "##[endgroup]";
     }
 }
