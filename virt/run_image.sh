@@ -104,9 +104,9 @@ mkfifo $SIN $SOUT $MIN $MOUT || true
 cp ../sargraph/sargraph.py $SHARE_PATH
 
 qemu-system-x86_64 \
-	-kernel $WORKDIR/bzImage-2021-01-14--21-34-05 \
-	-append "nox=1" \
-	-m $RAM -append "console=ttyS0" -enable-kvm -smp $CPU_COUNT \
+	-kernel $WORKDIR/bzImage-2021-01-15--23-25-17 \
+	-append "console=ttyS0 nox=1" \
+	-m $RAM -enable-kvm -smp $CPU_COUNT \
 	-drive format=raw,file.filename=$SIF_FILE,file.locking=off,file.driver=file,snapshot=on \
 	-drive format=raw,file.filename=$DUMMY_DISK,file.locking=off,file.driver=file,snapshot=on \
 	-drive format=raw,file.filename=$DUMMY_DISK,file.locking=off,file.driver=file,snapshot=on \
@@ -127,8 +127,7 @@ qemu-system-x86_64 \
 	-display none \
 	-vga none \
 	-daemonize \
-	--enable-kvm
-
+	-no-reboot
 
 readUntilString "Welcome to Buildroot"
 
