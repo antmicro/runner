@@ -27,6 +27,8 @@ echo "running as:	$RUNNING_USER"
 echo "wan ip:		$WAN_IP"
 
 echo 1 > /proc/sys/net/ipv4/ip_forward
+chmod 777 /dev/vhost-net
+chmod 777 /dev/vhost-vsock
 
 for i in $(seq 0 $END)
 do
