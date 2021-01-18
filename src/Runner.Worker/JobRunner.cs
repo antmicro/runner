@@ -134,12 +134,23 @@ namespace GitHub.Runner.Worker
                 qemuProc.Start();
                 Trace.Info($"Starting QEMU with start script PID {qemuProc.Id}");
 
+                var qemuToGithub = true;
+
                 using (StreamReader qemuOut = qemuProc.StandardOutput)
                 {
                     string line;
                     while((line = qemuOut.ReadLine()) != null)
                     {
-                        qemuCtx.Output(line);
+                        if (line.Contains("DEBUG START"))
+                        {
+                            qemuToGithub = false;
+                        }
+
+                        if (qemuToGithub)
+                        {
+                            qemuCtx.Output(line);
+                        }
+
                         Trace.Info(line);
                     }
                 }
@@ -155,23 +166,11 @@ namespace GitHub.Runner.Worker
                     Trace.Info(qemuNonZeroExitCode);
                     jobContext.Error(qemuNonZeroExitCode);
 
-                    var qemuToGithub = true;
-
                     using (StreamReader qemuErr = qemuProc.StandardError)
                     {
                         string line;
                         while((line = qemuErr.ReadLine()) != null)
                         {
-                            if (line.Contains("DEBUG START"))
-                            {
-                                qemuToGithub = false;
-                            }
-
-                            if (qemuToGithub)
-                            {
-                                qemuCtx.Output(line);
-                            }
-
                             Trace.Info(line);
                         }
                     }
