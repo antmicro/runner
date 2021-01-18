@@ -160,7 +160,7 @@ namespace GitHub.Runner.Worker
                         string line;
                         while((line = qemuErr.ReadLine()) != null)
                         {
-                            qemuCtx.Output(line);
+                            //qemuCtx.Output(line);
                             Trace.Info(line);
                         }
                     }
