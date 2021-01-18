@@ -20,6 +20,8 @@ echo "Overlay size:     $OVERLAY_SIZE"
 echo "vCPU count:       $CPU_COUNT"
 echo "RAM:              $RAM"
 
+echo "DEBUG START"
+
 while getopts ":n:r:s:" o; do
     case "${o}" in
         n)

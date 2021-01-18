@@ -155,12 +155,23 @@ namespace GitHub.Runner.Worker
                     Trace.Info(qemuNonZeroExitCode);
                     jobContext.Error(qemuNonZeroExitCode);
 
+                    var qemuToGithub = true;
+
                     using (StreamReader qemuErr = qemuProc.StandardError)
                     {
                         string line;
                         while((line = qemuErr.ReadLine()) != null)
                         {
-                            //qemuCtx.Output(line);
+                            if (line.Contains("DEBUG START"))
+                            {
+                                qemuToGithub = false;
+                            }
+
+                            if (qemuToGithub)
+                            {
+                                qemuCtx.Output(line);
+                            }
+
                             Trace.Info(line);
                         }
                     }
