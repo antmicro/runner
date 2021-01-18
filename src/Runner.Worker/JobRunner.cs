@@ -349,6 +349,12 @@ namespace GitHub.Runner.Worker
                 killProc.StartInfo.WorkingDirectory = virtDir;
                 killProc.StartInfo.UseShellExecute = false;
 
+                var killProc2 = new Process();
+                killProc2.StartInfo.FileName = WhichUtil.Which("kill", trace: Trace);
+                killProc2.StartInfo.Arguments = $"-s SIGKILL {virtPid}";
+                killProc2.StartInfo.WorkingDirectory = virtDir;
+                killProc2.StartInfo.UseShellExecute = false;
+
                 Trace.Info($"Unmouting sshfs from {WorkspaceDirectory}");
                 umountProc.Start();
                 umountProc.WaitForExit();
@@ -368,6 +374,34 @@ namespace GitHub.Runner.Worker
                 Trace.Info($"Killing QEMU with PID {virtPid}");
                 killProc.Start();
                 killProc.WaitForExit();
+
+                var waitPid = 5;
+
+                for (int i = 1; i <= waitPid; i++)
+                {
+                    Trace.Info($"[{i}/{waitPid}] waiting for QEMU to die");
+                    if (!File.Exists(virtPidPath))
+                    {
+                        break;
+                    }
+
+                    if (i == waitPid && File.Exists(virtPidPath))
+                    {
+                        Trace.Info($"Sending SIGKILL to {virtPid}");
+                        killProc2.Start();
+                        killProc2.WaitForExit();
+                        try
+                        {
+                            File.Delete(virtPidPath);
+                            Trace.Info($"Removed {virtPidPath}");
+                        }
+                        catch (Exception e)
+                        {
+                            Trace.Info($"Couldn't remove {virtPidPath}: {e}");
+                        }
+                    }
+                    Thread.Sleep(1000);
+                }
 
                 await ShutdownQueue(throwOnFailure: false);
             }
