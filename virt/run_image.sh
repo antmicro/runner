@@ -106,7 +106,7 @@ cp ../sargraph/sargraph.py $SHARE_PATH
 qemu-system-x86_64 \
 	-kernel $WORKDIR/bzImage-2021-01-15--23-25-17 \
 	-append "console=ttyS0 nox=1" \
-	-m $RAM -enable-kvm -smp $CPU_COUNT \
+	-m $RAM -enable-kvm -smp $CPU_COUNT -cpu host \
 	-drive format=raw,file.filename=$SIF_FILE,file.locking=off,file.driver=file,snapshot=on \
 	-drive format=raw,file.filename=$DUMMY_DISK,file.locking=off,file.driver=file,snapshot=on \
 	-drive format=raw,file.filename=$DUMMY_DISK,file.locking=off,file.driver=file,snapshot=on \
