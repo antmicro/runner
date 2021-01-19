@@ -20,8 +20,6 @@ echo "Overlay size:     $OVERLAY_SIZE"
 echo "vCPU count:       $CPU_COUNT"
 echo "RAM:              $RAM"
 
-echo "DEBUG START"
-
 while getopts ":n:r:s:" o; do
     case "${o}" in
         n)
@@ -45,6 +43,7 @@ FREE_SPACE=$(df -B1 . | tail -n +2 | awk '{ print $4 "\t" }')
 DUMMY_DISK=$WORKDIR/small.img
 SSH_PUB_KEY=$HOME/.ssh/id_rsa
 SHARE_PATH=$(realpath ../_layout)/_work_${PREFIX}/_temp/_runner_file_commands
+MAC=$(sed "`expr $PREFIX + 1`q;d" mac)
 
 TAP=tap${PREFIX}
 
@@ -55,7 +54,11 @@ SOUT=$Q.out
 MIN=$Q2.in
 MOUT=$Q2.out
 
+echo "MAC address:      ${MAC}"
 echo "Instance number:  ${PREFIX}"
+
+echo "DEBUG START"
+
 echo "Share path:       ${SHARE_PATH}"
 
 readUntilString() {
@@ -116,7 +119,7 @@ qemu-system-x86_64 \
 	-drive format=raw,file.filename=$DUMMY_DISK,file.locking=off,file.driver=file,snapshot=on,if=virtio \
 	-drive format=raw,file.filename=$DUMMY_DISK,file.locking=off,file.driver=file,snapshot=on,if=virtio \
 	-drive format=raw,file=$OVERLAY_IMG,if=virtio \
-	-nic tap,ifname=$TAP,script=no,downscript=no,model=virtio-net-pci,vhost=on \
+	-nic tap,ifname=$TAP,script=no,downscript=no,model=virtio-net-pci,vhost=on,mac=$MAC \
 	-smbios type=1,manufacturer=Antmicro,product="Antmicro Compute Engine",version="" \
 	-smbios type=2,manufacturer=Antmicro,product="Antmicro Compute Engine",version="" \
 	-smbios type=11,value="set_hostname scalenode-github-$PREFIX" \
