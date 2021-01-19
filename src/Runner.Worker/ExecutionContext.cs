@@ -952,15 +952,23 @@ namespace GitHub.Runner.Worker
         // Do not add a format string overload. See comment on ExecutionContext.Write().
         public static void Output(this IExecutionContext context, string message)
         {
-            string msg = "";
+            string msg = "", pre = "", post = "";
             bool isGhControl = message.StartsWith(WellKnownTags.Group) || message.StartsWith(WellKnownTags.EndGroup);
+            Regex r = new Regex(@"^\++\s");
+
             if (isGhControl)
             {
                 msg = message;
             }
             else
             {
-                msg = $"\u001b[32;1m{DateTime.Now.ToString("hh:mm:ss")}\u001b[0m | {message}";
+                if (r.Matches(message).Count > 0)
+                {
+                    pre  = "\u001b[34;1m";
+                    post = "\u001b[0m";
+                }
+
+                msg = $"\u001b[32;1m{DateTime.Now.ToString("hh:mm:ss")}\u001b[0m | {pre}{message}{post}";
             }
             context.Write(null, msg);
         }
