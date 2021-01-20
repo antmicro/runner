@@ -968,7 +968,7 @@ namespace GitHub.Runner.Worker
                     post = "\u001b[0m";
                 }
 
-                msg = $"\u001b[32;1m{DateTime.Now.ToString("hh:mm:ss")}\u001b[0m | {pre}{message}{post}";
+                msg = $"\u001b[32;1m{DateTime.Now.ToString("HH:mm:ss")}\u001b[0m | {pre}{message}{post}";
             }
             context.Write(null, msg);
         }
