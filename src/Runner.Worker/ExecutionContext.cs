@@ -950,9 +950,9 @@ namespace GitHub.Runner.Worker
         }
 
         // Do not add a format string overload. See comment on ExecutionContext.Write().
-        public static void Output(this IExecutionContext context, string message)
+        public static void Output(this IExecutionContext context, string message, string outputType = "")
         {
-            string msg = "", pre = "", post = "";
+            string msg = "", pre = "", post = "", preTime = AnsiColors.Green;
             bool isGhControl = message.StartsWith(WellKnownTags.Group) || message.StartsWith(WellKnownTags.EndGroup);
             Regex r = new Regex(@"^\++\s");
 
@@ -962,13 +962,15 @@ namespace GitHub.Runner.Worker
             }
             else
             {
+                if (outputType == "stderr") preTime = AnsiColors.Red;
                 if (r.Matches(message).Count > 0)
                 {
-                    pre  = "\u001b[34;1m";
-                    post = "\u001b[0m";
+                    pre  = AnsiColors.Blue;
+                    post = AnsiColors.Reset;
+                    preTime = AnsiColors.Green;
                 }
 
-                msg = $"\u001b[32;1m{DateTime.Now.ToString("HH:mm:ss")}\u001b[0m | {pre}{message}{post}";
+                msg = $"{preTime}{DateTime.Now.ToString("HH:mm:ss")}{AnsiColors.Reset} | {pre}{message}{post}";
             }
             context.Write(null, msg);
         }
@@ -1057,5 +1059,14 @@ namespace GitHub.Runner.Worker
         public static readonly string Debug = "##[debug]";
         public static readonly string Group = "##[group]";
         public static readonly string EndGroup = "##[endgroup]";
+    }
+
+    public static class AnsiColors
+    {
+        // All of them are bold!
+        public static readonly string Green = "\u001b[32;1m";
+        public static readonly string Blue  = "\u001b[34;1m";
+        public static readonly string Red   = "\u001b[31;1m" ;
+        public static readonly string Reset = "\u001b[0m";
     }
 }

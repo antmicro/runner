@@ -309,8 +309,8 @@ namespace GitHub.Runner.Worker.Handlers
                     workingDirectoryOriginal ?? string.Empty);
             Trace.Info($"Singularity directory: {changeContainerDir}");
 
-            using (var stdoutManager = new OutputManager(ExecutionContext, ActionCommandManager))
-            using (var stderrManager = new OutputManager(ExecutionContext, ActionCommandManager))
+            using (var stdoutManager = new OutputManager(ExecutionContext, ActionCommandManager, outputManagerType: "stdout"))
+            using (var stderrManager = new OutputManager(ExecutionContext, ActionCommandManager, outputManagerType: "stderr"))
             {
                 StepHost.OutputDataReceived += stdoutManager.OnDataReceived;
                 StepHost.ErrorDataReceived += stderrManager.OnDataReceived;

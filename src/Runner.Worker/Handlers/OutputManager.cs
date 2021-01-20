@@ -26,12 +26,14 @@ namespace GitHub.Runner.Worker.Handlers
         private IssueMatcher[] _matchers = Array.Empty<IssueMatcher>();
         // Mapping that indicates whether a directory belongs to the workflow repository
         private readonly Dictionary<string, string> _directoryMap = new Dictionary<string, string>();
+        private readonly string _outputManagerType;
 
-        public OutputManager(IExecutionContext executionContext, IActionCommandManager commandManager, ContainerInfo container = null)
+        public OutputManager(IExecutionContext executionContext, IActionCommandManager commandManager, ContainerInfo container = null, string outputManagerType = "")
         {
             _executionContext = executionContext;
             _commandManager = commandManager;
             _container = container ?? executionContext.Global.Container;
+            _outputManagerType = outputManagerType;
 
             // Recursion failsafe (test override)
             var failsafeString = Environment.GetEnvironmentVariable("RUNNER_TEST_GET_REPOSITORY_PATH_FAILSAFE");
@@ -152,7 +154,7 @@ namespace GitHub.Runner.Worker.Handlers
             }
 
             // Regular output
-            _executionContext.Output(line);
+            _executionContext.Output(line, _outputManagerType);
         }
 
         private void OnMatcherChanged(object sender, MatcherChangedEventArgs e)
