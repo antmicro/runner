@@ -267,6 +267,12 @@ namespace GitHub.Runner.Common
                         settings.WorkFolder));
                     break;
 
+                case WellKnownDirectory.ConfigDir:
+                    path = Path.Combine(
+                            new DirectoryInfo(GetDirectory(WellKnownDirectory.Root)).Parent.FullName,
+                            "_configuration");
+                    break;
+
                 default:
                     throw new NotSupportedException($"Unexpected well known directory: '{directory}'");
             }
@@ -283,61 +289,61 @@ namespace GitHub.Runner.Common
             {
                 case WellKnownConfigFile.Runner:
                     path = Path.Combine(
-                        GetDirectory(WellKnownDirectory.Root),
+                        GetDirectory(WellKnownDirectory.ConfigDir),
                         $".runner_{instanceNumber}");
                     break;
 
                 case WellKnownConfigFile.Credentials:
                     path = Path.Combine(
-                        GetDirectory(WellKnownDirectory.Root),
+                        GetDirectory(WellKnownDirectory.ConfigDir),
                         $".credentials_{instanceNumber}");
                     break;
 
                 case WellKnownConfigFile.MigratedCredentials:
                     path = Path.Combine(
-                        GetDirectory(WellKnownDirectory.Root),
+                        GetDirectory(WellKnownDirectory.ConfigDir),
                         $".credentials_migrated_{instanceNumber}");
                     break;
 
                 case WellKnownConfigFile.RSACredentials:
                     path = Path.Combine(
-                        GetDirectory(WellKnownDirectory.Root),
+                        GetDirectory(WellKnownDirectory.ConfigDir),
                         $".credentials_rsaparams_{instanceNumber}");
                     break;
 
                 case WellKnownConfigFile.Service:
                     path = Path.Combine(
-                        GetDirectory(WellKnownDirectory.Root),
+                        GetDirectory(WellKnownDirectory.ConfigDir),
                         $".service_{instanceNumber}");
                     break;
 
                 case WellKnownConfigFile.CredentialStore:
 #if OS_OSX
                     path = Path.Combine(
-                        GetDirectory(WellKnownDirectory.Root),
+                        GetDirectory(WellKnownDirectory.ConfigDir),
                         ".credential_store.keychain");
 #else
                     path = Path.Combine(
-                        GetDirectory(WellKnownDirectory.Root),
+                        GetDirectory(WellKnownDirectory.ConfigDir),
                         $".credential_store_{instanceNumber}");
 #endif
                     break;
 
                 case WellKnownConfigFile.Certificates:
                     path = Path.Combine(
-                        GetDirectory(WellKnownDirectory.Root),
+                        GetDirectory(WellKnownDirectory.ConfigDir),
                         $".certificates_{instanceNumber}");
                     break;
 
                 case WellKnownConfigFile.Options:
                     path = Path.Combine(
-                        GetDirectory(WellKnownDirectory.Root),
+                        GetDirectory(WellKnownDirectory.ConfigDir),
                         $".options_{instanceNumber}");
                     break;
 
                 case WellKnownConfigFile.SetupInfo:
                     path = Path.Combine(
-                        GetDirectory(WellKnownDirectory.Root),
+                        GetDirectory(WellKnownDirectory.ConfigDir),
                         $".setup_info_{instanceNumber}");
                     break;
 

@@ -146,6 +146,9 @@ namespace GitHub.Runner.Common
         {
             base.Initialize(hostContext);
 
+            var credentialsDir = HostContext.GetDirectory(WellKnownDirectory.ConfigDir);
+            Directory.CreateDirectory(credentialsDir);
+
             var currentAssemblyLocation = System.Reflection.Assembly.GetEntryAssembly().Location;
             Trace.Info("currentAssemblyLocation: {0}", currentAssemblyLocation);
 

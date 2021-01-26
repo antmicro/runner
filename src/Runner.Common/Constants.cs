@@ -13,6 +13,7 @@ namespace GitHub.Runner.Common
         Tools,
         Update,
         Work,
+        ConfigDir
     }
 
     public enum WellKnownConfigFile

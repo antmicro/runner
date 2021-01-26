@@ -19,6 +19,7 @@ _downloads
 _layout
 _package
 _dotnetsdk
+_configuration
 TestResults
 TestLogs
 .DS_Store
