@@ -51,6 +51,4 @@ EOM
 echo "$MAIN_SYSTEMD_UNIT" > /lib/systemd/system/gha-main@.service
 echo "$NET_SYSTEMD_UNIT" > /lib/systemd/system/gha-taps@.service
 
-systemctl stop dnsmasq
-systemctl disable dnsmasq
 systemctl daemon-reload

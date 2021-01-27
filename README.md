@@ -20,6 +20,8 @@ The recommended way of running this software in the production is by using the s
 In order to do that, run `./install_systemd_services.sh`.
 Please be advised that this will assume absolute paths to this repository so if you ever decide to move it elsewhere, make sure to run the script again.
 
+> WARNING: You may have to stop and disable dnsmasq systemd unit to avoid conflicts by running `sudo systemctl stop dnsmasq && sudo systemctl disable dnsmasq`
+
 The next step is defining the parameters of virtual machines which will be spawned.
 Simply copy the `.vm_specs.example` to `.vm_specs` and adjust the parameters accordingly.
 
