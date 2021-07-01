@@ -68,6 +68,7 @@ namespace GitHub.Runner.Common
             "--no-group",
             "--timeout=30"
         };
+        public static readonly int CompositeActionsMaxDepth = 9;
 
         // This enum is embedded within the Constants class to make it easier to reference and avoid
         // ambiguous type reference with System.Runtime.InteropServices.OSPlatform and System.Runtime.InteropServices.Architecture
