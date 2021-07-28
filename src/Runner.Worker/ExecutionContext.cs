@@ -55,6 +55,7 @@ namespace GitHub.Runner.Worker
     public interface IExecutionContext : IRunnerService
     {
         Guid Id { get; }
+        Guid EmbeddedId { get; }
         string ScopeName { get; }
         string ContextName { get; }
         Task ForceCompleted { get; }
@@ -77,6 +78,10 @@ namespace GitHub.Runner.Worker
 
         // Only job level ExecutionContext has PostJobSteps
         Stack<IStep> PostJobSteps { get; }
+        HashSet<Guid> EmbeddedStepsWithPostRegistered{ get; }
+
+        // Keep track of embedded steps states
+        Dictionary<Guid, Dictionary<string, string>> EmbeddedIntraActionState { get; }
 
         bool EchoOnActionCommand { get; set; }
 
@@ -87,8 +92,8 @@ namespace GitHub.Runner.Worker
         // Initialize
         void InitializeJob(Pipelines.AgentJobRequestMessage message, CancellationToken token);
         void CancelToken();
-        IExecutionContext CreateChild(Guid recordId, string displayName, string refName, string scopeName, string contextName, Dictionary<string, string> intraActionState = null, int? recordOrder = null, IPagingLogger logger = null, bool isEmbedded = false, CancellationTokenSource cancellationTokenSource = null);
-        IExecutionContext CreateEmbeddedChild(string scopeName, string contextName);
+        IExecutionContext CreateChild(Guid recordId, string displayName, string refName, string scopeName, string contextName, Dictionary<string, string> intraActionState = null, int? recordOrder = null, IPagingLogger logger = null, bool isEmbedded = false, CancellationTokenSource cancellationTokenSource = null, Guid embeddedId = default(Guid));
+        IExecutionContext CreateEmbeddedChild(string scopeName, string contextName, Guid embeddedId, Dictionary<string, string> intraActionState = null);
 
         // logging
         long Write(string tag, string message);
@@ -151,6 +156,7 @@ namespace GitHub.Runner.Worker
         private long _totalThrottlingDelayInMilliseconds = 0;
 
         public Guid Id => _record.Id;
+        public Guid EmbeddedId { get; private set; }
         public string ScopeName { get; private set; }
         public string ContextName { get; private set; }
         public Task ForceCompleted => _forceCompleted.Task;
@@ -173,6 +179,11 @@ namespace GitHub.Runner.Worker
 
         // Only job level ExecutionContext has StepsWithPostRegistered
         public HashSet<Guid> StepsWithPostRegistered { get; private set; }
+
+        // Only job level ExecutionContext has EmbeddedStepsWithPostRegistered
+        public HashSet<Guid> EmbeddedStepsWithPostRegistered { get; private set; }
+
+        public Dictionary<Guid, Dictionary<string, string>> EmbeddedIntraActionState { get; private set; }
 
         public bool EchoOnActionCommand { get; set; }
 
@@ -264,13 +275,15 @@ namespace GitHub.Runner.Worker
 
         public void RegisterPostJobStep(IStep step)
         {
-            // TODO: Remove when we support composite post job steps
             if (this.IsEmbedded)
             {
-                throw new Exception("Composite actions do not currently support post steps");
-
-            }
-            if (step is IActionRunner actionRunner && !Root.StepsWithPostRegistered.Add(actionRunner.Action.Id))
+                if (step is IActionRunner actionRunner && !Root.EmbeddedStepsWithPostRegistered.Add(actionRunner.Action.Id))
+                {
+                    Trace.Info($"'post' of '{actionRunner.DisplayName}' already push to child post step stack.");
+                }
+                return;
+            } 
+            else if (step is IActionRunner actionRunner && !Root.StepsWithPostRegistered.Add(actionRunner.Action.Id))
             {
                 Trace.Info($"'post' of '{actionRunner.DisplayName}' already push to post step stack.");
                 return;
@@ -280,7 +293,7 @@ namespace GitHub.Runner.Worker
             Root.PostJobSteps.Push(step);
         }
 
-        public IExecutionContext CreateChild(Guid recordId, string displayName, string refName, string scopeName, string contextName, Dictionary<string, string> intraActionState = null, int? recordOrder = null, IPagingLogger logger = null, bool isEmbedded = false, CancellationTokenSource cancellationTokenSource = null)
+        public IExecutionContext CreateChild(Guid recordId, string displayName, string refName, string scopeName, string contextName, Dictionary<string, string> intraActionState = null, int? recordOrder = null, IPagingLogger logger = null, bool isEmbedded = false, CancellationTokenSource cancellationTokenSource = null, Guid embeddedId = default(Guid))
         {
             Trace.Entering();
 
@@ -289,6 +302,7 @@ namespace GitHub.Runner.Worker
             child.Global = Global;
             child.ScopeName = scopeName;
             child.ContextName = contextName;
+            child.EmbeddedId = embeddedId;
             if (intraActionState == null)
             {
                 child.IntraActionState = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
@@ -336,9 +350,9 @@ namespace GitHub.Runner.Worker
         /// An embedded execution context shares the same record ID, record name, logger,
         /// and a linked cancellation token.
         /// </summary>
-        public IExecutionContext CreateEmbeddedChild(string scopeName, string contextName)
+        public IExecutionContext CreateEmbeddedChild(string scopeName, string contextName, Guid embeddedId, Dictionary<string, string> intraActionState = null)
         {
-            return Root.CreateChild(_record.Id, _record.Name, _record.Id.ToString("N"), scopeName, contextName, logger: _logger, isEmbedded: true, cancellationTokenSource: CancellationTokenSource.CreateLinkedTokenSource(_cancellationTokenSource.Token));
+            return Root.CreateChild(_record.Id, _record.Name, _record.Id.ToString("N"), scopeName, contextName, logger: _logger, isEmbedded: true, cancellationTokenSource: CancellationTokenSource.CreateLinkedTokenSource(_cancellationTokenSource.Token), intraActionState: intraActionState, embeddedId: embeddedId);
         }
 
         public void Start(string currentOperation = null)
@@ -394,7 +408,7 @@ namespace GitHub.Runner.Worker
 
             _logger.End();
 
-            // Skip if generated context name. Generated context names start with "__". After M271-ish the server will never send an empty context name.
+            // Skip if generated context name. Generated context names start with "__". After 3.2 the server will never send an empty context name.
             if (!string.IsNullOrEmpty(ContextName) && !ContextName.StartsWith("__", StringComparison.Ordinal))
             {
                 Global.StepsContext.SetOutcome(ScopeName, ContextName, (Outcome ?? Result ?? TaskResult.Succeeded).ToActionResult());
@@ -457,7 +471,7 @@ namespace GitHub.Runner.Worker
         {
             ArgUtil.NotNullOrEmpty(name, nameof(name));
 
-            // Skip if generated context name. Generated context names start with "__". After M271-ish the server will never send an empty context name.
+            // Skip if generated context name. Generated context names start with "__". After 3.2 the server will never send an empty context name.
             if (string.IsNullOrEmpty(ContextName) || ContextName.StartsWith("__", StringComparison.Ordinal))
             {
                 reference = null;
@@ -683,6 +697,12 @@ namespace GitHub.Runner.Worker
 
             // StepsWithPostRegistered for job ExecutionContext
             StepsWithPostRegistered = new HashSet<Guid>();
+
+            // EmbeddedStepsWithPostRegistered for job ExecutionContext
+            EmbeddedStepsWithPostRegistered = new HashSet<Guid>();
+
+            // EmbeddedIntraActionState for job ExecutionContext
+            EmbeddedIntraActionState = new Dictionary<Guid, Dictionary<string,string>>();
 
             // Job timeline record.
             InitializeTimelineRecord(
