@@ -248,7 +248,10 @@ namespace GitHub.Runner.Worker
                                 {
                                     _cachedEmbeddedPreSteps[parentStepId] = new List<Pipelines.ActionStep>();
                                 }
-                                _cachedEmbeddedPreSteps[parentStepId].Add(action);
+                                // Clone action so we can modify the condition without affecting the original
+                                var clonedAction = action.Clone() as Pipelines.ActionStep;
+                                clonedAction.Condition = definition.Data.Execution.InitCondition;
+                                _cachedEmbeddedPreSteps[parentStepId].Add(clonedAction);
                             }
                         }
 
@@ -259,7 +262,10 @@ namespace GitHub.Runner.Worker
                                 // If we haven't done so already, add the parent to the post steps
                                 _cachedEmbeddedPostSteps[parentStepId] = new Stack<Pipelines.ActionStep>();
                             }
-                            _cachedEmbeddedPostSteps[parentStepId].Push(action);
+                            // Clone action so we can modify the condition without affecting the original
+                            var clonedAction = action.Clone() as Pipelines.ActionStep;
+                            clonedAction.Condition = definition.Data.Execution.CleanupCondition;
+                            _cachedEmbeddedPostSteps[parentStepId].Push(clonedAction);
                         }
                     }
                 }
