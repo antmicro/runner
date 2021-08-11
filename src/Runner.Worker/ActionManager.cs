@@ -612,6 +612,7 @@ namespace GitHub.Runner.Worker
                     {
                         NameWithOwner = repositoryReference.Name,
                         Ref = repositoryReference.Ref,
+                        Path = repositoryReference.Path,
                     };
                 })
                 .ToList();
