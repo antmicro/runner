@@ -73,6 +73,7 @@ namespace GitHub.Runner.Listener
                 Name = _settings.AgentName,
                 Version = BuildConstants.RunnerPackage.Version,
                 OSDescription = RuntimeInformation.OSDescription,
+                Ephemeral = false,
             };
 
             Trace.Info(agent);
