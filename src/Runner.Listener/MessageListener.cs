@@ -23,6 +23,7 @@ namespace GitHub.Runner.Listener
         Task DeleteSessionAsync();
         Task<TaskAgentMessage> GetNextMessageAsync(CancellationToken token);
         Task DeleteMessageAsync(TaskAgentMessage message);
+        string GetInitRunnerVersion();
     }
 
     public sealed class MessageListener : RunnerService, IMessageListener
@@ -44,6 +45,11 @@ namespace GitHub.Runner.Listener
 
             _term = HostContext.GetService<ITerminal>();
             _runnerServer = HostContext.GetService<IRunnerServer>();
+        }
+
+        public string GetInitRunnerVersion()
+        {
+            return _session.Agent.Version;
         }
 
         public async Task<Boolean> CreateSessionAsync(CancellationToken token)
@@ -68,6 +74,8 @@ namespace GitHub.Runner.Listener
                 Version = BuildConstants.RunnerPackage.Version,
                 OSDescription = RuntimeInformation.OSDescription,
             };
+
+            Trace.Info(agent);
             string sessionName = $"{Environment.MachineName ?? "RUNNER"}";
             var taskAgentSession = new TaskAgentSession(sessionName, agent);
 

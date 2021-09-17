@@ -358,10 +358,22 @@ namespace GitHub.Runner.Listener
                             HostContext.WritePerfCounter($"MessageReceived_{message.MessageType}");
                             if (string.Equals(message.MessageType, AgentRefreshMessage.MessageType, StringComparison.OrdinalIgnoreCase))
                             {
+                                var initRunnerVersion = _listener.GetInitRunnerVersion();
+                                var currRunnerVersion = BuildConstants.RunnerPackage.Version;
+
+                                Trace.Info($"Init RV: {initRunnerVersion}, current RV: {currRunnerVersion}");
+
                                 if (autoUpdateInProgress == false)
                                 {
-                                    autoUpdateInProgress = true;
-                                    Trace.Info("Refresh message received, will restart the runner.");
+                                    if (initRunnerVersion != currRunnerVersion)
+                                    {
+                                        autoUpdateInProgress = true;
+                                        Trace.Info("Refresh message received, will restart the runner.");
+                                    }
+                                    else
+                                    {
+                                        Trace.Info("Refresh message received but RV seems up-to-date.");
+                                    }
                                 }
                                 else
                                 {
