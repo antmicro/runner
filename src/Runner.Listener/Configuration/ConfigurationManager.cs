@@ -79,10 +79,6 @@ namespace GitHub.Runner.Listener.Configuration
             _term.WriteLine("--------------------------------------------------------------------------------", ConsoleColor.White);
 
             Trace.Info(nameof(ConfigureAsync));
-            if (IsConfigured())
-            {
-                throw new InvalidOperationException("Cannot configure the runner because it is already configured. To reconfigure the runner, run 'config.cmd remove' or './config.sh remove' first.");
-            }
 
             RunnerSettings runnerSettings = new RunnerSettings();
 
@@ -468,6 +464,7 @@ namespace GitHub.Runner.Listener.Configuration
             // update should replace the existing labels
             agent.Version = BuildConstants.RunnerPackage.Version;
             agent.OSDescription = RuntimeInformation.OSDescription;
+            agent.Ephemeral = false;
 
             agent.Labels.Clear();
 
@@ -494,6 +491,7 @@ namespace GitHub.Runner.Listener.Configuration
                 MaxParallelism = 1,
                 Version = BuildConstants.RunnerPackage.Version,
                 OSDescription = RuntimeInformation.OSDescription,
+                Ephemeral = false,
             };
 
             agent.Labels.Add(new AgentLabel("self-hosted", LabelType.System));
