@@ -657,7 +657,12 @@ namespace GitHub.Runner.Worker
                 }
                 catch (Exception ex) when (!executionContext.CancellationToken.IsCancellationRequested) // Do not retry if the run is canceled.
                 {
-                    if (attempt < 3)
+                    // UnresolvableActionDownloadInfoException is a 422 client error, don't retry
+                    // Some possible cases are:
+                    // * Repo is rate limited
+                    // * Repo or tag doesn't exist, or isn't public
+                    // * Policy validation failed
+                    if (attempt < 3 && !(ex is WebApi.UnresolvableActionDownloadInfoException))
                     {
                         executionContext.Output($"Failed to resolve action download info. Error: {ex.Message}");
                         executionContext.Debug(ex.ToString());
@@ -673,6 +678,7 @@ namespace GitHub.Runner.Worker
                         // Some possible cases are:
                         // * Repo is rate limited
                         // * Repo or tag doesn't exist, or isn't public
+                        // * Policy validation failed
                         if (ex is WebApi.UnresolvableActionDownloadInfoException)
                         {
                             throw;
