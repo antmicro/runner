@@ -43,23 +43,30 @@ gcloud config set $PROJECT
 
 # Create and setup a service account.
 export SERVICE_ACCOUNT_ID=runner-manager
+
 gcloud iam service-accounts create $SERVICE_ACCOUNT_ID
 
+export FULL_SA_MAIL=$SERVICE_ACCOUNT_ID@$PROJECT.iam.gserviceaccount.com
+
 gcloud projects add-iam-policy-binding $PROJECT \
-    --member="serviceAccount:$SERVICE_ACCOUNT_ID@$PROJECT \
+    --member="serviceAccount:$FULL_SA_MAIL" \
     --role="roles/compute.admin"
 
 gcloud projects add-iam-policy-binding $PROJECT \
-    --member="serviceAccount:$SERVICE_ACCOUNT_ID@$PROJECT \
+    --member="serviceAccount:$FULL_SA_MAIL" \
     --role="roles/iam.serviceAccountCreator"
 
 gcloud projects add-iam-policy-binding $PROJECT \
-    --member="serviceAccount:$SERVICE_ACCOUNT_ID@$PROJECT \
+    --member="serviceAccount:$FULL_SA_MAIL" \
     --role="roles/iam.serviceAccountUser"
+
+gcloud projects add-iam-policy-binding $PROJECT \
+    --member="serviceAccount:$FULL_SA_MAIL" \
+    --role="roles/iam.serviceAccountKeyAdmin"
 
 # Create and download SA key.
 # WARNING: the export below will be used by Terraform later.
-export GOOGLE_APPLICATION_CREDENTIALS
+export GOOGLE_APPLICATION_CREDENTIALS=$HOME/$SERVICE_ACCOUNT_ID.json
 gcloud iam service-accounts keys create $GOOGLE_APPLICATION_CREDENTIALS \
     --iam-account=$SERVICE_ACCOUNT_ID@$PROJECT
 
