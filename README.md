@@ -39,7 +39,7 @@ gcloud auth login
 # Create a GCP project for your runner.
 export PROJECT=example-runner-project
 gcloud projects create $PROJECT
-gcloud config set $PROJECT
+gcloud config set project $PROJECT
 
 # Create and setup a service account.
 export SERVICE_ACCOUNT_ID=runner-manager
