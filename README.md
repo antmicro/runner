@@ -24,7 +24,25 @@ The following packages must be installed:
 
 * `build-essential`
 * [Terraform](https://www.terraform.io/docs/cli/install/apt.html)
+```bash
+sudo apt-get install software-properties-common
+
+curl -fsSL https://apt.releases.hashicorp.com/gpg | 
+    sudo apt-key add -
+
+sudo apt-add-repository "deb [arch=$(dpkg --print-architecture)] https://apt.releases.hashicorp.com $(lsb_release -cs) main"
+```
 * [Google Cloud SDK](https://cloud.google.com/sdk/docs/install#deb)
+```bash
+echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] https://packages.cloud.google.com/apt cloud-sdk main" | 
+    sudo tee -a /etc/apt/sources.list.d/google-cloud-sdk.list
+
+sudo apt-get install apt-transport-https ca-certificates gnupg
+curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | 
+    sudo apt-key --keyring /usr/share/keyrings/cloud.google.gpg add -
+
+sudo apt-get update && sudo apt-get install google-cloud-sdk
+```
 
 ### Installation steps
 
@@ -46,22 +64,24 @@ export SERVICE_ACCOUNT_ID=runner-manager
 gcloud iam service-accounts create $SERVICE_ACCOUNT_ID
 
 gcloud projects add-iam-policy-binding $PROJECT \
-    --member="serviceAccount:$SERVICE_ACCOUNT_ID@$PROJECT \
+    --member="serviceAccount:$SERVICE_ACCOUNT_ID@$PROJECT.iam.gserviceaccount.com" \
     --role="roles/compute.admin"
 
 gcloud projects add-iam-policy-binding $PROJECT \
-    --member="serviceAccount:$SERVICE_ACCOUNT_ID@$PROJECT \
+    --member="serviceAccount:$SERVICE_ACCOUNT_ID@$PROJECT.iam.gserviceaccount.com" \
     --role="roles/iam.serviceAccountCreator"
 
 gcloud projects add-iam-policy-binding $PROJECT \
-    --member="serviceAccount:$SERVICE_ACCOUNT_ID@$PROJECT \
+    --member="serviceAccount:$SERVICE_ACCOUNT_ID@$PROJECT.iam.gserviceaccount.com" \
     --role="roles/iam.serviceAccountUser"
 
 # Create and download SA key.
 # WARNING: the export below will be used by Terraform later.
-export GOOGLE_APPLICATION_CREDENTIALS
+# This command is for the OUTPUT_FILE option for "keys create"
+export GOOGLE_APPLICATION_CREDENTIALS=~/key.out
+
 gcloud iam service-accounts keys create $GOOGLE_APPLICATION_CREDENTIALS \
-    --iam-account=$SERVICE_ACCOUNT_ID@$PROJECT
+    --iam-account=$SERVICE_ACCOUNT_ID@$PROJECT.iam.gserviceaccount.com
 
 # Create a GCP bucket for worker image.
 export BUCKET=$PROJECT-worker-bucket
@@ -72,7 +92,7 @@ Build and upload the worker image:
 
 ```bash
 # Clone the repository
-git clone https://github.com/antmicro/github-actions-runner-scalerunner.git
+git clone --recursive https://github.com/antmicro/github-actions-runner-scalerunner.git
 cd github-actions-runner-scalerunner
 
 # Compile bzImage
@@ -80,13 +100,47 @@ cd buildroot && make BR2_EXTERNAL=../overlay/ scalenode_gcp_defconfig && make
 
 # Prepare a disk for GCP
 ./make_gcp_image.sh
+```
 
-# Upload the resulting tar archive
+### Adjust Service Account priviliges before uploading built disk to GCP
+
+Save the bucket's IAM policy to a temporary (arbitrary) JSON file
+```bash
+gsutil iam get gs://$BUCKET > /arbitrary/path/file.json
+```
+Get the project name and default service account email address. Adjust filter accordingly if a different service account is used
+```bash
+export PROJECT=$(gcloud config get-value project)
+export SA=$(gcloud iam service-accounts list --filter=default | 
+    grep -E -o '[a-z0-9._%+-]+@[a-z0-9.-]+(\.[a-z0-9._%+-]+)?[a-z]{2,4}')
+```
+Get the absolute path of the Bucket config file
+```bash
+export BUCKET_FILE=/arbitrary/path/file.json
+```
+Using the `sed` utility to insert required permissions associated with the bucket
+```bash
+sed -i 's/"bindings": \[/"bindings": \[\
+    {\
+      "members": \[\
+        "projectEditor:'"$PROJECT"'",\
+        "projectOwner:'"$PROJECT"'",\
+        "serviceAccount:'"$SA"'"\
+      \],\
+      "role": "roles\/storage.legacyBucketOwner"\
+    \},/' $BUCKET_FILE
+```
+Upload the modified bucket file back to GCloud
+```bash
+gsutil iam set $BUCKET_FILE gs://$BUCKET
+```
+Upload the resulting tar archive
+
+```bash
 ./upload_gcp_image.sh $PROJECT $BUCKET
 ```
 
-Setup virtual infrastructure using Terraform:
-
+### Setup virtual infrastructure using Terraform:
 ```bash
 git clone https://github.com/antmicro/github-actions-runner-terraform.git
 terraform init && terraform apply
@@ -95,7 +149,7 @@ terraform init && terraform apply
 Connect to the coordinator instance created in the previous step:
 
 ```bash
-gcloud compute --zone <COORDINATOR_ZONE> ssh <COORDINATOR_INSTANCE>
+gcloud compute ssh gha-runner-coordinator --zone=us-west1-a
 ```
 
 Install and configure the runner on the coordinator instance:
