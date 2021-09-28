@@ -370,7 +370,7 @@ namespace GitHub.Runner.Worker
             var umountProc = new Process();
 
             umountProc.StartInfo.FileName = WhichUtil.Which("bash", trace: Trace);
-            umountProc.StartInfo.Arguments = $"-e sshfs.sh umount {instanceNumber} {WorkspaceDirectory}";
+            umountProc.StartInfo.Arguments = $"sshfs.sh umount {instanceNumber} {WorkspaceDirectory}";
             umountProc.StartInfo.WorkingDirectory = virtDir;
             umountProc.StartInfo.UseShellExecute = false;
             umountProc.StartInfo.RedirectStandardError = true;

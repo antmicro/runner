@@ -10,6 +10,23 @@ function help() {
     exit 1
 }
 
+function umount_retry() {
+    timeout=30
+    for i in $(seq $timeout); do
+        echo "[$i] Trying to unmout $SHARE_PATH"
+        fusermount -u $SHARE_PATH
+        if [ $? -eq 0 ]
+        then
+            break
+        else
+            processes_blocking=$(fuser $SHARE_PATH)
+            echo "Unmount blocked by pid: $processes_blocking"
+            echo "Retrying in 5s"
+            sleep 5
+        fi
+    done
+}
+
 cd $(dirname $0)
 
 if [ "$#" -ne 3 ]; then
@@ -40,8 +57,7 @@ case "$1" in
         exit $?
         ;;
     umount)
-        echo "Unmouting $SHARE_PATH"
-        fusermount -u $SHARE_PATH
+        umount_retry $SHARE_PATH
         exit $?
         ;;
     status)
