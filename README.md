@@ -115,7 +115,8 @@ Connect to the coordinator instance created in the previous step:
 gcloud compute ssh <COORDINATOR_INSTANCE> --zone <COORDINATOR_ZONE> 
 ```
 
-Install and configure the runner on the coordinator instance:
+Install and configure the runner on the coordinator instance according to the instructions below.
+The registration token (the `$TOKEN` variable) can be obtained from the **Runners settings** page in repository settings (`https://github.com/$REPOSITORY_ORG/$REPOSITORY_NAME/settings/actions/runners/new`) or using the [Self-hosted runners API](https://docs.github.com/en/rest/reference/actions#create-a-registration-token-for-an-organization). 
 
 ```bash
 # Update repositories and install wget.
