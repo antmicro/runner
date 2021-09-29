@@ -102,7 +102,7 @@ terraform init && terraform apply
 Connect to the coordinator instance created in the previous step:
 
 ```bash
-gcloud compute --zone <COORDINATOR_ZONE> ssh <COORDINATOR_INSTANCE>
+gcloud compute ssh <COORDINATOR_INSTANCE> --zone <COORDINATOR_ZONE> 
 ```
 
 Install and configure the runner on the coordinator instance:
