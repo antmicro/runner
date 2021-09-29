@@ -109,7 +109,7 @@ Install and configure the runner on the coordinator instance:
 
 ```bash
 # Download and run the installation script.
-wget https://raw.githubusercontent.com/antmicro/runner/vm-runners/scripts/install.sh | bash
+wget -O - https://raw.githubusercontent.com/antmicro/runner/vm-runners/scripts/install.sh | bash
 
 # The runner software runs as the 'runner' user, so let's sudo into it.
 sudo -i -u runner
