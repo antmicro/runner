@@ -41,6 +41,16 @@ export PROJECT=example-runner-project
 gcloud projects create $PROJECT
 gcloud config set project $PROJECT
 
+# At this point, billing needs to be enabled.
+# To do this, follow the instructions from the link below:
+# https://cloud.google.com/billing/docs/how-to/modify-project
+
+# Enable the necessary APIs in your project.
+gcloud services enable compute.googleapis.com
+gcloud services enable storage-component.googleapis.com
+gcloud services enable storage.googleapis.com
+gcloud services enable storage-api.googleapis.com
+
 # Create and setup a service account.
 export SERVICE_ACCOUNT_ID=runner-manager
 
