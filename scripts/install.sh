@@ -1,9 +1,9 @@
 #!/bin/bash
 set -e
 
-## 0386acd
+## 71d532d
 
-update-alternatives --install /usr/bin/python python /usr/bin/python3
+update-alternatives --install /usr/bin/python python /usr/bin/python3 50
 apt -y install git
 echo "%wheel         ALL = (ALL) NOPASSWD: ALL" >> /etc/sudoers.d/wheel_passwordless
 groupadd -f wheel
