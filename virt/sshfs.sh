@@ -1,7 +1,7 @@
 #!/bin/bash
 
 function help() {
-    echo "Usage: $0 [COMMAND] [INSTANCE_NUMBER] [WORKSPACE_DIRECTORY]"
+    echo "Usage: $0 [COMMAND] [INSTANCE_NUMBER]"
     echo ""
     echo "Where [COMMAND] is one of:"
     echo "   mount"
@@ -29,14 +29,14 @@ function umount_retry() {
 
 cd $(dirname $0)
 
-if [ "$#" -ne 3 ]; then
+if [ "$#" -ne 2 ]; then
     help
 fi
 
 IP_PREFIX=`hostname`
 IP=$IP_PREFIX-auto-spawned$2
-SHARE_PATH=$(realpath ../_layout)/_work_$2/$3
-REMOTE_PATH="scalerunner@$IP:/mnt/2/work"
+SHARE_PATH=$(realpath ../_layout)/_work_$2/
+REMOTE_PATH="scalerunner@$IP:/mnt/2/"
 
 mkdir -p $SHARE_PATH
 

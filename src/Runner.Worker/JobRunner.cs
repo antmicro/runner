@@ -141,7 +141,7 @@ namespace GitHub.Runner.Worker
                 spawnMachineProc.ErrorDataReceived += (_, args) => Trace.Error(args.Data ?? "");
 
                 sshfsProc.StartInfo.FileName = WhichUtil.Which("bash", trace: Trace);
-                sshfsProc.StartInfo.Arguments = $"sshfs.sh mount {instanceNumber} {WorkspaceDirectory}";
+                sshfsProc.StartInfo.Arguments = $"sshfs.sh mount {instanceNumber}";
                 sshfsProc.StartInfo.WorkingDirectory = virtDir;
                 sshfsProc.StartInfo.UseShellExecute = false;
                 sshfsProc.StartInfo.RedirectStandardError = true;
@@ -149,10 +149,6 @@ namespace GitHub.Runner.Worker
 
                 sshfsProc.OutputDataReceived += (_, args) => Trace.Info(args.Data ?? "");
                 sshfsProc.ErrorDataReceived += (_, args) => Trace.Error(args.Data ?? "");
-
-                // Setup TEMP directories
-                _tempDirectoryManager = HostContext.GetService<ITempDirectoryManager>();
-                _tempDirectoryManager.InitializeTempDirectory(jobContext);
 
                 spawnMachineProc.Start();
                 spawnMachineProc.BeginOutputReadLine();
@@ -204,6 +200,10 @@ namespace GitHub.Runner.Worker
 
                     return await CompleteJobAsync(jobServer, jobContext, message, TaskResult.Failed);
                 }
+
+                // Setup TEMP directories
+                _tempDirectoryManager = HostContext.GetService<ITempDirectoryManager>();
+                _tempDirectoryManager.InitializeTempDirectory(jobContext);
 
                 vmCtx.Complete();
 
@@ -370,7 +370,7 @@ namespace GitHub.Runner.Worker
             var umountProc = new Process();
 
             umountProc.StartInfo.FileName = WhichUtil.Which("bash", trace: Trace);
-            umountProc.StartInfo.Arguments = $"sshfs.sh umount {instanceNumber} {WorkspaceDirectory}";
+            umountProc.StartInfo.Arguments = $"sshfs.sh umount {instanceNumber}";
             umountProc.StartInfo.WorkingDirectory = virtDir;
             umountProc.StartInfo.UseShellExecute = false;
             umountProc.StartInfo.RedirectStandardError = true;
