@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Diagnostics;
 using System.IO;
 using System.Text;
 using System.Collections.Generic;
@@ -10,6 +11,8 @@ using GitHub.Runner.Common;
 using GitHub.Runner.Sdk;
 using GitHub.DistributedTask.WebApi;
 using Pipelines = GitHub.DistributedTask.Pipelines;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 
 namespace GitHub.Runner.Worker.Handlers
 {
@@ -368,6 +371,34 @@ namespace GitHub.Runner.Worker.Handlers
                 {
                     ExecutionContext.Error($"Process completed with exit code {exitCode}.");
                     ExecutionContext.Result = TaskResult.Failed;
+
+                    if (exitCode == 255)
+                    {
+                        var vmSpecsLocation = Path.Combine(
+                                new DirectoryInfo(HostContext.GetDirectory(WellKnownDirectory.Root)).Parent.FullName,
+                                ".vm_specs.json"
+                                );
+                        dynamic vmSpecs = JObject.Parse(File.ReadAllText(vmSpecsLocation));
+
+                        Trace.Info($"Will check {sshIp} in zone {vmSpecs.gcp.zone}");
+
+                        var checkMachineProc = new Process();
+                        checkMachineProc.StartInfo.FileName = WhichUtil.Which("gcloud", trace: Trace);
+                        checkMachineProc.StartInfo.Arguments = $"compute instances describe {sshIp} --zone={vmSpecs.gcp.zone} --quiet";
+                        checkMachineProc.StartInfo.UseShellExecute = false;
+                        checkMachineProc.StartInfo.RedirectStandardError = true;
+                        checkMachineProc.StartInfo.RedirectStandardOutput = true;
+
+                        checkMachineProc.OutputDataReceived += (_, args) => Trace.Info(args.Data ?? "");
+                        checkMachineProc.ErrorDataReceived += (_, args) => Trace.Error(args.Data ?? "");
+
+                        checkMachineProc.Start();
+                        checkMachineProc.BeginOutputReadLine();
+                        checkMachineProc.BeginErrorReadLine();
+                        checkMachineProc.WaitForExit();
+
+                        Trace.Info($"Check machine status exit code: {checkMachineProc.ExitCode}");
+                    }
                 }
 
                 StepHost.StandardInChannel = null;
