@@ -118,12 +118,15 @@ namespace GitHub.Runner.Worker
                         {
                             extension.ProcessCommand(context, input, actionCommand, container);
                         }
-                        catch (Exception ex)
+                        catch (Exception)
                         {
                             var commandInformation = extension.OmitEcho ? extension.Command : input;
                             context.Error($"Unable to process command '{commandInformation}' successfully.");
-                            context.Error(ex);
-                            context.CommandResult = TaskResult.Failed;
+                            // TODO: add support for action commands,
+                            // for now just ignore error
+                            return true;
+                            //context.Error(ex);
+                            //context.CommandResult = TaskResult.Failed;
                         }
                     }
                     else
