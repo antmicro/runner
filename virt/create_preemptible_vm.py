@@ -134,6 +134,7 @@ def main(instance_number, container_file):
         sys.exit(1)
 
     sif_location = '/mnt/container.sif'
+    node_sif_location = '/mnt/node.sif'
     infer_dns_cmd = "$(echo $SSH_CONNECTION | awk '{ print $1 }')"
 
     commands = (
@@ -144,13 +145,16 @@ def main(instance_number, container_file):
             'sudo /etc/init.d/S01syslogd restart',
             f'logger {labels}',
             f'echo "Pulling {container_file}..."',
-            f'sudo singularity pull {sif_location} docker://{container_file}',
+	    f'sudo singularity pull {sif_location} docker://{container_file}',
             f'sudo singularity instance start -C -e --dns {infer_dns_cmd} --overlay /mnt/1 --bind /mnt/2:/root {sif_location} i',
+            f'echo "Pulling node:latest..."',
+            f'sudo singularity pull {node_sif_location} docker://node:latest',
+            f'sudo singularity instance start -C -e --dns {infer_dns_cmd} --overlay /mnt/1 --bind /mnt/2:/root {node_sif_location} node',
             'sudo iptables -A OUTPUT -d 169.254.169.254 -j DROP',
             f'chmod +x {SARGRAPH[1]}',
             f'sudo mv {SARGRAPH[1]} /usr/bin/sargraph',
             'cd /mnt && SARGRAPH_OUTPUT_TYPE=svg sudo -E sargraph chart start',
-            )
+    )
 
     for cmd in commands:
         _, stdout, stderr = ssh.exec_command(cmd)
