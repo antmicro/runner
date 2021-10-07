@@ -306,12 +306,10 @@ namespace GitHub.Runner.Worker.Handlers
             var sshIp = githubContext["qemu_ip"];
 
             fileName = "/usr/bin/ssh";
-            var sshArguments = new List<string> {"-q",
-                "-o \"UserKnownHostsFile /dev/null\"",
-                "-o \"StrictHostKeyChecking no\"",
-                "-o \"ServerAliveInterval 10\"",
-                $"scalerunner@{sshIp} sudo singularity exec -e instance://i bash"
-            };
+
+            var sshArguments = new List<string>(Constants.CommonSshArgs);
+            sshArguments.Add($"scalerunner@{sshIp} sudo singularity exec -e instance://i bash");
+
             arguments = string.Join(" ", sshArguments.ToArray());
 
             var changeContainerDir = Path.Combine("/root/work", 

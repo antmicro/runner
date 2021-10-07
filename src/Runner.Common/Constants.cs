@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 
 namespace GitHub.Runner.Common
 {
@@ -42,6 +43,13 @@ namespace GitHub.Runner.Common
         public static string ProcessTrackingId = "RUNNER_TRACKING_ID";
         public static string PluginTracePrefix = "##[plugin.trace]";
         public static readonly int RunnerDownloadRetryMaxAttempts = 3;
+
+        
+        public static List<string> CommonSshArgs = new List<string> {"-q",
+            "-o \"UserKnownHostsFile /dev/null\"",
+            "-o \"StrictHostKeyChecking no\"",
+            "-o \"ServerAliveInterval 10\""
+        };
 
         // This enum is embedded within the Constants class to make it easier to reference and avoid
         // ambiguous type reference with System.Runtime.InteropServices.OSPlatform and System.Runtime.InteropServices.Architecture
