@@ -368,10 +368,11 @@ namespace GitHub.Runner.Worker.Handlers
                 if (exitCode != 0)
                 {
                     ExecutionContext.Error($"Process completed with exit code {exitCode}.");
-                    ExecutionContext.Result = TaskResult.Failed;
 
                     if (exitCode == 255)
                     {
+                        ExecutionContext.Error("This error indicates issues with communication with the worker instance.");
+
                         var vmSpecsLocation = Path.Combine(
                                 new DirectoryInfo(HostContext.GetDirectory(WellKnownDirectory.Root)).Parent.FullName,
                                 ".vm_specs.json"
@@ -381,13 +382,27 @@ namespace GitHub.Runner.Worker.Handlers
                         Trace.Info($"Will check {sshIp} in zone {vmSpecs.gcp.zone}");
 
                         var checkMachineProc = new Process();
+                        var checkMachineRawJson = String.Empty;
                         checkMachineProc.StartInfo.FileName = WhichUtil.Which("gcloud", trace: Trace);
-                        checkMachineProc.StartInfo.Arguments = $"compute instances describe {sshIp} --zone={vmSpecs.gcp.zone} --quiet";
+                        checkMachineProc.StartInfo.Arguments = String.Join(
+                                " ",
+                                "compute instances describe",
+                                sshIp,
+                                $"--zone={vmSpecs.gcp.zone}",
+                                "--format=json",
+                                "--quiet"
+                                );
                         checkMachineProc.StartInfo.UseShellExecute = false;
                         checkMachineProc.StartInfo.RedirectStandardError = true;
                         checkMachineProc.StartInfo.RedirectStandardOutput = true;
 
-                        checkMachineProc.OutputDataReceived += (_, args) => Trace.Info(args.Data ?? "");
+                        checkMachineProc.OutputDataReceived += (_, args) => 
+                        {
+                            var safeData = args.Data ?? "";
+
+                            Trace.Info(safeData);
+                            checkMachineRawJson += safeData;
+                        };
                         checkMachineProc.ErrorDataReceived += (_, args) => Trace.Error(args.Data ?? "");
 
                         checkMachineProc.Start();
@@ -396,6 +411,17 @@ namespace GitHub.Runner.Worker.Handlers
                         checkMachineProc.WaitForExit();
 
                         Trace.Info($"Check machine status exit code: {checkMachineProc.ExitCode}");
+
+                        try
+                        {
+                            dynamic checkMachine = JObject.Parse(checkMachineRawJson);
+
+                            ExecutionContext.Error($"The worker instance has status {checkMachine.status}");
+                        }
+                        catch (JsonReaderException e)
+                        {
+                            Trace.Info($"Could not parse gcloud output: {e}");
+                        }
 
                         var pingProc = new Process();
                         pingProc.StartInfo.FileName = WhichUtil.Which("ping", trace: Trace);
@@ -413,7 +439,25 @@ namespace GitHub.Runner.Worker.Handlers
                         pingProc.WaitForExit();
 
                         Trace.Info($"Ping exit code: {pingProc.ExitCode}");
+
+                        switch (pingProc.ExitCode)
+                        {
+                            case 0:
+                                ExecutionContext.Error("Ping was successful.");
+                                break;
+                            case 1:
+                                ExecutionContext.Error("No replies received while pinging.");
+                                break;
+                            case 2:
+                                ExecutionContext.Error("An error occured while pinging.");
+                                break;
+                            default:
+                                ExecutionContext.Error($"Unrecognized ping exit code {pingProc.ExitCode}");
+                                break;
+                        }
                     }
+
+                    ExecutionContext.Result = TaskResult.Failed;
                 }
 
                 StepHost.StandardInChannel = null;
