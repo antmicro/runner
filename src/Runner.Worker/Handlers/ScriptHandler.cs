@@ -379,8 +379,27 @@ namespace GitHub.Runner.Worker.Handlers
                                 );
                         dynamic vmSpecs = JObject.Parse(File.ReadAllText(vmSpecsLocation));
 
-                        Trace.Info($"Will check {sshIp} in zone {vmSpecs.gcp.zone}");
+                        Trace.Info($"Running diagnostics for {sshIp} in zone {vmSpecs.gcp.zone}");
 
+                        // Collect Busybox's syslogd data
+                        var fetchSyslogsArgs = new List<string>(Constants.CommonSshArgs);
+                        fetchSyslogsArgs.Add("cat /var/log/messages");
+
+                        var fetchSyslogs = new Process();
+                        fetchSyslogs.StartInfo.FileName = WhichUtil.Which("ssh", trace: Trace);
+                        fetchSyslogs.StartInfo.Arguments = string.Join(" ", fetchSyslogsArgs.ToArray());
+                        fetchSyslogs.StartInfo.UseShellExecute = false;
+                        fetchSyslogs.StartInfo.RedirectStandardError = true;
+                        fetchSyslogs.StartInfo.RedirectStandardOutput = true;
+
+                        fetchSyslogs.OutputDataReceived += (_, args) => Trace.Info(args.Data ?? "");
+                        fetchSyslogs.ErrorDataReceived += (_, args) => Trace.Error(args.Data ?? "");
+
+                        fetchSyslogs.Start();
+                        fetchSyslogs.BeginOutputReadLine();
+                        fetchSyslogs.BeginErrorReadLine();
+
+                        // Query GCP while the previous command is running
                         var checkMachineProc = new Process();
                         var checkMachineRawJson = String.Empty;
                         checkMachineProc.StartInfo.FileName = WhichUtil.Which("gcloud", trace: Trace);
@@ -398,29 +417,32 @@ namespace GitHub.Runner.Worker.Handlers
 
                         checkMachineProc.OutputDataReceived += (_, args) => 
                         {
-                            var safeData = args.Data ?? "";
-
-                            Trace.Info(safeData);
-                            checkMachineRawJson += safeData;
+                            checkMachineRawJson += args.Data ?? "";
                         };
                         checkMachineProc.ErrorDataReceived += (_, args) => Trace.Error(args.Data ?? "");
 
                         checkMachineProc.Start();
                         checkMachineProc.BeginOutputReadLine();
                         checkMachineProc.BeginErrorReadLine();
+
+                        // Wait for GCP query and syslogd extraction to complete
                         checkMachineProc.WaitForExit();
+                        fetchSyslogs.WaitForExit();
 
                         Trace.Info($"Check machine status exit code: {checkMachineProc.ExitCode}");
+                        Trace.Info($"Cat logs exit code: {fetchSyslogs.ExitCode}");
 
                         try
                         {
                             dynamic checkMachine = JObject.Parse(checkMachineRawJson);
 
                             ExecutionContext.Error($"The worker instance has status {checkMachine.status}");
+
+                            Trace.Info($"GCP status: {checkMachine.ToString()}");
                         }
                         catch (JsonReaderException e)
                         {
-                            Trace.Info($"Could not parse gcloud output: {e}");
+                            Trace.Error($"Could not parse gcloud output: {e}");
                         }
 
                         var pingProc = new Process();
