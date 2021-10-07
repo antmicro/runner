@@ -398,6 +398,23 @@ namespace GitHub.Runner.Worker.Handlers
                         checkMachineProc.WaitForExit();
 
                         Trace.Info($"Check machine status exit code: {checkMachineProc.ExitCode}");
+
+                        var pingProc = new Process();
+                        pingProc.StartInfo.FileName = WhichUtil.Which("ping", trace: Trace);
+                        pingProc.StartInfo.Arguments = $"ping -w 3 {sshIp}";
+                        pingProc.StartInfo.UseShellExecute = false;
+                        pingProc.StartInfo.RedirectStandardError = true;
+                        pingProc.StartInfo.RedirectStandardOutput = true;
+
+                        pingProc.OutputDataReceived += (_, args) => Trace.Info(args.Data ?? "");
+                        pingProc.ErrorDataReceived += (_, args) => Trace.Error(args.Data ?? "");
+
+                        pingProc.Start();
+                        pingProc.BeginOutputReadLine();
+                        pingProc.BeginErrorReadLine();
+                        pingProc.WaitForExit();
+
+                        Trace.Info($"Ping exit code: {pingProc.ExitCode}");
                     }
                 }
 
