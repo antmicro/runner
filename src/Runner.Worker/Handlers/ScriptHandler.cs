@@ -447,7 +447,7 @@ namespace GitHub.Runner.Worker.Handlers
 
                         var pingProc = new Process();
                         pingProc.StartInfo.FileName = WhichUtil.Which("ping", trace: Trace);
-                        pingProc.StartInfo.Arguments = $"ping -w 3 {sshIp}";
+                        pingProc.StartInfo.Arguments = $"-w 3 {sshIp}";
                         pingProc.StartInfo.UseShellExecute = false;
                         pingProc.StartInfo.RedirectStandardError = true;
                         pingProc.StartInfo.RedirectStandardOutput = true;
