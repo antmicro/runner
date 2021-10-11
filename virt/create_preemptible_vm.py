@@ -133,7 +133,7 @@ def main(instance_number, container_file):
         print(e)
         sys.exit(1)
 
-    sif_location = '/mnt/container.sif'
+    container_sif_location = '/mnt/container.sif'
     node_sif_location = '/mnt/node.sif'
     infer_dns_cmd = "$(echo $SSH_CONNECTION | awk '{ print $1 }')"
 
@@ -144,12 +144,15 @@ def main(instance_number, container_file):
             r'echo "SYSLOGD_ARGS=\"-R {}:5140 -L\"" | sudo cp /dev/stdin /etc/default/syslogd'.format(infer_dns_cmd),
             'sudo /etc/init.d/S01syslogd restart',
             f'logger {labels}',
-            f'echo "Pulling {container_file}..."',
-	    f'sudo singularity pull {sif_location} docker://{container_file}',
-            f'sudo singularity instance start -C -e --dns {infer_dns_cmd} --overlay /mnt/1 --bind /mnt/2:/root {sif_location} i',
-            f'echo "Pulling node:latest..."',
-            f'sudo singularity pull {node_sif_location} docker://node:latest',
+
+            f'echo "Starting node:latest..."',
+            f'sudo singularity pull --nohttps {node_sif_location} docker://10.0.0.2:5000/library/node:latest',
             f'sudo singularity instance start -C -e --dns {infer_dns_cmd} --overlay /mnt/1 --bind /mnt/2:/root {node_sif_location} node',
+
+            f'echo "Starting {container_file}..."',
+            f'sudo singularity pull --nohttps {container_sif_location} docker://10.0.0.2:5000/library/{container_file}',
+            f'sudo singularity instance start -C -e --dns {infer_dns_cmd} --overlay /mnt/1 --bind /mnt/2:/root {container_sif_location} i',
+
             'sudo iptables -A OUTPUT -d 169.254.169.254 -j DROP',
             f'chmod +x {SARGRAPH[1]}',
             f'sudo mv {SARGRAPH[1]} /usr/bin/sargraph',
