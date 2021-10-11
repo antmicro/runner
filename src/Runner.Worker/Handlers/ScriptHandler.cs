@@ -425,8 +425,35 @@ namespace GitHub.Runner.Worker.Handlers
                         checkMachineProc.BeginOutputReadLine();
                         checkMachineProc.BeginErrorReadLine();
 
-                        // Wait for GCP query and syslogd extraction to complete
+                        // Fetch serial port logs from GCP
+                        var getSerialPortProc = new Process();
+                        var getSerialPortRawJson = String.Empty;
+                        getSerialPortProc.StartInfo.FileName = WhichUtil.Which("gcloud", trace: Trace);
+                        getSerialPortProc.StartInfo.Arguments = String.Join(
+                                " ",
+                                "compute instances get-serial-port-output",
+                                sshIp,
+                                $"--zone={vmSpecs.gcp.zone}",
+                                "--format=json",
+                                "--quiet"
+                                );
+                        getSerialPortProc.StartInfo.UseShellExecute = false;
+                        getSerialPortProc.StartInfo.RedirectStandardError = true;
+                        getSerialPortProc.StartInfo.RedirectStandardOutput = true;
+
+                        getSerialPortProc.OutputDataReceived += (_, args) => 
+                        {
+                            getSerialPortRawJson += args.Data ?? "";
+                        };
+                        getSerialPortProc.ErrorDataReceived += (_, args) => Trace.Error(args.Data ?? "");
+
+                        getSerialPortProc.Start();
+                        getSerialPortProc.BeginOutputReadLine();
+                        getSerialPortProc.BeginErrorReadLine();
+
+                        // Wait for above processes to complete
                         checkMachineProc.WaitForExit();
+                        getSerialPortProc.WaitForExit();
                         fetchSyslogs.WaitForExit();
 
                         Trace.Info($"Check machine status exit code: {checkMachineProc.ExitCode}");
@@ -439,6 +466,17 @@ namespace GitHub.Runner.Worker.Handlers
                             ExecutionContext.Error($"The worker instance has status {checkMachine.status}");
 
                             Trace.Info($"GCP status: {checkMachine.ToString()}");
+                        }
+                        catch (JsonReaderException e)
+                        {
+                            Trace.Error($"Could not parse gcloud output: {e}");
+                        }
+
+                        try
+                        {
+                            dynamic getSerialPort = JObject.Parse(getSerialPortRawJson);
+
+                            Trace.Info($"Serial port log: {getSerialPort.contents}");
                         }
                         catch (JsonReaderException e)
                         {
