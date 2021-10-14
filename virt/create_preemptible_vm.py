@@ -1,5 +1,5 @@
 #!/usr/bin/python3
-import os, sys, subprocess, json, click, paramiko, time, functools, platform
+import os, sys, subprocess, json, click, paramiko, time, functools, platform, shlex, shutil
 from collections import namedtuple
 
 print = functools.partial(print, flush=True)
@@ -7,6 +7,7 @@ print = functools.partial(print, flush=True)
 USER = 'scalerunner'
 PUBKEY = os.path.join(os.path.expanduser('~'), '.ssh/id_rsa.pub'), f'/home/{USER}/.ssh/authorized_keys'
 SARGRAPH = os.path.realpath('../sargraph/sargraph.py'), f'/home/{USER}/sargraph.py'
+GCLOUD = shutil.which('gcloud')
 
 def load_config():
     with open('../.vm_specs.json', 'r') as f:
@@ -14,6 +15,21 @@ def load_config():
 
 def elapsed(start):
     return round(time.time() - start, 2)
+
+def get_gcp_disk(disk_name, zone):
+    if disk_name is None or zone is None:
+        return None
+
+    cmd = "{} compute disks describe {} --zone={} --format=json".format(
+            GCLOUD, disk_name, zone)
+
+    return json.loads(
+            subprocess.check_output(
+                shlex.split(cmd),
+                stderr=subprocess.DEVNULL,
+                timeout=10
+                )
+            )
 
 @click.command()
 @click.option('-n', '--instance-number', help='Instance number', required=True)
@@ -27,6 +43,15 @@ def main(instance_number, container_file):
     project_id = c.gcp.project
     zone = c.gcp.zone
     instance_name = f'{platform.node()}-auto-spawned{instance_number}'
+
+    try:
+        external_disk = get_gcp_disk(
+                disk_name=os.environ.get('GHA_EXTERNAL_DISK'),
+                zone=c.gcp.zone,
+                )
+    except subprocess.CalledProcessError:
+        print('Unable to access requested external disk!')
+        sys.exit(1)
 
     print(f'Spawning a GCP machine in {c.gcp.zone}...')
     print(f'Instance name:\t {instance_name}')
@@ -49,27 +74,33 @@ def main(instance_number, container_file):
 
     gcloud_start = time.time()
 
+    instance_cmd = 'gcloud beta compute --verbosity=error ' \
+            f'--project={c.gcp.project} ' \
+            f'instances create {instance_name} --zone={c.gcp.zone} ' \
+            f'--machine-type={machine_type} --subnet={c.gcp.subnet} ' \
+            '--no-address --network-tier=PREMIUM ' \
+            '--metadata=serial-port-enable=true,' \
+            'ssh-keys=coordinator:' \
+            f'{key} ' \
+            f'--labels=' \
+            f'{labels} ' \
+            '--no-restart-on-failure --tags=runners ' \
+            '--maintenance-policy=TERMINATE --preemptible ' \
+            '--no-service-account ' \
+            '--no-scopes ' \
+            f'--image={c.gcp.image} --image-project={c.gcp.project} ' \
+            f'--boot-disk-size={overlay_size_gb}GB ' \
+            f'--boot-disk-type={c.gcp.disk_type} ' \
+            f'--boot-disk-device-name={instance_name} ' \
+            '--reservation-affinity=any'
+
+    if external_disk is not None:
+        print("Attaching external disk {} ({}GB)".format(external_disk['name'], external_disk['sizeGb']))
+        instance_cmd += ' --disk=auto-delete=no,device-name=aux,name={},mode=ro'.format(external_disk['name'])
+
     try:
         output = subprocess.check_output(
-                'gcloud beta compute --verbosity=error '
-                f'--project={c.gcp.project} '
-                f'instances create {instance_name} --zone={c.gcp.zone} '
-                f'--machine-type={machine_type} --subnet={c.gcp.subnet} '
-                '--no-address --network-tier=PREMIUM '
-                '--metadata=serial-port-enable=true,'
-                'ssh-keys=coordinator:'
-                f'{key} '
-                f'--labels='
-                f'{labels} '
-                '--no-restart-on-failure --tags=runners '
-                '--maintenance-policy=TERMINATE --preemptible '
-                '--no-service-account '
-                '--no-scopes '
-                f'--image={c.gcp.image} --image-project={c.gcp.project} '
-                f'--boot-disk-size={overlay_size_gb}GB '
-                f'--boot-disk-type={c.gcp.disk_type} '
-                f'--boot-disk-device-name={instance_name} '
-                '--reservation-affinity=any',
+                instance_cmd,
                 shell=True,
                 stderr=subprocess.STDOUT,
         ).decode("utf-8")
