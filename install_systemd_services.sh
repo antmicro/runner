@@ -24,6 +24,12 @@ Environment=SCALE=%i
 ExecStart=/usr/bin/supervisord -n -c $PWD/supervisord.conf
 KillMode=process
 User=$SUDO_USER
+LimitAS=infinity
+LimitRSS=infinity
+LimitCORE=infinity
+LimitNPROC=infinity
+LimitNOFILE=infinity
+TasksMax=infinity
 
 [Install]
 WantedBy=multi-user.target
