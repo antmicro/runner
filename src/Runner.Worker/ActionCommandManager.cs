@@ -118,15 +118,12 @@ namespace GitHub.Runner.Worker
                         {
                             extension.ProcessCommand(context, input, actionCommand, container);
                         }
-                        catch (Exception)
+                        catch (Exception ex)
                         {
                             var commandInformation = extension.OmitEcho ? extension.Command : input;
                             context.Error($"Unable to process command '{commandInformation}' successfully.");
-                            // TODO: add support for action commands,
-                            // for now just ignore error
-                            return true;
-                            //context.Error(ex);
-                            //context.CommandResult = TaskResult.Failed;
+                            context.Error(ex);
+                            context.CommandResult = TaskResult.Failed;
                         }
                     }
                     else
@@ -376,6 +373,8 @@ namespace GitHub.Runner.Worker
             {
                 file = container.TranslateToHostPath(file);
             }
+            var instanceNumber = System.Environment.GetEnvironmentVariable(Constants.InstanceNumberVariable);
+            file = file.Replace("/root/", $"/home/runner/github-actions-runner/_layout/_work_{instanceNumber}/");
 
             // Root the path
             if (!Path.IsPathRooted(file))
