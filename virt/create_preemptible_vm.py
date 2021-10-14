@@ -137,16 +137,20 @@ def main(instance_number, container_file):
     infer_dns_cmd = "$(echo $SSH_CONNECTION | awk '{ print $1 }')"
 
     commands = (
-        'uname -a',
-        'sudo mkdir -p /mnt/1 /mnt/2/work',
-        f'echo "Pulling {container_file}..."',
-	    f'sudo singularity pull {sif_location} docker://{container_file}',
-        f'sudo singularity instance start -C -e --dns {infer_dns_cmd} --overlay /mnt/1 --bind /mnt/2:/root {sif_location} i',
-        'sudo iptables -A OUTPUT -d 169.254.169.254 -j DROP',
-        f'chmod +x {SARGRAPH[1]}',
-        f'sudo mv {SARGRAPH[1]} /usr/bin/sargraph',
-        'cd /mnt && SARGRAPH_OUTPUT_TYPE=svg sudo -E sargraph chart start',
-    )
+            'uname -a',
+            'sudo mkdir -p /mnt/1 /mnt/2/work',
+            'sudo mkdir -p /etc/default',
+            r'echo "SYSLOGD_ARGS=\"-R {}:5140 -L\"" | sudo cp /dev/stdin /etc/default/syslogd'.format(infer_dns_cmd),
+            'sudo /etc/init.d/S01syslogd restart',
+            f'logger {labels}',
+            f'echo "Pulling {container_file}..."',
+            f'sudo singularity pull {sif_location} docker://{container_file}',
+            f'sudo singularity instance start -C -e --dns {infer_dns_cmd} --overlay /mnt/1 --bind /mnt/2:/root {sif_location} i',
+            'sudo iptables -A OUTPUT -d 169.254.169.254 -j DROP',
+            f'chmod +x {SARGRAPH[1]}',
+            f'sudo mv {SARGRAPH[1]} /usr/bin/sargraph',
+            'cd /mnt && SARGRAPH_OUTPUT_TYPE=svg sudo -E sargraph chart start',
+            )
 
     for cmd in commands:
         _, stdout, stderr = ssh.exec_command(cmd)
