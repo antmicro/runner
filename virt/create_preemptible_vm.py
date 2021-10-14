@@ -94,9 +94,12 @@ def main(instance_number, container_file):
             f'--boot-disk-device-name={instance_name} ' \
             '--reservation-affinity=any'
 
+    external_disk_cmd = 'true'
+
     if external_disk is not None:
         print("Attaching external disk {} ({}GB)".format(external_disk['name'], external_disk['sizeGb']))
         instance_cmd += ' --disk=auto-delete=no,device-name=aux,name={},mode=ro'.format(external_disk['name'])
+        external_disk_cmd = 'sudo mount /dev/disk/by-id/scsi-0Google_PersistentDisk_aux-part1 /mnt/aux'
 
     try:
         output = subprocess.check_output(
@@ -172,20 +175,18 @@ def main(instance_number, container_file):
 
     commands = (
             'uname -a',
-            'sudo mkdir -p /mnt/1 /mnt/2/work',
+            'sudo mkdir -p /mnt/1 /mnt/2/work /mnt/aux',
             'sudo mkdir -p /etc/default',
             r'echo "SYSLOGD_ARGS=\"-R {}:5140 -L\"" | sudo cp /dev/stdin /etc/default/syslogd'.format(infer_dns_cmd),
             'sudo /etc/init.d/S01syslogd restart',
             f'logger {labels}',
-
             f'echo "Starting node:latest..."',
             f'sudo singularity pull --nohttps {node_sif_location} docker://{infer_dns_cmd}:5000/library/node:latest',
-            f'sudo singularity instance start -C -e --dns {infer_dns_cmd} --overlay /mnt/1 --bind /mnt/2:/root {node_sif_location} node',
-
+            f'sudo singularity instance start -C -e --dns {infer_dns_cmd} --overlay /mnt/1 --bind /mnt/2:/root,/mnt/aux {node_sif_location} node',
             f'echo "Starting {container_file}..."',
             f'sudo singularity pull --nohttps {container_sif_location} docker://{infer_dns_cmd}:5000/{container_file}',
-            f'sudo singularity instance start -C -e --dns {infer_dns_cmd} --overlay /mnt/1 --bind /mnt/2:/root {container_sif_location} i',
-
+            f'sudo singularity instance start -C -e --dns {infer_dns_cmd} --overlay /mnt/1 --bind /mnt/2:/root,/mnt/aux {container_sif_location} i',
+            external_disk_cmd,
             'sudo iptables -A OUTPUT -d 169.254.169.254 -j DROP',
             f'chmod +x {SARGRAPH[1]}',
             f'sudo mv {SARGRAPH[1]} /usr/bin/sargraph',
