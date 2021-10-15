@@ -75,6 +75,60 @@ namespace GitHub.Runner.Worker
             message.Variables["system.qemuIp"] = virtIp;
             message.Variables["system.containerWorkspace"] = WorkspaceDirectory;
 
+            string messageSerialized = JsonConvert.SerializeObject(message);
+            JObject messageJson = JObject.Parse(messageSerialized);
+
+            var externalDisk = String.Empty;
+
+            // We're parsing the JSON that looks like the example below:
+            //
+            // ```
+            // (...)
+            // "EnvironmentVariables": [
+            // {
+            //     "type": 2,
+            //         "file": 1,
+            //         "line": 18,
+            //         "col": 7,
+            //         "map": [
+            //         {
+            //             "Key": {
+            //                 "type": 0,
+            //                 "file": 1,
+            //                 "line": 18,
+            //                 "col": 7,
+            //                 "lit": "GHA_EXTERNAL_DISK"
+            //             },
+            //             "Value": {
+            //                 "type": 0,
+            //                 "file": 1,
+            //                 "line": 18,
+            //                 "col": 20,
+            //                 "lit": "auxdisk"
+            //             }
+            //         },
+            // (...)
+            // ```
+            try
+            {
+                foreach (var envList in messageJson["EnvironmentVariables"])
+                {
+                    foreach (var envEntry in envList["map"])
+                    {
+                        if ((string)envEntry["Key"]["lit"] == "GHA_EXTERNAL_DISK")
+                        {
+                            externalDisk = (string)envEntry["Value"]["lit"];
+                        }
+                    }
+                }
+            }
+            catch (Exception e)
+            {
+                Trace.Warning($"Couldn't extract external disk variable: {e}");
+            }
+            
+            Trace.Info($"External disk: {externalDisk}");
+
             Trace.Info($"VIRT IP: {virtIp}");
 
             dynamic vmSpecs = JObject.Parse(File.ReadAllText(Path.Combine(rootDir, ".vm_specs.json")));
