@@ -17,7 +17,7 @@ def elapsed(start):
     return round(time.time() - start, 2)
 
 def get_gcp_disk(disk_name, zone):
-    if disk_name is None or zone is None:
+    if not disk_name or not zone:
         return None
 
     cmd = "{} compute disks describe {} --zone={} --format=json".format(
@@ -34,7 +34,8 @@ def get_gcp_disk(disk_name, zone):
 @click.command()
 @click.option('-n', '--instance-number', help='Instance number', required=True)
 @click.option('-s', '--container-file', help='Container file', required=True)
-def main(instance_number, container_file):
+@click.option('-d', '--disk-name', help='External disk name', required=False, default=None)
+def main(instance_number, container_file, disk_name=None):
     c = load_config()
 
     machine_type = c.gcp.type
@@ -46,7 +47,7 @@ def main(instance_number, container_file):
 
     try:
         external_disk = get_gcp_disk(
-                disk_name=os.environ.get('GHA_EXTERNAL_DISK'),
+                disk_name=disk_name,
                 zone=c.gcp.zone,
                 )
     except subprocess.CalledProcessError:

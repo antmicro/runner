@@ -179,8 +179,15 @@ namespace GitHub.Runner.Worker
 
                 Trace.Info($"Container: ${container.Image}");
 
+                var spawnMachineArgs = $"create_preemptible_vm.py -n {instanceNumber} -s {container.Image}";
+
+                if (!String.IsNullOrEmpty(externalDisk))
+                {
+                    spawnMachineArgs += $" -d {externalDisk}";
+                }
+
                 spawnMachineProc.StartInfo.FileName = WhichUtil.Which("python3", trace: Trace);
-                spawnMachineProc.StartInfo.Arguments = $"create_preemptible_vm.py -n {instanceNumber} -s {container.Image}";
+                spawnMachineProc.StartInfo.Arguments = spawnMachineArgs; 
                 spawnMachineProc.StartInfo.WorkingDirectory = virtDir;
                 spawnMachineProc.StartInfo.UseShellExecute = false;
                 spawnMachineProc.StartInfo.RedirectStandardError = true;
