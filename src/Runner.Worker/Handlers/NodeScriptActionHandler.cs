@@ -7,6 +7,7 @@ using System.Threading.Channels;
 using GitHub.Runner.Common;
 using GitHub.Runner.Common.Util;
 using GitHub.Runner.Sdk;
+using GitHub.Runner.GCP;
 using GitHub.DistributedTask.WebApi;
 using GitHub.DistributedTask.Pipelines.ContextData;
 using Pipelines = GitHub.DistributedTask.Pipelines;
@@ -94,9 +95,9 @@ namespace GitHub.Runner.Worker.Handlers
             var jobName = System.Environment.GetEnvironmentVariable("GITHUB_JOB_FULL");
             Trace.Info($"jobName: {jobName}");
 
-            var instanceNumber = System.Environment.GetEnvironmentVariable(Constants.InstanceNumberVariable);
             if (actionName == "actions/upload-artifact/v2")
             {
+                var instanceNumber = System.Environment.GetEnvironmentVariable(Constants.InstanceNumberVariable);
                 var virtDir = Path.Combine(new DirectoryInfo(HostContext.GetDirectory(WellKnownDirectory.Root)).Parent.FullName, "virt");
 
                 var tempDir = HostContext.GetDirectory(WellKnownDirectory.Temp);
@@ -184,18 +185,13 @@ namespace GitHub.Runner.Worker.Handlers
             // 1) Wrap the script file path in double quotes.
             // 2) Escape double quotes within the script file path. Double-quote is a valid
             // file name character on Linux.
-            string arguments_node = StepHost.ResolvePathForStepHost(StringUtil.Format(@"""{0}""", target.Replace(@"""", @"\""")));
-            arguments_node = arguments_node.Replace($"/home/runner/github-actions-runner/_layout/_work_{instanceNumber}/", "/root/");
+            string arguments_node = GCPRunner.TranslateToGCPRunnerPath(StringUtil.Format(@"""{0}""", target.Replace(@"""", @"\""")));
             var githubContext = ExecutionContext.ExpressionValues["github"] as GitHubContext;
             var sshIp = githubContext["qemu_ip"];
 
             var fileName = "/usr/bin/ssh";
-            var sshArguments = new List<string> {"-q",
-                "-o \"UserKnownHostsFile /dev/null\"",
-                "-o \"StrictHostKeyChecking no\"",
-                "-o \"ServerAliveInterval 10\"",
-                $"scalerunner@{sshIp} sudo singularity exec -e instance://node bash"
-            };
+            var sshArguments = new List<string>(Constants.CommonSshArgs);
+            sshArguments.Add($"scalerunner@{sshIp} sudo singularity exec -e instance://node bash");
             var arguments = string.Join(" ", sshArguments.ToArray());
 
 #if OS_WINDOWS

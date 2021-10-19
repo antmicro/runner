@@ -9,6 +9,7 @@ using System.IO;
 using System.Linq;
 using GitHub.Runner.Common;
 using GitHub.Runner.Sdk;
+using GitHub.Runner.GCP;
 
 namespace GitHub.Runner.Worker
 {
@@ -373,8 +374,7 @@ namespace GitHub.Runner.Worker
             {
                 file = container.TranslateToHostPath(file);
             }
-            var instanceNumber = System.Environment.GetEnvironmentVariable(Constants.InstanceNumberVariable);
-            file = file.Replace("/root/", $"/home/runner/github-actions-runner/_layout/_work_{instanceNumber}/");
+            file = GCPCoordinator.TranslateToGCPCoordinatorPath(file);
 
             // Root the path
             if (!Path.IsPathRooted(file))
