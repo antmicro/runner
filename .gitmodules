@@ -1,3 +1,6 @@
 [submodule "sargraph"]
 	path = sargraph
 	url = https://github.com/antmicro/sargraph
+[submodule "distribution-library-image"]
+	path = distribution-library-image
+	url = https://github.com/docker/distribution-library-image
