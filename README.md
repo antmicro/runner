@@ -78,7 +78,7 @@ gcloud projects add-iam-policy-binding $PROJECT \
 # WARNING: the export below will be used by Terraform later.
 export GOOGLE_APPLICATION_CREDENTIALS=$HOME/$SERVICE_ACCOUNT_ID.json
 gcloud iam service-accounts keys create $GOOGLE_APPLICATION_CREDENTIALS \
-    --iam-account=$SERVICE_ACCOUNT_ID@$PROJECT
+    --iam-account=$FULL_SA_MAIL
 
 # Create a GCP bucket for worker image.
 export BUCKET=$PROJECT-worker-bucket
