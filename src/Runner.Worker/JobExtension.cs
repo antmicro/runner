@@ -63,6 +63,7 @@ namespace GitHub.Runner.Worker
                     context.Start();
                     context.Debug($"Starting: Set up job");
                     context.Output($"Current runner version: '{BuildConstants.RunnerPackage.Version}'");
+                    context.Output($"Current coordinator sha: '{BuildConstants.Source.CommitHash}'");
 
                     var setting = HostContext.GetService<IConfigurationStore>().GetSettings();
                     var credFile = HostContext.GetConfigFile(WellKnownConfigFile.Credentials);
