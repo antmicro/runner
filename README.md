@@ -74,6 +74,10 @@ gcloud projects add-iam-policy-binding $PROJECT \
     --member="serviceAccount:$FULL_SA_MAIL" \
     --role="roles/iam.serviceAccountKeyAdmin"
 
+gcloud projects add-iam-policy-binding $PROJECT \
+    --member="serviceAccount:$FULL_SA_MAIL" \
+    --role="(roles/resourcemanager.projectIamAdmin"
+
 # Create and download SA key.
 # WARNING: the export below will be used by Terraform later.
 export GOOGLE_APPLICATION_CREDENTIALS=$HOME/$SERVICE_ACCOUNT_ID.json
