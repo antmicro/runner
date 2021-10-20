@@ -127,7 +127,7 @@ The registration token (the `$TOKEN` variable) can be obtained from the **Runner
 sudo apt -qqy update && sudo apt -qqy install wget
 
 # Download and run the installation script.
-wget -O - https://raw.githubusercontent.com/antmicro/runner/vm-runners/scripts/install.sh | bash
+wget -O - https://raw.githubusercontent.com/antmicro/runner/vm-runners/scripts/install.sh | sudo bash
 
 # The runner software runs as the 'runner' user, so let's sudo into it.
 sudo -i -u runner
