@@ -54,6 +54,26 @@ def main(instance_number, container_file, disk_name=None):
         print('Unable to access requested external disk!')
         sys.exit(1)
 
+    coordinator_type_cmd = 'gcloud compute instances describe ' \
+                           '$(hostname) ' \
+                           f'--zone {zone} ' \
+                           '--format=\'table(machineType)\''
+
+    try:
+        coordinator_type = subprocess.check_output(
+                coordinator_type_cmd,
+                shell=True,
+                stderr=subprocess.STDOUT,
+        ).decode("utf-8")
+
+        coordinator_type = coordinator_type[coordinator_type.rfind("/") + 1:].replace(c.gcp.project, '***')
+        print(f'Using coordinator machine: {coordinator_type}')
+
+    except subprocess.CalledProcessError as err:
+        print('Failed to get coordinator machine type!')
+        print('\n'+coordinator_type.output.decode().replace(c.gcp.project, '***'))
+        sys.exit(1)
+
     print(f'Spawning a GCP machine in {c.gcp.zone}...')
     print(f'Instance name:\t {instance_name}')
     print(f'Instance type:\t {c.gcp.type}')
