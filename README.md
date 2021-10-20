@@ -133,6 +133,9 @@ wget -O - https://raw.githubusercontent.com/antmicro/runner/vm-runners/scripts/i
 sudo -i -u runner
 cd /home/runner/github-actions-runner
 
+# Init and update submodules
+git submodule update --init --recursive
+
 # Copy the .vm_specs.json file and adjust the parameters accordingly.
 cp .vm_specs.example.json .vm_specs.json
 vim .vm_specs.json
