@@ -236,7 +236,7 @@ namespace GitHub.Runner.Worker.Handlers
                 {
                     if (!ignoreEnv.Contains(e.Key))
                     {
-                        var exportStr = $" {e.Key}=\"{e.Value}\"";
+                        var exportStr = $" {e.Key}=\"{e.Value.Replace("\"", "\\\"")}\"";
                         Trace.Info(exportStr);
                         exportStanzas += exportStr;
                     }
