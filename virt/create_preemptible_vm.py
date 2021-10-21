@@ -89,7 +89,7 @@ def main(instance_number, container_file, disk_name=None):
     
     gh_env_list = ["GITHUB_JOB_FULL", "GITHUB_SHA", "GITHUB_RUN_ID"]
 
-    labels = ','.join(["{}={}".format(e.lower(), (os.environ.get(e) or 'null').lower()) for e in gh_env_list])
+    labels = ','.join(["{}={}".format(e.lower(), (os.environ.get(e)[:63] or 'null').lower()) for e in gh_env_list])
 
     print(labels)
 
