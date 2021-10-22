@@ -76,7 +76,7 @@ gcloud projects add-iam-policy-binding $PROJECT \
 
 gcloud projects add-iam-policy-binding $PROJECT \
     --member="serviceAccount:$FULL_SA_MAIL" \
-    --role="(roles/resourcemanager.projectIamAdmin"
+    --role="roles/resourcemanager.projectIamAdmin"
 
 # Create and download SA key.
 # WARNING: the export below will be used by Terraform later.
