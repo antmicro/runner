@@ -204,12 +204,8 @@ namespace GitHub.Runner.Worker.Handlers
             string prepend = string.Join(Path.PathSeparator.ToString(), ExecutionContext.Global.PrependPath.Reverse<string>());
             Trace.Info($"Prepend: {prepend}");
             var workspaceDir = githubContext["workspace"] as StringContextData;
+            workspaceDir = GCPRunner.TranslateToGCPRunnerPath(workingDirectory);
             Trace.Info($"Workspace from githubContext is {workspaceDir}");
-            Trace.Info($"Working directory from Inputs is {workingDirectory}");
-            var workingDirectoryOriginal = $"{workingDirectory}";
-            workingDirectory = "/";
-            var changeContainerDir = "/root/work";
-            Trace.Info($"Singularity directory: {changeContainerDir}");
 
             using (var stdoutManager = new OutputManager(ExecutionContext, ActionCommandManager))
             using (var stderrManager = new OutputManager(ExecutionContext, ActionCommandManager))
@@ -221,36 +217,24 @@ namespace GitHub.Runner.Worker.Handlers
                 // to overcome this issue, we need to use env to set-up this variables.
                 // It doesn't export variables, so execution of the node needs to be in the same process, e.g.:
                 // env TEST-VAR=abc TEST-VAR2=def node index.js
-                string exportStanzas = "env";
-
-                List<string> ignoreEnv = new List<string>
-                        { "GITHUB_WORKSPACE", "GITHUB_PATH", "GITHUB_EVENT_PATH", "RUNNER_TEMP", "RUNNER_TOOL_CACHE", "RUNNER_WORKSPACE", "GITHUB_ENV"};
+                string exportStanzas = $"cd {workspaceDir} && env";
 
                 var envCmdDir = "_runner_file_commands/";
                 var remoteEnvDir = "/9p";
-                var ghEnv = $"{remoteEnvDir}/{Environment["GITHUB_ENV"].Split(envCmdDir)[1]}";
                 var ghPath = $"{remoteEnvDir}/{Environment["GITHUB_PATH"].Split(envCmdDir)[1]}";
                 var pathSuffix = "${PATH:+:${PATH}}";
 
                 foreach (var e in Environment)
                 {
-                    if (!ignoreEnv.Contains(e.Key))
-                    {
-                        var exportStr = $" {e.Key}=\"{e.Value.Replace("\"", "\\\"")}\"";
-                        Trace.Info(exportStr);
-                        exportStanzas += exportStr;
-                    }
+                    var exportStr = $" {e.Key}=\"{GCPRunner.TranslateToGCPRunnerPath(e.Value.Replace("\"", "\\\""))}\"";
+                    Trace.Info(exportStr);
+                    exportStanzas += exportStr;
                 }
 
-                exportStanzas += $" GITHUB_WORKSPACE={changeContainerDir}";
-                exportStanzas += $" GITHUB_ENV={ghEnv}";
                 exportStanzas += $" GITHUB_PATH={ghPath}";
-                exportStanzas +=  " RUNNER_TEMP=/root/_temp";
                 exportStanzas += $" PATH={prepend}{pathSuffix}";
 
-                // FIXME: here we are changing directory to correct one
-                // but probably this should be done differently
-                input.Writer.TryWrite("cd /root/work && " + exportStanzas + " " + file + " " + arguments_node);
+                input.Writer.TryWrite(exportStanzas + " " + file + " " + arguments_node);
                 StepHost.StandardInChannel = input;
                 // Execute the process. Exit code 0 should always be returned.
                 // A non-zero exit code indicates infrastructural failure.

@@ -9,6 +9,7 @@ using System.Linq;
 using GitHub.DistributedTask.Pipelines.ContextData;
 using GitHub.Runner.Common;
 using GitHub.Runner.Sdk;
+using GitHub.Runner.GCP;
 using GitHub.DistributedTask.WebApi;
 using Pipelines = GitHub.DistributedTask.Pipelines;
 using Newtonsoft.Json;
@@ -312,8 +313,7 @@ namespace GitHub.Runner.Worker.Handlers
 
             arguments = string.Join(" ", sshArguments.ToArray());
 
-            var changeContainerDir = Path.Combine("/root/work", 
-                    workingDirectoryOriginal ?? string.Empty);
+            var changeContainerDir = GCPRunner.TranslateToGCPRunnerPath(workingDirectory);
             Trace.Info($"Singularity directory: {changeContainerDir}");
 
             using (var stdoutManager = new OutputManager(ExecutionContext, ActionCommandManager, outputManagerType: "stdout"))
@@ -325,27 +325,19 @@ namespace GitHub.Runner.Worker.Handlers
                 var input = Channel.CreateBounded<string>(new BoundedChannelOptions(1) { SingleReader = true, SingleWriter = true });
                 string exportStanzas = $"cd {changeContainerDir};";
 
-                List<string> ignoreEnv = new List<string> 
-                        { "GITHUB_WORKSPACE", "GITHUB_PATH", "RUNNER_TEMP", "GITHUB_EVENT_PATH", "RUNNER_TOOL_CACHE", "RUNNER_WORKSPACE", "GITHUB_ENV" };
 
                 var envCmdDir = "_runner_file_commands/";
                 var remoteEnvDir = "/9p";
-                var ghEnv = $"{remoteEnvDir}/{Environment["GITHUB_ENV"].Split(envCmdDir)[1]}";
                 var ghPath = $"{remoteEnvDir}/{Environment["GITHUB_PATH"].Split(envCmdDir)[1]}";
                 var pathSuffix = "${PATH:+:${PATH}}";
 
-                foreach (var e in Environment)                 
+                foreach (var e in Environment)
                 {
-                    if (!ignoreEnv.Contains(e.Key))
-                    {
-                        var exportStr = $"export {e.Key}=\"{e.Value}\";";
-                        Trace.Info(exportStr);
-                        exportStanzas += exportStr;
-                    }
+                    var exportStr = $"export {e.Key}=\"{GCPRunner.TranslateToGCPRunnerPath(e.Value.Replace("\"", "\\\""))}\";";
+                    Trace.Info(exportStr);
+                    exportStanzas += exportStr;
                 }
 
-                exportStanzas += $"export GITHUB_WORKSPACE={changeContainerDir};";
-                exportStanzas += $"export GITHUB_ENV={ghEnv};";
                 exportStanzas += $"export GITHUB_PATH={ghPath};";
                 exportStanzas += $"export PATH={prepend}{pathSuffix};";
 
