@@ -507,6 +507,26 @@ namespace GitHub.Runner.Worker.Handlers
                                 ExecutionContext.Error($"Unrecognized ping exit code {pingProc.ExitCode}");
                                 break;
                         }
+
+                        var checkEventProc = new Process();
+                        var instanceNumber = System.Environment.GetEnvironmentVariable(Constants.InstanceNumberVariable);
+                        var checkEventArgs = $"detect_preempted_signal.py -n {instanceNumber}";
+                        var rootDir = new DirectoryInfo(HostContext.GetDirectory(WellKnownDirectory.Root)).Parent.FullName;
+                        var virtDir = Path.Combine(rootDir, "virt");
+                        checkEventProc.StartInfo.FileName = WhichUtil.Which("python3", trace: Trace);
+                        checkEventProc.StartInfo.Arguments = checkEventArgs;
+                        checkEventProc.StartInfo.UseShellExecute = false;
+                        checkEventProc.StartInfo.WorkingDirectory = virtDir;
+                        checkEventProc.StartInfo.RedirectStandardError = true;
+                        checkEventProc.StartInfo.RedirectStandardOutput = true;
+
+                        checkEventProc.OutputDataReceived += (_, args) => ExecutionContext.Error(args.Data ?? "");
+                        checkEventProc.ErrorDataReceived += (_, args) => ExecutionContext.Error(args.Data ?? "");
+
+                        checkEventProc.Start();
+                        checkEventProc.BeginOutputReadLine();
+                        checkEventProc.BeginErrorReadLine();
+                        checkEventProc.WaitForExit();
                     }
 
                     ExecutionContext.Result = TaskResult.Failed;
