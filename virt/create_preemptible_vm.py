@@ -189,7 +189,9 @@ def main(instance_number, container_file, disk_name=None):
         sys.exit(1)
 
     container_sif_location = '/mnt/container.sif'
-    node_sif_location = '/mnt/node.sif'
+    node_sif_location = '/opt/sif/node.sif'
+    node_zip_src = 'https://github.com/antmicro/github-actions-singularity-node/releases/download/node-16-v0.1.1/node-16-v0.1.1.zip'
+    node_zip_dst = '/mnt/node.zip'
     infer_dns_cmd = "$(echo $SSH_CONNECTION | awk '{ print $1 }')"
 
     container_file = container_file if "/" in container_file else "library/" + container_file
@@ -198,12 +200,13 @@ def main(instance_number, container_file, disk_name=None):
             'uname -a',
             'sudo mkdir -p /mnt/1 /mnt/2/work /mnt/aux',
             'sudo mkdir -p /etc/default',
+            'sudo mkdir -p /opt/sif',
             r'echo "SYSLOGD_ARGS=\"-R {}:5140 -L\"" | sudo cp /dev/stdin /etc/default/syslogd'.format(infer_dns_cmd),
             'sudo /etc/init.d/S01syslogd restart',
             f'logger {labels}',
             external_disk_cmd,
-            f'sudo singularity pull --nohttps {node_sif_location} docker://{infer_dns_cmd}:5000/library/node:latest & sudo singularity pull --nohttps {container_sif_location} docker://{infer_dns_cmd}:5000/{container_file} &',
-            'wait',
+            f'sudo sh -c "test ! -f {node_sif_location} && curl -o {node_zip_dst} -Ls {node_zip_src} && unzip -p {node_zip_dst} node-16-alpine3.14.sif > {node_sif_location}"',
+            f'sudo singularity pull --nohttps {container_sif_location} docker://{infer_dns_cmd}:5000/{container_file}',
             f'sudo singularity instance start -C -e --dns {infer_dns_cmd} --overlay /mnt/1 --bind /mnt/2:/root,/mnt/aux {node_sif_location} node',
             f'echo "Starting {container_file}..."',
             f'sudo singularity instance start -C -e --dns {infer_dns_cmd} --overlay /mnt/1 --bind /mnt/2:/root,/mnt/aux {container_sif_location} i',
