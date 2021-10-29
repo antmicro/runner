@@ -204,7 +204,7 @@ namespace GitHub.Runner.Worker
                     return await CompleteJobAsync(jobServer, jobContext, message, TaskResult.Failed);
                 }
 
-                IExecutionContext vmCtx = jobContext.CreateChild(Guid.NewGuid(), "Set up VM", "VM_Init", null, null);
+                IExecutionContext vmCtx = jobContext.CreateChild(Guid.NewGuid(), "Set up VM", "VM_Init", null, null, ActionRunStage.Main);
                 vmCtx.Start();
 
                 Trace.Info($"Container: ${container.Image}");
@@ -487,7 +487,7 @@ namespace GitHub.Runner.Worker
 
         private bool FinalizeGcp(IExecutionContext jobContext, Pipelines.AgentJobRequestMessage message, dynamic vmSpecs)
         {
-            IExecutionContext vmCtx = jobContext.CreateChild(Guid.NewGuid(), "Teardown VM", "VM_teardown", null, null);
+            IExecutionContext vmCtx = jobContext.CreateChild(Guid.NewGuid(), "Teardown VM", "VM_teardown", null, null, ActionRunStage.Main);
             vmCtx.Start();
 
             // Variables inferred from environment.
@@ -585,7 +585,7 @@ namespace GitHub.Runner.Worker
                 FinalizeGcp(jobContext, message, vmSpecs); // Start Teardown VM step
 
                 Trace.Info("Finished finalizing GCP after VM starter failure.");
-                vmCtx = jobContext.CreateChild(Guid.NewGuid(), "Set up VM", "VM_Init", null, null); // Create new Start up VM step
+                vmCtx = jobContext.CreateChild(Guid.NewGuid(), "Set up VM", "VM_Init", null, null, ActionRunStage.Main); // Create new Start up VM step
                 vmCtx.Start();
         }
 
