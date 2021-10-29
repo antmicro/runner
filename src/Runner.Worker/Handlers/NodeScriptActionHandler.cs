@@ -95,6 +95,11 @@ namespace GitHub.Runner.Worker.Handlers
             var jobName = System.Environment.GetEnvironmentVariable("GITHUB_JOB_FULL");
             Trace.Info($"jobName: {jobName}");
 
+            // Get GitHubContext and use it to retrieve some variables that were inserted into it.
+            // This is used as a form of hacky message passing.
+            var githubContext = ExecutionContext.ExpressionValues["github"] as GitHubContext;
+            var sshIp = githubContext["qemu_ip"];
+
             if (actionName == "actions/upload-artifact/v2")
             {
                 var instanceNumber = System.Environment.GetEnvironmentVariable(Constants.InstanceNumberVariable);
@@ -137,24 +142,26 @@ namespace GitHub.Runner.Worker.Handlers
 
                 var runnerFileCommands = Path.Combine(tempDir, "_runner_file_commands");
 
-                var plotGet = new Process();
-                var plotGetArgs = new List<string> {"-q",
-                    "-o UserKnownHostsFile=/dev/null", 
-                    "-o StrictHostKeyChecking=no",
-                    "-i ~/.ssh/id_rsa",
-                    $"scalerunner@{System.Environment.MachineName}-auto-spawned{instanceNumber}:{plotRemotePath}",
-                    $"{runnerFileCommands}"
-                };
+                // Obtain the last component from working directory.
+                // Consider the following directory:
+                // /home/$USER/github-actions-runner/_layout/_work_0/$REPO/$REPO
+                // 
+                // $REPO/$REPO is that last component.
+                var workspaceLastComponent = githubContext["container_workspace"];
 
-                plotGet.StartInfo.FileName = WhichUtil.Which("scp", trace: Trace);
-                plotGet.StartInfo.Arguments = string.Join(" ", plotGetArgs);
-                plotGet.StartInfo.WorkingDirectory = virtDir;
-                plotGet.StartInfo.UseShellExecute = false;
-                plotGet.StartInfo.RedirectStandardError = true;
-                plotGet.StartInfo.RedirectStandardOutput = true;
+                var plotCp = new Process();
+                var plotCpArgs = new List<string>(Constants.CommonSshArgs);
+                plotCpArgs.Add($"scalerunner@{sshIp} sudo cp {plotRemotePath} /mnt/2/{workspaceLastComponent}/plot_{jobName}.svg");
 
-                plotGet.OutputDataReceived += (_, args) => Trace.Info(args.Data);
-                plotGet.ErrorDataReceived += (_, args) => Trace.Info(args.Data);
+                plotCp.StartInfo.FileName = WhichUtil.Which("ssh", trace: Trace);
+                plotCp.StartInfo.Arguments = string.Join(" ", plotCpArgs);
+                plotCp.StartInfo.WorkingDirectory = virtDir;
+                plotCp.StartInfo.UseShellExecute = false;
+                plotCp.StartInfo.RedirectStandardError = true;
+                plotCp.StartInfo.RedirectStandardOutput = true;
+
+                plotCp.OutputDataReceived += (_, args) => Trace.Info(args.Data);
+                plotCp.ErrorDataReceived += (_, args) => Trace.Info(args.Data);
 
                 // Wait 3 minutes for processes to exit
                 var procTimeout = 180000;
@@ -166,16 +173,12 @@ namespace GitHub.Runner.Worker.Handlers
 
                 if (sargraphStop.ExitCode == 0)
                 {
-                    plotGet.Start();
-                    plotGet.BeginOutputReadLine();
-                    plotGet.BeginErrorReadLine();
+                    plotCp.Start();
+                    plotCp.BeginOutputReadLine();
+                    plotCp.BeginErrorReadLine();
 
-                    plotGet.WaitForExit();
-                    Trace.Info($"{plotGet.StartInfo.Arguments} exit code: {plotGet.ExitCode}");
-
-                    File.Copy(
-                            Path.Combine(runnerFileCommands, "plot.svg"),
-                            Path.Combine(workingDirectory, $"plot_{jobName}.svg"));
+                    plotCp.WaitForExit();
+                    Trace.Info($"{plotCp.StartInfo.Arguments} exit code: {plotCp.ExitCode}");
                 }
             }
 
@@ -186,8 +189,6 @@ namespace GitHub.Runner.Worker.Handlers
             // 2) Escape double quotes within the script file path. Double-quote is a valid
             // file name character on Linux.
             string arguments_node = GCPRunner.TranslateToGCPRunnerPath(StringUtil.Format(@"""{0}""", target.Replace(@"""", @"\""")));
-            var githubContext = ExecutionContext.ExpressionValues["github"] as GitHubContext;
-            var sshIp = githubContext["qemu_ip"];
 
             var fileName = "/usr/bin/ssh";
             var sshArguments = new List<string>(Constants.CommonSshArgs);
