@@ -235,7 +235,11 @@ namespace GitHub.Runner.Worker.Handlers
                 exportStanzas += $" GITHUB_PATH={ghPath}";
                 exportStanzas += $" PATH={prepend}{pathSuffix}";
 
-                input.Writer.TryWrite(exportStanzas + " " + file + " " + arguments_node);
+                var initCmd = $"### START ###\n" + exportStanzas + " " + file + " " + arguments_node + $"\n### END ###";
+
+                Trace.Info(initCmd);
+
+                input.Writer.TryWrite(initCmd);
                 StepHost.StandardInChannel = input;
                 // Execute the process. Exit code 0 should always be returned.
                 // A non-zero exit code indicates infrastructural failure.
