@@ -8,6 +8,7 @@ USER = 'scalerunner'
 PUBKEY = os.path.join(os.path.expanduser('~'), '.ssh/id_rsa.pub'), f'/home/{USER}/.ssh/authorized_keys'
 SARGRAPH = os.path.realpath('../sargraph/sargraph.py'), f'/home/{USER}/sargraph.py'
 GCLOUD = shutil.which('gcloud')
+PREEMPT = '--preemptible' 
 
 def load_config():
     with open('../.vm_specs.json', 'r') as f:
@@ -93,8 +94,13 @@ def main(instance_number, container_file, disk_name=None):
 
     print(labels)
 
+    # Ensure compatibility with pre-67adc3a .vm_specs file.
+    try:
+        preemptible_machine = PREEMPT if c.machine.preemptible else ''
+    except AttributeError:
+        preemptible_machine = PREEMPT
 
-    preemptible_machine = '--preemptible' if c.machine.preemptible else ''
+    print(f'Preemptible: {bool(preemptible_machine)}')
 
     gcloud_start = time.time()
 
