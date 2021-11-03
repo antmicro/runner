@@ -79,6 +79,7 @@ namespace GitHub.Runner.Worker
             JObject messageJson = JObject.Parse(messageSerialized);
 
             var externalDisk = String.Empty;
+            var preemptibleOverride = String.Empty;
 
             // We're parsing the JSON that looks like the example below:
             //
@@ -119,15 +120,19 @@ namespace GitHub.Runner.Worker
                         {
                             externalDisk = (string)envEntry["Value"]["lit"];
                         }
+                        else if ((string)envEntry["Key"]["lit"] == "GHA_PREEMPTIBLE")
+                        {
+                            preemptibleOverride = (string)envEntry["Value"]["lit"];
+                        }
                     }
                 }
             }
             catch (Exception e)
             {
-                Trace.Warning($"Couldn't extract external disk variable: {e}");
+                Trace.Warning($"Couldn't extract special variable: {e}");
             }
             
-            Trace.Info($"External disk: {externalDisk}");
+            Trace.Info($"External disk: {externalDisk}; Preemptible override: {preemptibleOverride}");
 
             Trace.Info($"VIRT IP: {virtIp}");
 
@@ -184,6 +189,20 @@ namespace GitHub.Runner.Worker
                 if (!String.IsNullOrEmpty(externalDisk))
                 {
                     spawnMachineArgs += $" -d {externalDisk}";
+                }
+
+                if (!String.IsNullOrEmpty(preemptibleOverride))
+                {
+                    bool preemptibleOverrideBool;
+
+                    if (Boolean.TryParse(preemptibleOverride, out preemptibleOverrideBool))
+                    {
+                        spawnMachineArgs += $" -p {Convert.ToInt32(preemptibleOverrideBool)}";
+                    }
+                    else
+                    {
+                        vmCtx.Output("Boolean value expected for preemptible override.");
+                    }
                 }
 
                 spawnMachineProc.StartInfo.FileName = WhichUtil.Which("python3", trace: Trace);

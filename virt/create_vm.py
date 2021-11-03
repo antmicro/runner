@@ -36,7 +36,8 @@ def get_gcp_disk(disk_name, zone):
 @click.option('-n', '--instance-number', help='Instance number', required=True)
 @click.option('-s', '--container-file', help='Container file', required=True)
 @click.option('-d', '--disk-name', help='External disk name', required=False, default=None)
-def main(instance_number, container_file, disk_name=None):
+@click.option('-p', '--preemptible-override', help='Override preemptible setting', required=False, type=int, default=None)
+def main(instance_number, container_file, disk_name=None, preemptible_override=None):
     c = load_config()
 
     machine_type = c.gcp.type
@@ -99,6 +100,10 @@ def main(instance_number, container_file, disk_name=None):
         preemptible_machine = PREEMPT if c.machine.preemptible else ''
     except AttributeError:
         preemptible_machine = PREEMPT
+
+    # Allow overriding the setting at workflow level.
+    if preemptible_override is not None:
+        preemptible_machine = PREEMPT if bool(preemptible_override) else ''
 
     print(f'Preemptible: {bool(preemptible_machine)}')
 
