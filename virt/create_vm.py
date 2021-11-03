@@ -93,6 +93,9 @@ def main(instance_number, container_file, disk_name=None):
 
     print(labels)
 
+
+    preemptible_machine = '--preemptible' if c.machine.preemptible else ''
+
     gcloud_start = time.time()
 
     instance_cmd = 'gcloud beta compute --verbosity=error ' \
@@ -106,7 +109,8 @@ def main(instance_number, container_file, disk_name=None):
             f'--labels=' \
             f'{labels} ' \
             '--no-restart-on-failure --tags=runners ' \
-            '--maintenance-policy=TERMINATE --preemptible ' \
+            '--maintenance-policy=TERMINATE ' \
+            f'{preemptible_machine} ' \
             '--no-service-account ' \
             '--no-scopes ' \
             f'--image={c.gcp.image} --image-project={c.gcp.project} ' \

@@ -179,7 +179,7 @@ namespace GitHub.Runner.Worker
 
                 Trace.Info($"Container: ${container.Image}");
 
-                var spawnMachineArgs = $"create_preemptible_vm.py -n {instanceNumber} -s {container.Image}";
+                var spawnMachineArgs = $"create_vm.py -n {instanceNumber} -s {container.Image}";
 
                 if (!String.IsNullOrEmpty(externalDisk))
                 {

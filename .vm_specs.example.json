@@ -9,6 +9,7 @@
     "sa": "cool-service-account@my-cool-project.iam.gserviceaccount.com"
   },
   "machine": {
-    "disk": 30
+    "disk": 30,
+    "preemptible": false
   }
 }
