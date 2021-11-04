@@ -177,10 +177,15 @@ namespace GitHub.Runner.Worker
                     foreach (var token in message.EnvironmentVariables)
                     {
                         var environmentVariables = templateEvaluator.EvaluateStepEnvironment(token, jobContext.ExpressionValues, jobContext.ExpressionFunctions, VarUtil.EnvironmentVariableKeyComparer);
+
+                        Trace.Info($"token: {token}; environmentVariables: {environmentVariables}");
+
                         foreach (var pair in environmentVariables)
                         {
                             context.Global.EnvironmentVariables[pair.Key] = pair.Value ?? string.Empty;
                             context.SetEnvContext(pair.Key, pair.Value ?? string.Empty);
+
+                            Trace.Info($"\tpair: {pair}");
                         }
                     }
 
