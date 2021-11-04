@@ -78,62 +78,6 @@ namespace GitHub.Runner.Worker
             string messageSerialized = JsonConvert.SerializeObject(message);
             JObject messageJson = JObject.Parse(messageSerialized);
 
-            var externalDisk = String.Empty;
-            var preemptibleOverride = String.Empty;
-
-            // We're parsing the JSON that looks like the example below:
-            //
-            // ```
-            // (...)
-            // "EnvironmentVariables": [
-            // {
-            //     "type": 2,
-            //         "file": 1,
-            //         "line": 18,
-            //         "col": 7,
-            //         "map": [
-            //         {
-            //             "Key": {
-            //                 "type": 0,
-            //                 "file": 1,
-            //                 "line": 18,
-            //                 "col": 7,
-            //                 "lit": "GHA_EXTERNAL_DISK"
-            //             },
-            //             "Value": {
-            //                 "type": 0,
-            //                 "file": 1,
-            //                 "line": 18,
-            //                 "col": 20,
-            //                 "lit": "auxdisk"
-            //             }
-            //         },
-            // (...)
-            // ```
-            try
-            {
-                foreach (var envList in messageJson["EnvironmentVariables"])
-                {
-                    foreach (var envEntry in envList["map"])
-                    {
-                        if ((string)envEntry["Key"]["lit"] == "GHA_EXTERNAL_DISK")
-                        {
-                            externalDisk = (string)envEntry["Value"]["lit"];
-                        }
-                        else if ((string)envEntry["Key"]["lit"] == "GHA_PREEMPTIBLE")
-                        {
-                            preemptibleOverride = (string)envEntry["Value"]["lit"];
-                        }
-                    }
-                }
-            }
-            catch (Exception e)
-            {
-                Trace.Warning($"Couldn't extract special variable: {e}");
-            }
-            
-            Trace.Info($"External disk: {externalDisk}; Preemptible override: {preemptibleOverride}");
-
             Trace.Info($"VIRT IP: {virtIp}");
 
             dynamic vmSpecs = JObject.Parse(File.ReadAllText(Path.Combine(rootDir, ".vm_specs.json")));
@@ -165,6 +109,43 @@ namespace GitHub.Runner.Worker
 
                 var templateEval = jobContext.ToPipelineTemplateEvaluator();
                 var container = templateEval.EvaluateJobContainer(message.JobContainer, jobContext.ExpressionValues, jobContext.ExpressionFunctions);
+
+                // Interpret special variables.
+                var externalDisk = String.Empty;
+                var preemptibleOverride = String.Empty;
+
+                // The following sorcery is done so that templating in environment variables works properly.
+                foreach (var token in message.EnvironmentVariables)
+                {
+                    var environmentVariables = templateEval.EvaluateStepEnvironment(token, 
+                            jobContext.ExpressionValues, 
+                            jobContext.ExpressionFunctions, 
+                            VarUtil.EnvironmentVariableKeyComparer);
+
+                    foreach (var pair in environmentVariables)
+                    {
+                        var val = pair.Value ?? string.Empty;
+
+                        switch (pair.Key)
+                        {
+                            case "GHA_EXTERNAL_DISK":
+                                Trace.Info("External disk variable is present.");
+
+                                externalDisk = val;
+                                break;
+                            case "GHA_PREEMPTIBLE":
+                                Trace.Info("Preemptible override variable is present.");
+
+                                preemptibleOverride = val;
+                                break;
+                            default:
+                                Trace.Info($"Ignoring variable {pair.Key}");
+                                break;
+                        }
+                    }
+                }
+                
+                Trace.Info($"External disk: {externalDisk}; Preemptible override: {preemptibleOverride}");
 
                 if (!JobPassesSecurityRestrictions(jobContext))
                 {
