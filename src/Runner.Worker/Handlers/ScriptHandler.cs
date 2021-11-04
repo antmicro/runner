@@ -309,7 +309,7 @@ namespace GitHub.Runner.Worker.Handlers
             fileName = "/usr/bin/ssh";
 
             var sshArguments = new List<string>(Constants.CommonSshArgs);
-            sshArguments.Add($"scalerunner@{sshIp} sudo singularity exec -e instance://i bash");
+            sshArguments.Add($"scalerunner@{sshIp} sudo singularity exec -e instance://i bash -e");
 
             arguments = string.Join(" ", sshArguments.ToArray());
 
