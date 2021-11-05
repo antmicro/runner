@@ -234,7 +234,6 @@ def main(instance_number, container_file, disk_name=None, preemptible_override=N
             f'sudo singularity instance start -C -e --dns {infer_dns_cmd} --overlay /mnt/3 --bind /mnt/2:/root,/mnt/aux {node_sif_location} node',
             f'echo "Starting {container_file}..."',
             f'sudo singularity instance start -C -e --dns {infer_dns_cmd} --overlay /mnt/1 --bind /mnt/2:/root,/mnt/aux {container_sif_location} i',
-            'sudo iptables -A OUTPUT -d 169.254.169.254 -j DROP',
             f'chmod +x {SARGRAPH[1]}',
             f'sudo mv {SARGRAPH[1]} /usr/bin/sargraph',
             'cd /mnt && SARGRAPH_OUTPUT_TYPE=svg sudo -E sargraph chart start',
