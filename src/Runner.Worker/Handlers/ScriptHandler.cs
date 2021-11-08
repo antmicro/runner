@@ -329,7 +329,7 @@ namespace GitHub.Runner.Worker.Handlers
                 var envCmdDir = "_runner_file_commands/";
                 var remoteEnvDir = "/9p";
                 var ghPath = $"{remoteEnvDir}/{Environment["GITHUB_PATH"].Split(envCmdDir)[1]}";
-                var pathSuffix = "${PATH:+:${PATH}}";
+                var pathSuffix = "${PATH:+${PATH}}";
 
                 foreach (var e in Environment)
                 {
