@@ -158,7 +158,7 @@ def main(instance_number, container_file, disk_name=None, preemptible_override=N
     ssh = paramiko.SSHClient()
     ssh.set_missing_host_key_policy(paramiko.client.AutoAddPolicy())
 
-    ssh_timeout = ssh_timeout_c = 40
+    ssh_timeout = ssh_timeout_c = 50
 
     while ssh_timeout_c > 0:
         try:
@@ -170,7 +170,7 @@ def main(instance_number, container_file, disk_name=None, preemptible_override=N
                     auth_timeout=1,
                     banner_timeout=1,
             )
-            print('SSH is operational!')
+            print('Machine ready')
 
             _, stdout, stderr = ssh.exec_command('sudo chown -R {0}:{0} /home/{0}'.format(USER))
             stdout_lines = stdout.readlines()
@@ -184,7 +184,8 @@ def main(instance_number, container_file, disk_name=None, preemptible_override=N
 
             break
         except Exception as e:
-            print('[{}/{}] Waiting for SSH...'.format(ssh_timeout_c, ssh_timeout))
+            if ssh_timeout_c % 10 == 0:
+                print('Waiting for SSH... [{}/{}] '.format((int)((ssh_timeout - ssh_timeout_c) / 10), (int)(ssh_timeout / 10)))
             ssh_timeout_c -= 1
 
             if ssh_timeout_c == 0:
@@ -237,6 +238,7 @@ def main(instance_number, container_file, disk_name=None, preemptible_override=N
             f'chmod +x {SARGRAPH[1]}',
             f'sudo mv {SARGRAPH[1]} /usr/bin/sargraph',
             'cd /mnt && SARGRAPH_OUTPUT_TYPE=svg sudo -E sargraph chart start',
+            'sudo singularity exec -e instance://i df -h /',
     )
 
     for cmd in commands:
