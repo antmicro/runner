@@ -424,6 +424,8 @@ namespace GitHub.Runner.Worker
 
         private bool FinalizeGcp(IExecutionContext jobContext, Pipelines.AgentJobRequestMessage message, dynamic vmSpecs)
         {
+            IExecutionContext vmCtx = jobContext.CreateChild(Guid.NewGuid(), "Teardown VM", "VM_teardown", null, null);
+            vmCtx.Start();
             var instanceNumber = Environment.GetEnvironmentVariable(Constants.InstanceNumberVariable);
             var virtIp = message.Variables["system.qemuIp"].Value;
             var virtDir = message.Variables["system.qemuDir"].Value;
@@ -468,6 +470,29 @@ namespace GitHub.Runner.Worker
             gcloudDelProc.BeginOutputReadLine();
             gcloudDelProc.BeginErrorReadLine();
             gcloudDelProc.WaitForExit();
+
+            // check rsyslog for shutdown reason
+            var checkRsyslog = new Process();
+            checkRsyslog.StartInfo.FileName = WhichUtil.Which("python3", trace: Trace);
+            checkRsyslog.StartInfo.Arguments = $"check-rsyslog.py -n {instanceNumber}"; 
+            checkRsyslog.StartInfo.WorkingDirectory = virtDir;
+            checkRsyslog.StartInfo.UseShellExecute = false;
+            checkRsyslog.StartInfo.RedirectStandardError = true;
+            checkRsyslog.StartInfo.RedirectStandardOutput = true;
+
+            checkRsyslog.OutputDataReceived += (_, args) => 
+            {
+                vmCtx.Output(args.Data ?? "");
+                Trace.Info(args.Data ?? "");
+            };
+            // Log stderr to local logfile only to avoid potential leaks.
+            checkRsyslog.ErrorDataReceived += (_, args) => Trace.Error(args.Data ?? "");
+            checkRsyslog.Start();
+            checkRsyslog.BeginOutputReadLine();
+            checkRsyslog.BeginErrorReadLine();
+
+            checkRsyslog.WaitForExit();
+            vmCtx.Complete();
 
             return true;
         }
