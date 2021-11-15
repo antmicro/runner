@@ -12,8 +12,6 @@ The repositories listed below contain the definitions of the required components
 * [github-actions-runner-scalerunner](https://github.com/antmicro/github-actions-runner-scalerunner) - the image used by preemptible GCP instances that serve as workers (one worker per job).
 * [github-actions-runner-terraform](https://github.com/antmicro/github-actions-runner-terraform) - a [Terraform](https://www.terraform.io/) module used to create the virtual network, firewall rules, cloud NAT and coordinator instance for the runner.
 
-For convenience, an [installation script](https://raw.githubusercontent.com/antmicro/runner/vm-runners/scripts/install.sh) is available that installs dependencies, configures the system, clones the repository and builds the runner.
-
 ## Installation and configuration
 
 The manual below assumes that Debian Buster is used to deploy the runner.
