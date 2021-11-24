@@ -165,7 +165,7 @@ namespace GitHub.Runner.Worker
 
                 Trace.Info($"Container: ${container.Image}");
 
-                var spawnMachineArgs = $"create_vm.py -n {instanceNumber} -s {container.Image}";
+                var spawnMachineArgs = $"vm_command.py --mode create_vm -n {instanceNumber} -s {container.Image}";
 
                 if (!String.IsNullOrEmpty(externalDisk))
                 {
@@ -474,7 +474,7 @@ namespace GitHub.Runner.Worker
             // check rsyslog for shutdown reason
             var checkRsyslog = new Process();
             checkRsyslog.StartInfo.FileName = WhichUtil.Which("python3", trace: Trace);
-            checkRsyslog.StartInfo.Arguments = $"check-rsyslog.py -n {instanceNumber}"; 
+            checkRsyslog.StartInfo.Arguments = $"vm_command.py --mode check-rsyslog -n {instanceNumber}";
             checkRsyslog.StartInfo.WorkingDirectory = virtDir;
             checkRsyslog.StartInfo.UseShellExecute = false;
             checkRsyslog.StartInfo.RedirectStandardError = true;

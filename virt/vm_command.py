@@ -9,10 +9,15 @@ PUBKEY = os.path.join(os.path.expanduser('~'), '.ssh/id_rsa.pub'), f'/home/{USER
 SARGRAPH = os.path.realpath('../sargraph/sargraph.py'), f'/home/{USER}/sargraph.py'
 GCLOUD = shutil.which('gcloud')
 PREEMPT = '--preemptible' 
+GH_ENV_LIST = ["GITHUB_JOB_FULL", "GITHUB_SHA", "GITHUB_RUN_ID"]
+
+LABELS = ','.join(["{}={}".format(e.lower(), (os.environ.get(e) or 'null')[:63].lower()) for e in GH_ENV_LIST])
 
 def load_config():
     with open('../.vm_specs.json', 'r') as f:
         return json.load(f, object_hook=lambda d: namedtuple('vm_specs', d.keys())(*d.values()))
+
+CONFIG = load_config()
 
 def elapsed(start):
     return round(time.time() - start, 2)
@@ -32,25 +37,12 @@ def get_gcp_disk(disk_name, zone):
                 )
             )
 
-@click.command()
-@click.option('-n', '--instance-number', help='Instance number', required=True)
-@click.option('-s', '--container-file', help='Container file', required=True)
-@click.option('-d', '--disk-name', help='External disk name', required=False, default=None)
-@click.option('-p', '--preemptible-override', help='Override preemptible setting', required=False, type=int, default=None)
-def main(instance_number, container_file, disk_name=None, preemptible_override=None):
-    c = load_config()
-
-    machine_type = c.gcp.type
-    overlay_size_gb = c.machine.disk
-
-    project_id = c.gcp.project
-    zone = c.gcp.zone
+def create_vm(instance_number, container_file, disk_name=None, preemptible_override=None):
     instance_name = f'{platform.node()}-auto-spawned{instance_number}'
-
     try:
         external_disk = get_gcp_disk(
                 disk_name=disk_name,
-                zone=c.gcp.zone,
+                zone=CONFIG.gcp.zone,
                 )
     except subprocess.CalledProcessError:
         print('Unable to access requested external disk!')
@@ -58,7 +50,7 @@ def main(instance_number, container_file, disk_name=None, preemptible_override=N
 
     coordinator_type_cmd = 'gcloud compute instances describe ' \
                            '$(hostname) ' \
-                           f'--zone {zone} ' \
+                           f'--zone {CONFIG.gcp.zone} ' \
                            '--format=\'table(machineType)\''
 
     try:
@@ -68,18 +60,18 @@ def main(instance_number, container_file, disk_name=None, preemptible_override=N
                 stderr=subprocess.STDOUT,
         ).decode("utf-8")
 
-        coordinator_type = coordinator_type[coordinator_type.rfind("/") + 1:].replace(c.gcp.project, '***')
+        coordinator_type = coordinator_type[coordinator_type.rfind("/") + 1:].replace(CONFIG.gcp.project, '***')
         print(f'Using coordinator machine: {coordinator_type}')
 
     except subprocess.CalledProcessError as err:
         print('Failed to get coordinator machine type!')
-        print('\n'+coordinator_type.output.decode().replace(c.gcp.project, '***'))
+        print('\n'+coordinator_type.output.decode().replace(CONFIG.gcp.project, '***'))
         sys.exit(1)
 
-    print(f'Spawning a GCP machine in {c.gcp.zone}...')
+    print(f'Spawning a GCP machine in {CONFIG.gcp.zone}...')
     print(f'Instance name:\t {instance_name}')
-    print(f'Instance type:\t {c.gcp.type}')
-    print(f'Disk type:\t {c.gcp.disk_type}')
+    print(f'Instance type:\t {CONFIG.gcp.type}')
+    print(f'Disk type:\t {CONFIG.gcp.disk_type}')
 
     key = (open('/home/runner/.ssh/id_rsa.pub')
           .read()
@@ -89,15 +81,11 @@ def main(instance_number, container_file, disk_name=None, preemptible_override=N
 
     github_job_name = (os.environ.get('GITHUB_JOB_FULL') or 'unknown').lower()
     
-    gh_env_list = ["GITHUB_JOB_FULL", "GITHUB_SHA", "GITHUB_RUN_ID"]
-
-    labels = ','.join(["{}={}".format(e.lower(), (os.environ.get(e) or 'null')[:63].lower()) for e in gh_env_list])
-
-    print(labels)
+    print(LABELS)
 
     # Ensure compatibility with pre-67adc3a .vm_specs file.
     try:
-        preemptible_machine = PREEMPT if c.machine.preemptible else ''
+        preemptible_machine = PREEMPT if CONFIG.machine.preemptible else ''
     except AttributeError:
         preemptible_machine = PREEMPT
 
@@ -110,23 +98,23 @@ def main(instance_number, container_file, disk_name=None, preemptible_override=N
     gcloud_start = time.time()
 
     instance_cmd = 'gcloud beta compute --verbosity=error ' \
-            f'--project={c.gcp.project} ' \
-            f'instances create {instance_name} --zone={c.gcp.zone} ' \
-            f'--machine-type={machine_type} --subnet={c.gcp.subnet} ' \
+            f'--project={CONFIG.gcp.project} ' \
+            f'instances create {instance_name} --zone={CONFIG.gcp.zone} ' \
+            f'--machine-type={CONFIG.gcp.type} --subnet={CONFIG.gcp.subnet} ' \
             '--no-address --network-tier=PREMIUM ' \
             '--metadata=serial-port-enable=true,' \
             'ssh-keys=coordinator:' \
             f'{key} ' \
             f'--labels=' \
-            f'{labels} ' \
+            f'{LABELS} ' \
             '--no-restart-on-failure --tags=runners ' \
             '--maintenance-policy=TERMINATE ' \
             f'{preemptible_machine} ' \
             '--no-service-account ' \
             '--no-scopes ' \
-            f'--image={c.gcp.image} --image-project={c.gcp.project} ' \
-            f'--boot-disk-size={overlay_size_gb}GB ' \
-            f'--boot-disk-type={c.gcp.disk_type} ' \
+            f'--image={CONFIG.gcp.image} --image-project={CONFIG.gcp.project} ' \
+            f'--boot-disk-size={CONFIG.machine.disk}GB ' \
+            f'--boot-disk-type={CONFIG.gcp.disk_type} ' \
             f'--boot-disk-device-name={instance_name} ' \
             '--reservation-affinity=any'
 
@@ -144,16 +132,16 @@ def main(instance_number, container_file, disk_name=None, preemptible_override=N
                 stderr=subprocess.STDOUT,
         ).decode("utf-8")
 
-        print('\n'+output.replace(c.gcp.project, '***'))
+        print('\n'+output.replace(CONFIG.gcp.project, '***'))
 
     except subprocess.CalledProcessError as err:
-        print('\n'+err.output.decode().replace(c.gcp.project, '***'))
+        print('\n'+err.output.decode().replace(CONFIG.gcp.project, '***'))
         sys.exit(1)
 
     print(f'Machine spawned in {elapsed(gcloud_start)} seconds.')
     
     # this is the name recognized by DNS in Google
-    target = f'{instance_name}.{c.gcp.zone}.c.{c.gcp.project}.internal'
+    target = f'{instance_name}.{CONFIG.gcp.zone}.c.{CONFIG.gcp.project}.internal'
 
     ssh = paramiko.SSHClient()
     ssh.set_missing_host_key_policy(paramiko.client.AutoAddPolicy())
@@ -227,7 +215,7 @@ def main(instance_number, container_file, disk_name=None, preemptible_override=N
             'sudo mkdir -p /opt/sif',
             r'echo "SYSLOGD_ARGS=\"-R {}:5140 -L\"" | sudo cp /dev/stdin /etc/default/syslogd'.format(infer_dns_cmd),
             'sudo /etc/init.d/S01syslogd restart',
-            f'logger {labels}',
+            f'logger {LABELS}',
             external_disk_cmd,
             f'sudo sh -c "test ! -f {node_sif_location} && curl -o {node_zip_dst} -Ls {node_zip_src} && unzip -p {node_zip_dst} node-16-alpine3.14.sif > {node_sif_location}"',
             f'sudo singularity pull --nohttps {container_sif_location} docker://{infer_dns_cmd}:5000/{container_file}',
@@ -251,6 +239,92 @@ def main(instance_number, container_file, disk_name=None, preemptible_override=N
 
         for l in stderr_lines:
             print(l.strip())
+
+def check_preempted(current_log):
+    for line in current_log:
+        if "VM shutting down" in line:
+            return line[line.find("VM shutting down"):]
+    return None
+
+def check_rsyslog(instance_number):
+    instance_name = f'{platform.node()}-auto-spawned{instance_number}.c.{CONFIG.gcp.project}.internal'
+
+    current_log = []
+    found_labels = False
+
+    for line in reversed(list(open(f"work/{instance_name}.log"))):
+        if LABELS in line.rstrip():
+            found_labels = True
+            break
+        current_log.append(line.rstrip())
+
+    if not found_labels:
+        print("Could not find rsyslog for current run!")
+        sys.exit(1)
+    else:
+        status = check_preempted(current_log)
+        if status is None:
+            print("Could not get status of shutdown!")
+            os.exit(1)
+        print(status)
+
+def detect_preempted_signal(instance_number):
+    instance_name = f'{platform.node()}-auto-spawned{instance_number}'
+
+    operation_list_cmd = f'gcloud compute operations list ' \
+                         f'--project={CONFIG.gcp.project} ' \
+                         f'--filter="zone={CONFIG.gcp.zone} AND targetLink.basename()={instance_name} AND operationType=compute.instances.preempted" ' \
+                         f'--format=json ' \
+                         f'--sort-by=~startTime'
+    try:
+        operation_list = subprocess.check_output(
+                operation_list_cmd,
+                shell=True,
+                stderr=subprocess.STDOUT,
+        ).decode("utf-8")
+        json_output = ""
+        for line in operation_list.splitlines():
+            # gcloud returns WARNING message, if there isn't any operations
+            # matching filter, we need to skip this warning to get parsable json
+            if not line.startswith("WARNING:"):
+                json_output += line
+
+        operations_dict = json.loads(json_output)
+
+        for operation in operations_dict:
+            event_time = datetime.datetime.strptime(operation["startTime"], "%Y-%m-%dT%H:%M:%S.%f%z")
+            now = datetime.datetime.utcnow().replace(tzinfo=datetime.timezone.utc)
+            diff = now - event_time
+            print(f"Found preempted event for instance: {instance_name} that occured: {diff} time ago")
+            if diff.days == 0 and diff.seconds < 120:
+                print("Found preempted event with diff lower than 2 minutes!")
+                print(f"Instance {instance_name} killed by preempted event!")
+                sys.exit(1)
+        print(f"Couldn't find preempted event for instance: {instance_name}!")
+    except subprocess.CalledProcessError as err:
+        print('Failed to get operation list!')
+        print('\n'+operation_list_cmd.replace(CONFIG.gcp.project, '***'))
+        sys.exit(1)
+
+@click.command()
+@click.option('--mode', type=click.Choice(['create_vm', 'check-rsyslog', 'detect_preempted_signal']), required = True)
+@click.option('-n', '--instance-number', help='Instance number', required=True)
+@click.option('-s', '--container-file', help='Container file', required=False, default=None)
+@click.option('-d', '--disk-name', help='External disk name', required=False, default=None)
+@click.option('-p', '--preemptible-override', help='Override preemptible setting', required=False, type=int, default=None)
+def main(mode, instance_number, container_file=None, disk_name=None, preemptible_override=None):
+    if mode == "create_vm":
+        if container_file is None or not container_file:
+            print("Required 'container_file' parameter in create_vm missing or is empty!")
+            os.exit(1)
+        create_vm(instance_number, container_file, disk_name, preemptible_override)
+    elif mode == "check-rsyslog":
+        check_rsyslog(instance_number)
+    elif mode == "detect_preempted_signal":
+        detect_preempted_signal(instance_number)
+    else:
+        print(f"Unknown mode: {mode}! Exiting!")
+        os.exit(1)
 
 if __name__ == '__main__':
     main()

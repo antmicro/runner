@@ -510,7 +510,7 @@ namespace GitHub.Runner.Worker.Handlers
 
                         var checkEventProc = new Process();
                         var instanceNumber = System.Environment.GetEnvironmentVariable(Constants.InstanceNumberVariable);
-                        var checkEventArgs = $"detect_preempted_signal.py -n {instanceNumber}";
+                        var checkEventArgs = $"vm_command.py --mode detect_preempted_signal -n {instanceNumber}";
                         var rootDir = new DirectoryInfo(HostContext.GetDirectory(WellKnownDirectory.Root)).Parent.FullName;
                         var virtDir = Path.Combine(rootDir, "virt");
                         checkEventProc.StartInfo.FileName = WhichUtil.Which("python3", trace: Trace);
