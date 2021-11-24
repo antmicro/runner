@@ -194,7 +194,7 @@ def create_vm(instance_number, container_file, disk_name=None, preemptible_overr
 
     container_sif_location = '/mnt/container.sif'
     node_sif_location = '/opt/sif/node.sif'
-    node_zip_src = 'https://github.com/antmicro/github-actions-singularity-node/releases/download/node-16-v0.1.2/node-16-v0.1.2.zip'
+    node_zip_src = 'https://github.com/antmicro/github-actions-singularity-node/releases/download/node-16-v0.1.3/node-16-v0.1.3.zip'
     node_zip_dst = '/mnt/node.zip'
     infer_dns_cmd = "$(echo $SSH_CONNECTION | awk '{ print $1 }')"
 
