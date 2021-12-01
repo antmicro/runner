@@ -53,7 +53,6 @@ namespace GitHub.Runner.Worker
             var rootDir = new DirectoryInfo(HostContext.GetDirectory(WellKnownDirectory.Root)).Parent.FullName;
             var virtDir = Path.Combine(rootDir, "virt");
             var ghJson = message.ContextData["github"].ToJToken();
-            string virtIp = $"{Environment.MachineName}-auto-spawned{instanceNumber}";
 
             Trace.Info($"Runner instance: {instanceNumber}");
 
@@ -73,13 +72,10 @@ namespace GitHub.Runner.Worker
             Trace.Info($"WorkspaceDirectory: {WorkspaceDirectory}");
 
             message.Variables["system.qemuDir"] = virtDir;
-            message.Variables["system.qemuIp"] = virtIp;
             message.Variables["system.containerWorkspace"] = WorkspaceDirectory;
 
             string messageSerialized = JsonConvert.SerializeObject(message);
             JObject messageJson = JObject.Parse(messageSerialized);
-
-            Trace.Info($"VIRT IP: {virtIp}");
 
             dynamic vmSpecs = JObject.Parse(File.ReadAllText(Path.Combine(rootDir, ".vm_specs.json")));
 
@@ -157,7 +153,8 @@ namespace GitHub.Runner.Worker
                 IExecutionContext vmCtx = jobContext.CreateChild(Guid.NewGuid(), "Set up VM", "VM_Init", null, null);
                 vmCtx.Start();
 
-                if (IsGcpMachineRunning(virtIp, vmSpecs))
+                string runner_hostname = $"{Environment.MachineName}-auto-spawned{instanceNumber}";
+                if (IsGcpMachineRunning(runner_hostname, vmSpecs))
                 {
                     vmCtx.Output("Removing stale worker...");
                     FinalizeGcp(jobContext, message, vmSpecs);
@@ -448,7 +445,7 @@ namespace GitHub.Runner.Worker
             IExecutionContext vmCtx = jobContext.CreateChild(Guid.NewGuid(), "Teardown VM", "VM_teardown", null, null);
             vmCtx.Start();
             var instanceNumber = Environment.GetEnvironmentVariable(Constants.InstanceNumberVariable);
-            var virtIp = message.Variables["system.qemuIp"].Value;
+            string runner_hostname = $"{Environment.MachineName}-auto-spawned{instanceNumber}";
             var virtDir = message.Variables["system.qemuDir"].Value;
             var WorkspaceDirectory = message.Variables["system.containerWorkspace"].Value;
             var umountProc = new Process();
@@ -470,7 +467,7 @@ namespace GitHub.Runner.Worker
             var gZone = vmSpecs.gcp.zone;
             var gcloudDelProc = new Process();
             gcloudDelProc.StartInfo.FileName = WhichUtil.Which("gcloud", trace: Trace);
-            gcloudDelProc.StartInfo.Arguments = $"compute instances delete --delete-disks=boot --zone={gZone} {virtIp}";
+            gcloudDelProc.StartInfo.Arguments = $"compute instances delete --delete-disks=boot --zone={gZone} {runner_hostname}";
             gcloudDelProc.StartInfo.WorkingDirectory = virtDir;
             gcloudDelProc.StartInfo.UseShellExecute = false;
             gcloudDelProc.StartInfo.RedirectStandardError = true;
@@ -485,7 +482,7 @@ namespace GitHub.Runner.Worker
             umountProc.BeginErrorReadLine();
             umountProc.WaitForExit();
 
-            Trace.Info($"Destroying {virtIp} from {gZone}");
+            Trace.Info($"Destroying {runner_hostname} from {gZone}");
 
             gcloudDelProc.Start();
             gcloudDelProc.BeginOutputReadLine();
