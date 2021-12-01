@@ -304,7 +304,7 @@ namespace GitHub.Runner.Worker.Handlers
 
             Trace.Info(githubContext["job_id"]);
 
-            var sshIp = githubContext["qemu_ip"];
+            var sshIp = System.Environment.GetEnvironmentVariable(Constants.RunnerIPVariable);
 
             fileName = "/usr/bin/ssh";
 

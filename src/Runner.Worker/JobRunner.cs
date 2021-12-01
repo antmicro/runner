@@ -8,6 +8,7 @@ using System.Diagnostics;
 using System.Globalization;
 using System.Collections.Generic;
 using System.IO;
+using System.Text;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -193,8 +194,11 @@ namespace GitHub.Runner.Worker
                 spawnMachineProc.StartInfo.RedirectStandardError = true;
                 spawnMachineProc.StartInfo.RedirectStandardOutput = true;
 
+                StringBuilder output = new StringBuilder();
+
                 spawnMachineProc.OutputDataReceived += (_, args) => 
                 {
+                    output.Append(args.Data + "\n" ?? "");
                     vmCtx.Output(args.Data ?? "");
                     Trace.Info(args.Data ?? "");
                 };
@@ -236,6 +240,23 @@ namespace GitHub.Runner.Worker
                     vmCtx.Complete();
 
                     return await CompleteJobAsync(jobServer, jobContext, message, TaskResult.Failed);
+                }
+
+                using (var reader = new StringReader(output.ToString()))
+                {
+                    for (string line = reader.ReadLine(); line != null; line = reader.ReadLine())
+                    {
+                        if (line.Contains("export")) {
+                            line = line.Remove(0, "export ".Length);
+                            var export_val = line.Split("=");
+                            if (export_val.Length == 2)
+                            {
+                                Trace.Info($"Setting {export_val[0]} to {export_val[1]}");
+                                Environment.SetEnvironmentVariable(export_val[0], export_val[1]);
+                                break;
+                            }
+                        }
+                    }
                 }
 
                 Trace.Info($"Mounting {WorkspaceDirectory} via sshfs...");

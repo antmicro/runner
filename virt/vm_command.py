@@ -8,7 +8,7 @@ USER = 'scalerunner'
 PUBKEY = os.path.join(os.path.expanduser('~'), '.ssh/id_rsa.pub'), f'/home/{USER}/.ssh/authorized_keys'
 SARGRAPH = os.path.realpath('../sargraph/sargraph.py'), f'/home/{USER}/sargraph.py'
 GCLOUD = shutil.which('gcloud')
-PREEMPT = '--preemptible' 
+PREEMPT = '--preemptible'
 GH_ENV_LIST = ["GITHUB_JOB_FULL", "GITHUB_SHA", "GITHUB_RUN_ID"]
 
 LABELS = ','.join(["{}={}".format(e.lower(), (os.environ.get(e) or 'null')[:63].lower()) for e in GH_ENV_LIST])
@@ -36,6 +36,24 @@ def get_gcp_disk(disk_name, zone):
                 timeout=10
                 )
             )
+
+def export_runner_ip_addr(create_instance_output, runner_name, preemptible):
+    ip_index = 4 if preemptible else 3
+
+    for line in create_instance_output.splitlines():
+        splitted_line = line.split()
+        if runner_name in splitted_line[0]:
+            if len(splitted_line) > ip_index:
+                ip = splitted_line[ip_index]
+                # Environment variables doesn't get exported
+                # to the parent process, this export is only for
+                # current script, later runner parses below output
+                # and sets correct ip in the parent process
+                os.environ[runner_name] = ip
+                print(f"export {runner_name}={ip}")
+            else:
+                print("Couldn't find runner ip address! Exiting!")
+                os.exit(1)
 
 def create_vm(instance_number, container_file, disk_name=None, preemptible_override=None):
     instance_name = f'{platform.node()}-auto-spawned{instance_number}'
@@ -76,11 +94,11 @@ def create_vm(instance_number, container_file, disk_name=None, preemptible_overr
     key = (open('/home/runner/.ssh/id_rsa.pub')
           .read()
           .strip()
-	  .translate(str.maketrans({'+': r'\+', ' ': r'\ '}))	
+	  .translate(str.maketrans({'+': r'\+', ' ': r'\ '}))
     )
 
     github_job_name = (os.environ.get('GITHUB_JOB_FULL') or 'unknown').lower()
-    
+
     print(LABELS)
 
     # Ensure compatibility with pre-67adc3a .vm_specs file.
@@ -132,16 +150,20 @@ def create_vm(instance_number, container_file, disk_name=None, preemptible_overr
                 stderr=subprocess.STDOUT,
         ).decode("utf-8")
 
-        print('\n'+output.replace(CONFIG.gcp.project, '***'))
+        output = output.replace(CONFIG.gcp.project, '***')
+
+        print('\n'+output)
+
+        export_runner_ip_addr(output, instance_name, preemptible_machine is PREEMPT)
 
     except subprocess.CalledProcessError as err:
         print('\n'+err.output.decode().replace(CONFIG.gcp.project, '***'))
         sys.exit(1)
 
     print(f'Machine spawned in {elapsed(gcloud_start)} seconds.')
-    
+
     # this is the name recognized by DNS in Google
-    target = f'{instance_name}.{CONFIG.gcp.zone}.c.{CONFIG.gcp.project}.internal'
+    target = os.environ[instance_name]
 
     ssh = paramiko.SSHClient()
     ssh.set_missing_host_key_policy(paramiko.client.AutoAddPolicy())

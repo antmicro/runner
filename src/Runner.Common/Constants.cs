@@ -40,6 +40,7 @@ namespace GitHub.Runner.Common
 #endif
 
         public static string InstanceNumberVariable = "GH_RUNNER_NUM";
+        public static string RunnerIPVariable = Environment.MachineName + "-auto-spawned" + Environment.GetEnvironmentVariable(InstanceNumberVariable);
         public static string ProcessTrackingId = "RUNNER_TRACKING_ID";
         public static string PluginTracePrefix = "##[plugin.trace]";
         public static readonly int RunnerDownloadRetryMaxAttempts = 3;

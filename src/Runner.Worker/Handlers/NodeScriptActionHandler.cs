@@ -98,7 +98,7 @@ namespace GitHub.Runner.Worker.Handlers
             // Get GitHubContext and use it to retrieve some variables that were inserted into it.
             // This is used as a form of hacky message passing.
             var githubContext = ExecutionContext.ExpressionValues["github"] as GitHubContext;
-            var sshIp = githubContext["qemu_ip"];
+            var sshIp = System.Environment.GetEnvironmentVariable(Constants.RunnerIPVariable);
 
             if (actionName == "actions/upload-artifact/v2")
             {
