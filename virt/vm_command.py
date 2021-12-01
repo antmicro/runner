@@ -113,6 +113,7 @@ def create_vm(instance_number, container_file, disk_name=None, preemptible_overr
 
     print(f'Preemptible: {bool(preemptible_machine)}')
 
+    # Create and start the virtual machine.
     gcloud_start = time.time()
 
     instance_cmd = 'gcloud beta compute --verbosity=error ' \
@@ -136,13 +137,6 @@ def create_vm(instance_number, container_file, disk_name=None, preemptible_overr
             f'--boot-disk-device-name={instance_name} ' \
             '--reservation-affinity=any'
 
-    external_disk_cmd = 'true'
-
-    if external_disk is not None:
-        print("Attaching external disk {} ({}GB)".format(external_disk['name'], external_disk['sizeGb']))
-        instance_cmd += ' --disk=auto-delete=no,device-name=aux,name={},mode=ro'.format(external_disk['name'])
-        external_disk_cmd = 'sudo mount /dev/disk/by-id/scsi-0Google_PersistentDisk_aux-part1 /mnt/aux'
-
     try:
         output = subprocess.check_output(
                 instance_cmd,
@@ -162,6 +156,30 @@ def create_vm(instance_number, container_file, disk_name=None, preemptible_overr
 
     print(f'Machine spawned in {elapsed(gcloud_start)} seconds.')
 
+    # Attach an external disk (if applicable)
+    external_disk_cmd = 'true'
+
+    if external_disk is not None:
+        print("Attaching external disk {} ({}GB)".format(external_disk['name'], external_disk['sizeGb']))
+
+        attach_disk = "gcloud compute instances attach-disk {} --disk={} --device-name=aux --zone={} --mode=ro".format(
+                instance_name, external_disk['name'], CONFIG.gcp.zone
+                )
+
+        external_disk_cmd = 'sudo mount /dev/disk/by-id/scsi-0Google_PersistentDisk_aux-part1 /mnt/aux'
+
+        try:
+            output = subprocess.check_output(
+                    attach_disk,
+                    shell=True,
+                    stderr=subprocess.STDOUT,
+            ).decode("utf-8")
+
+            print('\n'+output.replace(CONFIG.gcp.project, '***'))
+        except subprocess.CalledProcessError as err:
+            print('\n'+err.output.decode().replace(CONFIG.gcp.project, '***'))
+            sys.exit(1)
+    
     # this is the name recognized by DNS in Google
     target = os.environ[instance_name]
 
