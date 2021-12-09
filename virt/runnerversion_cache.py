@@ -19,6 +19,15 @@ def load_fallback():
     with open(fallback_path, 'r') as f:
         return f.readline().strip()
 
+def load_message_current_runnerversion():
+    current_runnerversion_path = os.path.realpath('../src/current_runnerversion')
+    try:
+        with open(current_runnerversion_path, 'r') as f:
+            return f.readline().strip()
+    except Exception:
+        pass
+    return ""
+
 RV_URL = "https://raw.githubusercontent.com/actions/runner/main/src/runnerversion"
 RV_LOCK = threading.Lock()
 RV = load_fallback()
@@ -41,14 +50,20 @@ def update_rv():
 
     while True:
         try:
-            r = requests.get(RV_URL)
-            r.raise_for_status()
             with RV_LOCK:
-                new_rv = r.text.strip()
-                if new_rv != RV:
+                new_rv = load_message_current_runnerversion()
+                if new_rv is not "":
                     RV = new_rv
                     RV_T = datetime.datetime.now().isoformat()
-                    logging.info(f"New RV: {RV}")
+                    logging.info(f"New RV (from current_runnerversion file): {RV}")
+                else:
+                    r = requests.get(RV_URL)
+                    r.raise_for_status()
+                    new_rv = r.text.strip()
+                    if new_rv != RV:
+                        RV = new_rv
+                        RV_T = datetime.datetime.now().isoformat()
+                        logging.info(f"New RV (from RV_URL): {RV}")
         except Exception as e:
             logging.info(f"Exception occured: {str(e)}")
         time.sleep(10)

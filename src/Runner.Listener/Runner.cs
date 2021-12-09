@@ -359,15 +359,16 @@ namespace GitHub.Runner.Listener
                             if (string.Equals(message.MessageType, AgentRefreshMessage.MessageType, StringComparison.OrdinalIgnoreCase))
                             {
                                 var initRunnerVersion = _listener.GetInitRunnerVersion();
-                                var currRunnerVersion = BuildConstants.RunnerPackage.Version;
 
-                                Trace.Info($"Init RV: {initRunnerVersion}, current RV: {currRunnerVersion}");
 
                                 if (autoUpdateInProgress == false)
                                 {
-                                    if (initRunnerVersion != currRunnerVersion)
+                                    var runnerUpdateMessage = JsonUtility.FromString<AgentRefreshMessage>(message.Body);
+                                    Trace.Info($"Init RV: {initRunnerVersion}, current RV: {runnerUpdateMessage.TargetVersion}");
+                                    if (initRunnerVersion != runnerUpdateMessage.TargetVersion)
                                     {
                                         autoUpdateInProgress = true;
+                                        await File.WriteAllTextAsync("../src/current_runnerversion", runnerUpdateMessage.TargetVersion);
                                         Trace.Info("Refresh message received, will restart the runner.");
                                     }
                                     else
