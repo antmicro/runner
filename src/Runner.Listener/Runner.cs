@@ -368,7 +368,18 @@ namespace GitHub.Runner.Listener
                                     if (initRunnerVersion != runnerUpdateMessage.TargetVersion)
                                     {
                                         autoUpdateInProgress = true;
-                                        await File.WriteAllTextAsync("../src/current_runnerversion", runnerUpdateMessage.TargetVersion);
+                                        try
+                                        {
+                                          FileStream fileStream = new FileStream("../src/current_runnerversion", FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.Read);
+                                          using (StreamWriter sr = new StreamWriter(fileStream))
+                                          {
+                                            sr.Write(runnerUpdateMessage.TargetVersion);
+                                          }
+                                        }
+                                        catch (Exception ex)
+                                        {
+                                          Trace.Info($"Ignore exception on version write: {ex}");
+                                        }
                                         Trace.Info("Refresh message received, will restart the runner.");
                                     }
                                     else
