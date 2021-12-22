@@ -134,7 +134,7 @@ def create_vm(instance_number, container_file, disk_name=None, preemptible_overr
             f'--image={CONFIG.gcp.image} --image-project={CONFIG.gcp.project} ' \
             f'--boot-disk-size={CONFIG.machine.disk}GB ' \
             f'--boot-disk-type={CONFIG.gcp.disk_type} ' \
-            f'--boot-disk-device-name={instance_name} ' \
+            f'--boot-disk-device-name=scalerunner-boot-disk ' \
             '--reservation-affinity=any'
 
     try:
