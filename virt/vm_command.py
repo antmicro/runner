@@ -213,7 +213,7 @@ def create_vm(instance_number, container_file, disk_name=None, preemptible_overr
             break
         except Exception as e:
             if ssh_timeout_c % 10 == 0:
-                print('Waiting for SSH... [{}/{}] '.format((int)((ssh_timeout - ssh_timeout_c) / 10), (int)(ssh_timeout / 10)))
+                print('Waiting for SSH... [{}/{}] '.format((int)(((ssh_timeout - ssh_timeout_c) / 10) + 1), (int)(ssh_timeout / 10)))
             ssh_timeout_c -= 1
 
             if ssh_timeout_c == 0:
