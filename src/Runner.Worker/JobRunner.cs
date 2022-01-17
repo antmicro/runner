@@ -153,8 +153,7 @@ namespace GitHub.Runner.Worker
                 IExecutionContext vmCtx = jobContext.CreateChild(Guid.NewGuid(), "Set up VM", "VM_Init", null, null);
                 vmCtx.Start();
 
-                string runner_hostname = $"{Environment.MachineName}-auto-spawned{instanceNumber}";
-                if (IsGcpMachineRunning(runner_hostname, vmSpecs))
+                if (IsGcpMachineRunning(Constants.RunnerIPVariable, vmSpecs))
                 {
                     vmCtx.Output("Removing stale worker...");
                     FinalizeGcp(jobContext, message, vmSpecs);
