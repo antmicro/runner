@@ -202,16 +202,6 @@ namespace GitHub.Runner.Worker
                 // Log stderr to local logfile only to avoid potential leaks.
                 spawnMachineProc.ErrorDataReceived += (_, args) => Trace.Error(args.Data ?? "");
 
-                sshfsProc.StartInfo.FileName = WhichUtil.Which("bash", trace: Trace);
-                sshfsProc.StartInfo.Arguments = $"sshfs.sh mount {instanceNumber}";
-                sshfsProc.StartInfo.WorkingDirectory = virtDir;
-                sshfsProc.StartInfo.UseShellExecute = false;
-                sshfsProc.StartInfo.RedirectStandardError = true;
-                sshfsProc.StartInfo.RedirectStandardOutput = true;
-
-                sshfsProc.OutputDataReceived += (_, args) => Trace.Info(args.Data ?? "");
-                sshfsProc.ErrorDataReceived += (_, args) => Trace.Error(args.Data ?? "");
-
                 spawnMachineProc.Start();
                 spawnMachineProc.BeginOutputReadLine();
                 spawnMachineProc.BeginErrorReadLine();
@@ -239,6 +229,7 @@ namespace GitHub.Runner.Worker
                     return await CompleteJobAsync(jobServer, jobContext, message, TaskResult.Failed);
                 }
 
+                // Interpret special lines coming from the VM starter script.
                 using (var reader = new StringReader(output.ToString()))
                 {
                     for (string line = reader.ReadLine(); line != null; line = reader.ReadLine())
@@ -255,6 +246,19 @@ namespace GitHub.Runner.Worker
                         }
                     }
                 }
+
+                // The export statement line reader should have set this variable.
+                var sshIp = Environment.GetEnvironmentVariable(Constants.RunnerIPVariable);
+
+                sshfsProc.StartInfo.FileName = WhichUtil.Which("bash", trace: Trace);
+                sshfsProc.StartInfo.Arguments = $"sshfs.sh mount {instanceNumber} {sshIp}";
+                sshfsProc.StartInfo.WorkingDirectory = virtDir;
+                sshfsProc.StartInfo.UseShellExecute = false;
+                sshfsProc.StartInfo.RedirectStandardError = true;
+                sshfsProc.StartInfo.RedirectStandardOutput = true;
+
+                sshfsProc.OutputDataReceived += (_, args) => Trace.Info(args.Data ?? "");
+                sshfsProc.ErrorDataReceived += (_, args) => Trace.Error(args.Data ?? "");
 
                 Trace.Info($"Mounting {WorkspaceDirectory} via sshfs...");
                 vmCtx.Output("Mounting worker filesystem...");
@@ -444,14 +448,19 @@ namespace GitHub.Runner.Worker
         {
             IExecutionContext vmCtx = jobContext.CreateChild(Guid.NewGuid(), "Teardown VM", "VM_teardown", null, null);
             vmCtx.Start();
+
+            // Variables inferred from environment.
             var instanceNumber = Environment.GetEnvironmentVariable(Constants.InstanceNumberVariable);
-            string runner_hostname = $"{Environment.MachineName}-auto-spawned{instanceNumber}";
+            var sshIp = Environment.GetEnvironmentVariable(Constants.RunnerIPVariable);
+
+            // Variables inferred from modified JSON message.
             var virtDir = message.Variables["system.qemuDir"].Value;
             var WorkspaceDirectory = message.Variables["system.containerWorkspace"].Value;
+
             var umountProc = new Process();
 
             umountProc.StartInfo.FileName = WhichUtil.Which("bash", trace: Trace);
-            umountProc.StartInfo.Arguments = $"sshfs.sh umount {instanceNumber}";
+            umountProc.StartInfo.Arguments = $"sshfs.sh umount {instanceNumber} {sshIp}";
             umountProc.StartInfo.WorkingDirectory = virtDir;
             umountProc.StartInfo.UseShellExecute = false;
             umountProc.StartInfo.RedirectStandardError = true;
@@ -467,7 +476,7 @@ namespace GitHub.Runner.Worker
             var gZone = vmSpecs.gcp.zone;
             var gcloudDelProc = new Process();
             gcloudDelProc.StartInfo.FileName = WhichUtil.Which("gcloud", trace: Trace);
-            gcloudDelProc.StartInfo.Arguments = $"compute instances delete --delete-disks=boot --zone={gZone} {runner_hostname}";
+            gcloudDelProc.StartInfo.Arguments = $"compute instances delete --delete-disks=boot --zone={gZone} {Constants.RunnerIPVariable}";
             gcloudDelProc.StartInfo.WorkingDirectory = virtDir;
             gcloudDelProc.StartInfo.UseShellExecute = false;
             gcloudDelProc.StartInfo.RedirectStandardError = true;
@@ -482,7 +491,7 @@ namespace GitHub.Runner.Worker
             umountProc.BeginErrorReadLine();
             umountProc.WaitForExit();
 
-            Trace.Info($"Destroying {runner_hostname} from {gZone}");
+            Trace.Info($"Destroying {Constants.RunnerIPVariable} from {gZone}");
 
             gcloudDelProc.Start();
             gcloudDelProc.BeginOutputReadLine();
