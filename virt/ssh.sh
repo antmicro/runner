@@ -1,7 +1,11 @@
 #!/bin/bash
 
-IP_PREFIX=`hostname`
-IP=$IP_PREFIX-auto-spawned$1
+# Parameters list:
+# $1 -- hostname
+# $2 -- verb
+# $3 -- (optional) verb parameter
+
+IP=$1
 
 echo "Connecting to $IP"
 

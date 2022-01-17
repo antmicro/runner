@@ -110,7 +110,7 @@ namespace GitHub.Runner.Worker.Handlers
 
                 var sargraphStop = new Process();
                 sargraphStop.StartInfo.FileName = WhichUtil.Which("bash", trace: Trace);
-                sargraphStop.StartInfo.Arguments = $"ssh.sh {instanceNumber} --sargraph-stop {plotRemotePath}";
+                sargraphStop.StartInfo.Arguments = $"ssh.sh {sshIp} --sargraph-stop {plotRemotePath}";
                 sargraphStop.StartInfo.WorkingDirectory = virtDir;
                 sargraphStop.StartInfo.UseShellExecute = false;
                 sargraphStop.StartInfo.RedirectStandardError = true;
