@@ -325,10 +325,6 @@ namespace GitHub.Runner.Worker.Handlers
                 var input = Channel.CreateBounded<string>(new BoundedChannelOptions(1) { SingleReader = true, SingleWriter = true });
                 string exportStanzas = $"cd {changeContainerDir};";
 
-
-                var envCmdDir = "_runner_file_commands/";
-                var remoteEnvDir = "/9p";
-                var ghPath = $"{remoteEnvDir}/{Environment["GITHUB_PATH"].Split(envCmdDir)[1]}";
                 var pathSuffix = "${PATH:+${PATH}}";
 
                 foreach (var e in Environment)
@@ -338,7 +334,6 @@ namespace GitHub.Runner.Worker.Handlers
                     exportStanzas += exportStr;
                 }
 
-                exportStanzas += $"export GITHUB_PATH={ghPath};";
                 exportStanzas += $"export PATH={prepend}{pathSuffix};";
 
                 input.Writer.TryWrite(exportStanzas+contents);

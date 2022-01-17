@@ -220,9 +220,6 @@ namespace GitHub.Runner.Worker.Handlers
                 // env TEST-VAR=abc TEST-VAR2=def node index.js
                 string exportStanzas = $"cd {workspaceDir} && env";
 
-                var envCmdDir = "_runner_file_commands/";
-                var remoteEnvDir = "/9p";
-                var ghPath = $"{remoteEnvDir}/{Environment["GITHUB_PATH"].Split(envCmdDir)[1]}";
                 var pathSuffix = "${PATH:+:${PATH}}";
 
                 foreach (var e in Environment)
@@ -232,7 +229,6 @@ namespace GitHub.Runner.Worker.Handlers
                     exportStanzas += exportStr;
                 }
 
-                exportStanzas += $" GITHUB_PATH={ghPath}";
                 exportStanzas += $" PATH={prepend}{pathSuffix}";
 
                 var initCmd = $"### START ###\n" + exportStanzas + " " + file + " " + arguments_node + $"\n### END ###";
