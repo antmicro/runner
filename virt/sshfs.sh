@@ -29,12 +29,19 @@ function umount_retry() {
 
 cd $(dirname $0)
 
-if [ "$#" -ne 2 ]; then
+if [ "$#" -ne 2 ] && [ "$#" -ne 3 ]; then
     help
 fi
 
-IP_PREFIX=`hostname`
-IP=$IP_PREFIX-auto-spawned$2
+# Using the IP address is the preferred way of connecting.
+# The DNS server might have an older value or there might be a temporary resolution failure.
+if [ -n "$3" ]; then
+    IP="$3"
+else
+    echo "WARNING: Hostname not supplied, inferring from instance number"
+    IP="$(hostname)-auto-spawned$2"
+fi
+
 SHARE_PATH=$(realpath ../_layout)/_work_$2/
 REMOTE_PATH="scalerunner@$IP:/mnt/2/"
 
