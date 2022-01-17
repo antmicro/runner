@@ -125,7 +125,7 @@ namespace GitHub.Runner.Worker.Handlers
 
                 var symFix = new Process();
                 symFix.StartInfo.FileName = WhichUtil.Which("bash", trace: Trace);
-                symFix.StartInfo.Arguments = $"symlink_resolve.sh {instanceNumber}";
+                symFix.StartInfo.Arguments = $"symlink_resolve.sh {sshIp}";
                 symFix.StartInfo.WorkingDirectory = virtDir;
                 symFix.StartInfo.UseShellExecute = false;
                 symFix.StartInfo.RedirectStandardError = true;

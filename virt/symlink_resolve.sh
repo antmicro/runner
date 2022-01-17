@@ -4,9 +4,7 @@ set -e
 
 cd $(dirname $0)
 
-PREFIX=$1
-IP_PREFIX=`hostname`
-SSH_HOST=$IP_PREFIX-auto-spawned$PREFIX
+SSH_HOST=$1
 
 sshSend() {
     echo "# connecting to $SSH_HOST"
@@ -23,7 +21,6 @@ $@
 EOF
 }
 
-echo "# `getent hosts $SSH_HOST`"
 sshSend "mkdir -p /root/work"
 sshSend "mount --bind /mnt/2/work /root/work"
 sshSend 'cd /root/work;for f in $(find -type l);do cp -f $(readlink $f) $f || true;done;'
