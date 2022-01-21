@@ -15,7 +15,7 @@ function umount_retry() {
     for i in $(seq $timeout); do
         echo "[$i] Trying to unmout $SHARE_PATH"
         fusermount -u $SHARE_PATH
-        if [ $? -eq 0 ]
+        if [ $? -eq 0 ] || [ ! -f "$SHARE_PATH" ]
         then
             break
         else
