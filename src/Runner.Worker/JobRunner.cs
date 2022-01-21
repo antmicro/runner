@@ -47,8 +47,6 @@ namespace GitHub.Runner.Worker
             ServiceEndpoint systemConnection = message.Resources.Endpoints.Single(x => string.Equals(x.Name, WellKnownServiceEndpointNames.SystemVssConnection, StringComparison.OrdinalIgnoreCase));
 
             // Spawn Google VM
-            var spawnMachineProc = new Process();
-            var sshfsProc = new Process();
             var instanceNumber = Environment.GetEnvironmentVariable(Constants.InstanceNumberVariable);
             var rootDir = new DirectoryInfo(HostContext.GetDirectory(WellKnownDirectory.Root)).Parent.FullName;
             var virtDir = Path.Combine(rootDir, "virt");
@@ -149,16 +147,9 @@ namespace GitHub.Runner.Worker
                     jobContext.Error("Running job on this worker disallowed by security policy");
                     return await CompleteJobAsync(jobServer, jobContext, message, TaskResult.Failed);
                 }
-                
+
                 IExecutionContext vmCtx = jobContext.CreateChild(Guid.NewGuid(), "Set up VM", "VM_Init", null, null);
                 vmCtx.Start();
-
-                if (IsGcpMachineRunning(Constants.RunnerIPVariable, vmSpecs))
-                {
-                    vmCtx.Output("Removing stale worker...");
-                    FinalizeGcp(jobContext, message, vmSpecs);
-                    vmCtx.Output("Stale worker removed.");
-                }
 
                 Trace.Info($"Container: ${container.Image}");
 
@@ -182,104 +173,36 @@ namespace GitHub.Runner.Worker
                         vmCtx.Output("Boolean value expected for preemptible override.");
                     }
                 }
-
-                spawnMachineProc.StartInfo.FileName = WhichUtil.Which("python3", trace: Trace);
-                spawnMachineProc.StartInfo.Arguments = spawnMachineArgs; 
-                spawnMachineProc.StartInfo.WorkingDirectory = virtDir;
-                spawnMachineProc.StartInfo.UseShellExecute = false;
-                spawnMachineProc.StartInfo.RedirectStandardError = true;
-                spawnMachineProc.StartInfo.RedirectStandardOutput = true;
-
-                StringBuilder output = new StringBuilder();
-
-                spawnMachineProc.OutputDataReceived += (_, args) => 
-                {
-                    output.Append(args.Data + "\n" ?? "");
-                    vmCtx.Output(args.Data ?? "");
-                    Trace.Info(args.Data ?? "");
-                };
-                // Log stderr to local logfile only to avoid potential leaks.
-                spawnMachineProc.ErrorDataReceived += (_, args) => Trace.Error(args.Data ?? "");
-
-                spawnMachineProc.Start();
-                spawnMachineProc.BeginOutputReadLine();
-                spawnMachineProc.BeginErrorReadLine();
-
-                Trace.Info($"Starting VM with start script PID {spawnMachineProc.Id}");
-
-                spawnMachineProc.WaitForExit();
-
-                if (spawnMachineProc.ExitCode != 0)
-                {
-                    var vmNonZeroExitCode = $"VM starter exited with non-zero exit code: {spawnMachineProc.ExitCode}";
-
-                    vmCtx.Error(vmNonZeroExitCode);
-                    vmCtx.Result = TaskResult.Failed;
-
-                    Trace.Error(vmNonZeroExitCode);
-                    jobContext.Error(vmNonZeroExitCode);
-
-                    FinalizeGcp(jobContext, message, vmSpecs);
-
-                    Trace.Info("Finished finalizing GCP after VM starter failure.");
-
-                    vmCtx.Complete();
-
-                    return await CompleteJobAsync(jobServer, jobContext, message, TaskResult.Failed);
-                }
-
-                // Interpret special lines coming from the VM starter script.
-                using (var reader = new StringReader(output.ToString()))
-                {
-                    for (string line = reader.ReadLine(); line != null; line = reader.ReadLine())
-                    {
-                        if (line.Contains("export")) {
-                            line = line.Remove(0, "export ".Length);
-                            var export_val = line.Split("=");
-                            if (export_val.Length == 2)
-                            {
-                                Trace.Info($"Setting {export_val[0]} to {export_val[1]}");
-                                Environment.SetEnvironmentVariable(export_val[0], export_val[1]);
-                                break;
-                            }
-                        }
+                
+                int vmExitCode = 1;
+                StringBuilder output_string = new StringBuilder();
+                for (int i = 0; i < 5; i++) {
+                    vmExitCode = StartGcpMachine(spawnMachineArgs, virtDir, output_string, vmCtx, jobContext);
+                    if(vmExitCode > 0) {
+                        RestartGcpMachine(vmExitCode, jobContext, message, vmSpecs, ref vmCtx);
+                        continue;
                     }
+
+                    if (!SetRunnerIP(output_string.ToString())) { 
+                        vmExitCode = 1;
+                        RestartGcpMachine(vmExitCode, jobContext, message, vmSpecs, ref vmCtx);
+                        continue;
+                    }
+                    Trace.Info($"Mounting {WorkspaceDirectory} via sshfs...");
+                    vmExitCode = MountWorkerFilesystem(vmCtx, virtDir);
+                    if (vmExitCode > 0) {
+                        vmCtx.Error("Mounting worker filesystem failed!");
+                        RestartGcpMachine(vmExitCode, jobContext, message, vmSpecs, ref vmCtx);
+                        continue;
+                    }
+
+                    if (vmExitCode == 0)
+                        break;
                 }
-
-                // The export statement line reader should have set this variable.
-                var sshIp = Environment.GetEnvironmentVariable(Constants.RunnerIPVariable);
-
-                sshfsProc.StartInfo.FileName = WhichUtil.Which("bash", trace: Trace);
-                sshfsProc.StartInfo.Arguments = $"sshfs.sh mount {instanceNumber} {sshIp}";
-                sshfsProc.StartInfo.WorkingDirectory = virtDir;
-                sshfsProc.StartInfo.UseShellExecute = false;
-                sshfsProc.StartInfo.RedirectStandardError = true;
-                sshfsProc.StartInfo.RedirectStandardOutput = true;
-
-                sshfsProc.OutputDataReceived += (_, args) => Trace.Info(args.Data ?? "");
-                sshfsProc.ErrorDataReceived += (_, args) => Trace.Error(args.Data ?? "");
-
-                Trace.Info($"Mounting {WorkspaceDirectory} via sshfs...");
-                vmCtx.Output("Mounting worker filesystem...");
-
-                sshfsProc.Start();
-                sshfsProc.BeginOutputReadLine();
-                sshfsProc.BeginErrorReadLine();
-                sshfsProc.WaitForExit(30000);
-                sshfsProc.WaitForExit();
-
-                if (sshfsProc.ExitCode != 0)
-                {
-                    Trace.Error($"sshfs started exited with {sshfsProc.ExitCode}");
-                    jobContext.Error($"sshfs: exit code {sshfsProc.ExitCode}");
-
-                    vmCtx.Error("Mounting worker filesystem failed!");
-                    vmCtx.Result = TaskResult.Failed;
-
-                    FinalizeGcp(jobContext, message, vmSpecs);
-
+                // after 5 unsuccessful attempts to start VM, fail whole job
+                if (vmExitCode > 0) {
+                    jobContext.Error($"VM starter exited with non-zero exit code: {vmExitCode}");
                     vmCtx.Complete();
-
                     return await CompleteJobAsync(jobServer, jobContext, message, TaskResult.Failed);
                 }
 
@@ -521,6 +444,94 @@ namespace GitHub.Runner.Worker
             vmCtx.Complete();
 
             return true;
+        }
+
+        private int StartGcpMachine(String spawnMachineArgs, String virtDir, StringBuilder output_string, IExecutionContext vmCtx, IExecutionContext jobContext) {
+            var spawnMachineProc = new Process();
+            spawnMachineProc.StartInfo.FileName = WhichUtil.Which("python3", trace: Trace);
+            spawnMachineProc.StartInfo.Arguments = spawnMachineArgs; 
+            spawnMachineProc.StartInfo.WorkingDirectory = virtDir;
+            spawnMachineProc.StartInfo.UseShellExecute = false;
+            spawnMachineProc.StartInfo.RedirectStandardError = true;
+            spawnMachineProc.StartInfo.RedirectStandardOutput = true;
+
+
+            spawnMachineProc.OutputDataReceived += (_, args) => 
+            {
+                output_string.Append(args.Data + "\n" ?? "");
+                vmCtx.Output(args.Data ?? "");
+                Trace.Info(args.Data ?? "");
+            };
+            // Log stderr to local logfile only to avoid potential leaks.
+            spawnMachineProc.ErrorDataReceived += (_, args) => Trace.Error(args.Data ?? "");
+
+            spawnMachineProc.Start();
+            spawnMachineProc.BeginOutputReadLine();
+            spawnMachineProc.BeginErrorReadLine();
+
+            Trace.Info($"Starting VM with start script PID {spawnMachineProc.Id}");
+
+            spawnMachineProc.WaitForExit();
+
+            return spawnMachineProc.ExitCode;
+        }
+
+        private bool SetRunnerIP(String output) {
+            // Interpret special lines coming from the VM starter script.
+            using (var reader = new StringReader(output))
+            {
+                for (string line = reader.ReadLine(); line != null; line = reader.ReadLine())
+                {
+                    if (line.Contains("export")) {
+                        line = line.Remove(0, "export ".Length);
+                        var export_val = line.Split("=");
+                        if (export_val.Length == 2)
+                        {
+                            Trace.Info($"Setting {export_val[0]} to {export_val[1]}");
+                            Environment.SetEnvironmentVariable(export_val[0], export_val[1]);
+                            return true;
+                        }
+                    }
+                }
+            }
+            return false;
+        }
+
+        private int MountWorkerFilesystem(IExecutionContext vmCtx, String virtDir) {
+            var sshfsProc = new Process();
+            var instanceNumber = Environment.GetEnvironmentVariable(Constants.InstanceNumberVariable);
+            var sshIp = Environment.GetEnvironmentVariable(Constants.RunnerIPVariable);
+            sshfsProc.StartInfo.FileName = WhichUtil.Which("bash", trace: Trace);
+            sshfsProc.StartInfo.Arguments = $"sshfs.sh mount {instanceNumber} {sshIp}";
+            sshfsProc.StartInfo.WorkingDirectory = virtDir;
+            sshfsProc.StartInfo.UseShellExecute = false;
+            sshfsProc.StartInfo.RedirectStandardError = true;
+            sshfsProc.StartInfo.RedirectStandardOutput = true;
+
+            sshfsProc.OutputDataReceived += (_, args) => Trace.Info(args.Data ?? "");
+            sshfsProc.ErrorDataReceived += (_, args) => Trace.Error(args.Data ?? "");
+
+            vmCtx.Output("Mounting worker filesystem...");
+
+            sshfsProc.Start();
+            sshfsProc.BeginOutputReadLine();
+            sshfsProc.BeginErrorReadLine();
+            sshfsProc.WaitForExit(30000);
+            sshfsProc.WaitForExit();
+
+            return sshfsProc.ExitCode;
+        }
+
+        private void RestartGcpMachine(int exitCode, IExecutionContext jobContext, Pipelines.AgentJobRequestMessage message, dynamic vmSpecs, ref IExecutionContext vmCtx) {
+                var vmNonZeroExitCode = $"VM starter exited with non-zero exit code: {exitCode}";
+                Trace.Error(vmNonZeroExitCode);
+                vmCtx.Complete(); // Complete Set up VM step
+
+                FinalizeGcp(jobContext, message, vmSpecs); // Start Teardown VM step
+
+                Trace.Info("Finished finalizing GCP after VM starter failure.");
+                vmCtx = jobContext.CreateChild(Guid.NewGuid(), "Set up VM", "VM_Init", null, null); // Create new Start up VM step
+                vmCtx.Start();
         }
 
         private bool JobPassesSecurityRestrictions(IExecutionContext jobContext)
