@@ -53,4 +53,20 @@ format_logs_disk() {
     fi
 }
 
+add_fstab_entry() {
+    local disk_uuid="$(sudo blkid -s UUID -o value $disk_first_part_path)"
+    local check_fstab="$(sudo grep -q $disk_uuid /etc/fstab; echo $?)"
+
+    if [ "$check_fstab" -eq 1 ]; then
+        echo "UUID=$disk_uuid $disk_mount_path ext4 rw,discard,errors=remount-ro,x-systemd.growfs 0 1" \
+            | sudo tee -a /etc/fstab
+    fi
+}
+
+mount_logs_disk() {
+    sudo mkdir -p $disk_mount_path
+    sudo mount $disk_mount_path
+    sudo chown $USER.$USER $disk_mount_path
+}
+
 $@
