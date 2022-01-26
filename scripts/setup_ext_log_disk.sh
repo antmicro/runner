@@ -20,22 +20,33 @@ get_coordinator_zone() {
         | rev
 }
 
+is_logs_disk_present() {
+    local res=$(gcloud compute disks describe --zone="$(get_coordinator_zone)" \
+        --format=none \
+        "$gcp_disk_name" &>/dev/null; echo $?)
+    echo "$res"
+}
+
 create_logs_disk() {
-    gcloud compute disks create \
-        --type=pd-standard \
-        --zone="$(get_coordinator_zone)" \
-        --size="$gcp_disk_size" \
-        "$gcp_disk_name"
+    if [ "$(is_logs_disk_present)" -ne 0 ]; then
+        gcloud compute disks create \
+            --type=pd-standard \
+            --zone="$(get_coordinator_zone)" \
+            --size="$gcp_disk_size" \
+            "$gcp_disk_name"
+    fi
 }
 
 # WARNING: this function requires that the SA attached to the coordinator has the following role:
 # - iam.serviceAccountUser
 attach_logs_disk() {
-    gcloud compute instances attach-disk "$(hostname)" \
-        --disk="$gcp_disk_name" \
-        --device-name="$disk_device_name" \
-        --zone="$(get_coordinator_zone)" \
-        --mode=rw
+    if [ ! -b "$disk_path" ]; then
+        gcloud compute instances attach-disk "$(hostname)" \
+            --disk="$gcp_disk_name" \
+            --device-name="$disk_device_name" \
+            --zone="$(get_coordinator_zone)" \
+            --mode=rw
+    fi
 }
 
 detach_logs_disk() {
