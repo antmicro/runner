@@ -103,6 +103,6 @@ if [ "$#" -eq 0 ]; then
     format_logs_disk
     add_fstab_entry
     mount_logs_disk
+else
+    $@
 fi
-
-$@
