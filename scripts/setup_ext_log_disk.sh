@@ -38,6 +38,12 @@ attach_logs_disk() {
         --mode=rw
 }
 
+detach_logs_disk() {
+    gcloud compute instances detach-disk "$(hostname)" \
+        --disk="$gcp_disk_name" \
+        --zone="$(get_coordinator_zone)"
+}
+
 is_first_part_formatted() {
     sudo blkid -s TYPE | grep "$(realpath $disk_path)" | wc -l
 }
