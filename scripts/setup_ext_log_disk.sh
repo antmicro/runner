@@ -75,4 +75,17 @@ mount_logs_disk() {
     sudo chown $USER.$USER $disk_mount_path
 }
 
+if [ "$#" -eq 0 ]; then
+    create_logs_disk
+    attach_logs_disk
+
+    # HACK: Just in case to make sure that disk entries are present.
+    sync
+    sleep 1
+
+    format_logs_disk
+    add_fstab_entry
+    mount_logs_disk
+fi
+
 $@
