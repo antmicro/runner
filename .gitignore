@@ -40,3 +40,4 @@ test/misc/*
 
 **/*.swp
 __pycache__/
+src/current_runnerversion
