@@ -64,8 +64,14 @@ add_fstab_entry() {
 }
 
 mount_logs_disk() {
+    local disk_mounted="$(mountpoint -q $disk_mount_path; echo $?)"
+
     sudo mkdir -p $disk_mount_path
-    sudo mount $disk_mount_path
+
+    if [ "$disk_mounted" -ne 0 ]; then
+        sudo mount $disk_mount_path
+    fi
+
     sudo chown $USER.$USER $disk_mount_path
 }
 
