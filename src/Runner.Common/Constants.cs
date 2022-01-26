@@ -45,7 +45,8 @@ namespace GitHub.Runner.Common
         public static string PluginTracePrefix = "##[plugin.trace]";
         public static readonly int RunnerDownloadRetryMaxAttempts = 3;
 
-        
+        public static string LogDiskMountpoint = "/var/log/runner";
+
         public static List<string> CommonSshArgs = new List<string> {"-q",
             "-o \"UserKnownHostsFile /dev/null\"",
             "-o \"StrictHostKeyChecking no\"",

@@ -114,14 +114,18 @@ namespace GitHub.Runner.Common
 
                 var logDirectory = $"{Environment.GetEnvironmentVariable(Constants.InstanceNumberVariable)}_{Constants.Path.DiagDirectory}";
 
-                if (string.IsNullOrEmpty(logPath))
+                if (!string.IsNullOrEmpty(logPath))
                 {
-                    // this should give us _diag folder under runner root directory
-                    diagLogDirectory = Path.Combine(new DirectoryInfo(Path.GetDirectoryName(Assembly.GetEntryAssembly().Location)).Parent.FullName, logDirectory); 
+                    diagLogDirectory = Path.Combine(logPath, logDirectory);
+                }
+                else if (IsLogDiskMounted())
+                {
+                    diagLogDirectory = Path.Combine(Constants.LogDiskMountpoint, logDirectory);
                 }
                 else
                 {
-                    diagLogDirectory = Path.Combine(logPath, logDirectory);
+                    // this should give us _diag folder under runner root directory
+                    diagLogDirectory = Path.Combine(new DirectoryInfo(Path.GetDirectoryName(Assembly.GetEntryAssembly().Location)).Parent.FullName, logDirectory); 
                 }
 
                 _traceManager = new TraceManager(new HostTraceListener(diagLogDirectory, hostType, logPageSize, logRetentionDays), this.SecretMasker);
@@ -218,6 +222,19 @@ namespace GitHub.Runner.Common
                     _userAgents.Add(new ProductInfoHeaderValue($"RunnerId", clientId));
                 }
             }
+        }
+
+        public bool IsLogDiskMounted()
+        {
+            var p = new Process();
+            p.StartInfo.FileName = WhichUtil.Which("mountpoint", trace: _trace);
+            p.StartInfo.Arguments = $"-q {Constants.LogDiskMountpoint}";
+            p.StartInfo.UseShellExecute = false;
+
+            p.Start();
+            p.WaitForExit();
+
+            return p.ExitCode == 0;
         }
 
         public string GetDirectory(WellKnownDirectory directory)
