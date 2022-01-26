@@ -90,9 +90,14 @@ namespace GitHub.Runner.Common
             this.SecretMasker.AddValueEncoder(ValueEncoders.XmlDataEscape);
             this.SecretMasker.AddValueEncoder(ValueEncoders.TrimDoubleQuotes);
 
+            // Final values of logging-related variables.
             int logPageSize = 0, logRetentionDays = 0;
+            string diagLogDirectory;
+
+            // Logging-related variables inferred from environment.
             string logSizeEnv = Environment.GetEnvironmentVariable($"{hostType.ToUpperInvariant()}_LOGSIZE");
             string logRetentionDaysEnv = Environment.GetEnvironmentVariable($"{hostType.ToUpperInvariant()}_LOGRETENTION");
+            string logPath = Environment.GetEnvironmentVariable("GH_RUNNER_LOG_PATH");
 
             // Create the trace manager.
             if (string.IsNullOrEmpty(logFile))
@@ -107,8 +112,18 @@ namespace GitHub.Runner.Common
                     logRetentionDays = _defaultLogRetentionDays;
                 }
 
-                // this should give us _diag folder under runner root directory
-                string diagLogDirectory = Path.Combine(new DirectoryInfo(Path.GetDirectoryName(Assembly.GetEntryAssembly().Location)).Parent.FullName, $"{Environment.GetEnvironmentVariable(Constants.InstanceNumberVariable)}_{Constants.Path.DiagDirectory}");
+                var logDirectory = $"{Environment.GetEnvironmentVariable(Constants.InstanceNumberVariable)}_{Constants.Path.DiagDirectory}";
+
+                if (string.IsNullOrEmpty(logPath))
+                {
+                    // this should give us _diag folder under runner root directory
+                    diagLogDirectory = Path.Combine(new DirectoryInfo(Path.GetDirectoryName(Assembly.GetEntryAssembly().Location)).Parent.FullName, logDirectory); 
+                }
+                else
+                {
+                    diagLogDirectory = Path.Combine(logPath, logDirectory);
+                }
+
                 _traceManager = new TraceManager(new HostTraceListener(diagLogDirectory, hostType, logPageSize, logRetentionDays), this.SecretMasker);
             }
             else
