@@ -1,5 +1,7 @@
 #!/bin/bash
 
+set -e
+
 # Disk paths/names within the system
 disk_device_name="gharunnerlogs"
 disk_path="/dev/disk/by-id/google-$disk_device_name"
