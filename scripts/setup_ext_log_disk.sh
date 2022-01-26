@@ -61,12 +61,12 @@ format_logs_disk() {
 
 add_fstab_entry() {
     local disk_uuid="$(sudo blkid -s UUID -o value $disk_first_part_path)"
-    local check_fstab="$(sudo grep -q $disk_uuid /etc/fstab; echo $?)"
 
-    if [ "$check_fstab" -eq 1 ]; then
-        echo "UUID=$disk_uuid $disk_mount_path ext4 rw,discard,errors=remount-ro,x-systemd.growfs 0 1" \
-            | sudo tee -a /etc/fstab
-    fi
+    # Remove all occurences of mount point in fstab.
+    sudo sed -i "\\;$disk_mount_path;d" /etc/fstab
+
+    echo "UUID=$disk_uuid $disk_mount_path ext4 rw,discard,errors=remount-ro,x-systemd.growfs 0 1" \
+        | sudo tee -a /etc/fstab
 }
 
 mount_logs_disk() {
