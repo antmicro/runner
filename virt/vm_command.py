@@ -116,6 +116,10 @@ def create_vm(instance_number, container_file, disk_name=None, preemptible_overr
     # Create and start the virtual machine.
     gcloud_start = time.time()
 
+    boot_disk_name = "scalerunner-boot-disk"
+    boot_disk_path = f"/dev/disk/by-id/scsi-0Google_PersistentDisk_{boot_disk_name}"
+    boot_disk_ext_part = f"{boot_disk_path}-part2"
+
     instance_cmd = 'gcloud beta compute --verbosity=error ' \
             f'--project={CONFIG.gcp.project} ' \
             f'instances create {instance_name} --zone={CONFIG.gcp.zone} ' \
@@ -134,7 +138,7 @@ def create_vm(instance_number, container_file, disk_name=None, preemptible_overr
             f'--image={CONFIG.gcp.image} --image-project={CONFIG.gcp.project} ' \
             f'--boot-disk-size={CONFIG.machine.disk}GB ' \
             f'--boot-disk-type={CONFIG.gcp.disk_type} ' \
-            f'--boot-disk-device-name=scalerunner-boot-disk ' \
+            f'--boot-disk-device-name={boot_disk_name} ' \
             '--reservation-affinity=any'
 
     try:
@@ -272,7 +276,7 @@ def create_vm(instance_number, container_file, disk_name=None, preemptible_overr
             f'sudo singularity --debug instance start -C -e --dns {infer_dns_cmd} --overlay /mnt/1 --bind /mnt/2:/root,/mnt/aux {container_sif_location} i',
             f'chmod +x {SARGRAPH[1]}',
             f'sudo mv {SARGRAPH[1]} /usr/bin/sargraph',
-            'cd /mnt && SARGRAPH_OUTPUT_TYPE=svg sudo -E sargraph chart start',
+            f'cd /mnt && SARGRAPH_OUTPUT_TYPE=svg sudo -E sargraph chart start -f $(realpath {boot_disk_ext_part})',
             'sudo singularity exec -e instance://i df -h /',
     )
 
