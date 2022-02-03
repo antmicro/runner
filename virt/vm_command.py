@@ -364,7 +364,7 @@ def main(mode, instance_number, container_file=None, disk_name=None, preemptible
     if mode == "create_vm":
         if container_file is None or not container_file:
             print("Required 'container_file' parameter in create_vm missing or is empty!")
-            os.exit(1)
+            sys.exit(1)
         create_vm(instance_number, container_file, disk_name, preemptible_override)
     elif mode == "check-rsyslog":
         check_rsyslog(instance_number)
@@ -372,7 +372,7 @@ def main(mode, instance_number, container_file=None, disk_name=None, preemptible
         detect_preempted_signal(instance_number)
     else:
         print(f"Unknown mode: {mode}! Exiting!")
-        os.exit(1)
+        sys.exit(1)
 
 if __name__ == '__main__':
     main()
