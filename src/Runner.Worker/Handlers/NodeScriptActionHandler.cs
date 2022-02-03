@@ -123,6 +123,12 @@ namespace GitHub.Runner.Worker.Handlers
                 sargraphStop.BeginOutputReadLine();
                 sargraphStop.BeginErrorReadLine();
 
+                Trace.Info($"Starting {sargraphStop.StartInfo.Arguments} with PID {sargraphStop.Id}");
+
+                sargraphStop.WaitForExit();
+
+                Trace.Info($"{sargraphStop.StartInfo.Arguments} exit code: {sargraphStop.ExitCode}");
+
                 var symFix = new Process();
                 symFix.StartInfo.FileName = WhichUtil.Which("bash", trace: Trace);
                 symFix.StartInfo.Arguments = $"symlink_resolve.sh {sshIp}";
@@ -131,14 +137,18 @@ namespace GitHub.Runner.Worker.Handlers
                 symFix.StartInfo.RedirectStandardError = true;
                 symFix.StartInfo.RedirectStandardOutput = true;
 
-                symFix.OutputDataReceived += (_, args) => Trace.Info(args.Data);
-                symFix.ErrorDataReceived += (_, args) => Trace.Info(args.Data);
+                symFix.OutputDataReceived += (_, args) => Trace.Info(args.Data ?? "");
+                symFix.ErrorDataReceived += (_, args) => Trace.Info(args.Data ?? "");
 
                 symFix.Start();
                 symFix.BeginOutputReadLine();
                 symFix.BeginErrorReadLine();
 
                 Trace.Info($"Starting {symFix.StartInfo.Arguments} with PID {symFix.Id}");
+
+                symFix.WaitForExit();
+
+                Trace.Info($"{symFix.StartInfo.Arguments} exit code: {symFix.ExitCode}");
 
                 var runnerFileCommands = Path.Combine(tempDir, "_runner_file_commands");
 
@@ -160,16 +170,8 @@ namespace GitHub.Runner.Worker.Handlers
                 plotCp.StartInfo.RedirectStandardError = true;
                 plotCp.StartInfo.RedirectStandardOutput = true;
 
-                plotCp.OutputDataReceived += (_, args) => Trace.Info(args.Data);
-                plotCp.ErrorDataReceived += (_, args) => Trace.Info(args.Data);
-
-                // Wait 3 minutes for processes to exit
-                var procTimeout = 180000;
-                while (!symFix.WaitForExit(procTimeout));
-                while (!sargraphStop.WaitForExit(procTimeout));
-
-                Trace.Info($"{symFix.StartInfo.Arguments} exit code: {symFix.ExitCode}");
-                Trace.Info($"{sargraphStop.StartInfo.Arguments} exit code: {sargraphStop.ExitCode}");
+                plotCp.OutputDataReceived += (_, args) => Trace.Info(args.Data ?? "");
+                plotCp.ErrorDataReceived += (_, args) => Trace.Info(args.Data ?? "");
 
                 if (sargraphStop.ExitCode == 0)
                 {
