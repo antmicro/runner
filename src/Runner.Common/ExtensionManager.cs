@@ -59,6 +59,7 @@ namespace GitHub.Runner.Common
                 case "GitHub.Runner.Worker.IFileCommandExtension":
                     Add<T>(extensions, "GitHub.Runner.Worker.AddPathFileCommand, Runner.Worker");
                     Add<T>(extensions, "GitHub.Runner.Worker.SetEnvFileCommand, Runner.Worker");
+                    Add<T>(extensions, "GitHub.Runner.Worker.CreateStepSummaryCommand, Runner.Worker");
                     break;
                 default:
                     // This should never happen.
