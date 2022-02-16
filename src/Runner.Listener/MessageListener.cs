@@ -1,19 +1,19 @@
-using GitHub.DistributedTask.WebApi;
-using GitHub.Runner.Listener.Configuration;
-using GitHub.Services.Common;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
+using System.IO;
+using System.Runtime.InteropServices;
+using System.Security.Cryptography;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
-using System.Security.Cryptography;
-using System.IO;
-using System.Text;
-using GitHub.Services.OAuth;
-using System.Diagnostics;
-using System.Runtime.InteropServices;
+using GitHub.DistributedTask.WebApi;
 using GitHub.Runner.Common;
+using GitHub.Runner.Listener.Configuration;
 using GitHub.Runner.Sdk;
 using GitHub.Runner.Common.Util;
+using GitHub.Services.OAuth;
+using GitHub.Services.Common;
 
 namespace GitHub.Runner.Listener
 {
@@ -36,6 +36,7 @@ namespace GitHub.Runner.Listener
         private IRunnerServer _runnerServer;
         private TaskAgentSession _session;
         private TimeSpan _getNextMessageRetryInterval;
+        private bool _accessTokenRevoked = false;
         private readonly TimeSpan _sessionCreationRetryInterval = TimeSpan.FromSeconds(30);
         private readonly TimeSpan _sessionConflictRetryLimit = TimeSpan.FromMinutes(4);
         private readonly TimeSpan _clockSkewRetryLimit = TimeSpan.FromMinutes(30);
@@ -125,6 +126,7 @@ namespace GitHub.Runner.Listener
                 catch (TaskAgentAccessTokenExpiredException)
                 {
                     Trace.Info("Runner OAuth token has been revoked. Session creation failed.");
+                    _accessTokenRevoked = true;
                     throw;
                 }
                 catch (Exception ex)
@@ -175,9 +177,16 @@ namespace GitHub.Runner.Listener
         {
             if (_session != null && _session.SessionId != Guid.Empty)
             {
-                using (var ts = new CancellationTokenSource(TimeSpan.FromSeconds(30)))
+                if (!_accessTokenRevoked)
                 {
-                    await _runnerServer.DeleteAgentSessionAsync(_settings.PoolId, _session.SessionId, ts.Token);
+                    using (var ts = new CancellationTokenSource(TimeSpan.FromSeconds(30)))
+                    {
+                        await _runnerServer.DeleteAgentSessionAsync(_settings.PoolId, _session.SessionId, ts.Token);
+                    }
+                }
+                else
+                {
+                    Trace.Warning("Runner OAuth token has been revoked. Skip deleting session.");
                 }
             }
         }
@@ -259,6 +268,7 @@ namespace GitHub.Runner.Listener
                 catch (TaskAgentAccessTokenExpiredException)
                 {
                     Trace.Info("Runner OAuth token has been revoked. Unable to pull message.");
+                    _accessTokenRevoked = true;
                     throw;
                 }
                 catch (AccessDeniedException e) when (e.InnerException is InvalidTaskAgentVersionException)
