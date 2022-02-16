@@ -142,6 +142,19 @@ vim .vm_specs.json
 ./config.sh --url https://github.com/$REPOSITORY_ORG/$REPOSITORY_NAME --token $TOKEN --num $SLOTS
 ```
 
+### Delegate logging to an external Compute Engine disk (optional)
+
+By default, timestamped runner logs are stored in `*_diag` directories under `$THIS_REPO_PATH/_layout`.
+
+It is possible, however, to point the runner to store logs on an external disk.
+
+A helper script is available which creates, formats and mounts such a disk.
+In order to ensure persistence, a corresponding entry will be added to `/etc/fstab`.
+
+To enable this feature, simply run `./scripts/setup_ext_log_disk.sh`.
+
+After completing this step, restart the runner and the new mount point (`/var/log/runner`) will be picked up automatically.
+
 ## Starting the runner
 
 ### Manual method
