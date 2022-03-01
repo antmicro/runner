@@ -32,8 +32,7 @@ def get_gcp_disk(disk_name, zone):
     return json.loads(
             subprocess.check_output(
                 shlex.split(cmd),
-                stderr=subprocess.DEVNULL,
-                timeout=10
+                stderr=subprocess.DEVNULL
                 )
             )
 
