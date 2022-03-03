@@ -1,4 +1,4 @@
-﻿using GitHub.DistributedTask.WebApi;
+using GitHub.DistributedTask.WebApi;
 using Pipelines = GitHub.DistributedTask.Pipelines;
 using GitHub.Runner.Common.Util;
 using GitHub.Services.Common;
@@ -392,7 +392,7 @@ namespace GitHub.Runner.Worker
             umountProc.ErrorDataReceived += (_, args) =>
             {
                 Trace.Error(args.Data ?? "");
-                jobContext.Error(args.Data ?? "");
+                jobContext.Warning(args.Data ?? "");
             };
 
             var gZone = vmSpecs.gcp.zone;
