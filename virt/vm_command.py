@@ -55,6 +55,7 @@ def export_runner_ip_addr(create_instance_output, runner_name, preemptible):
                 os.exit(1)
 
 def create_vm(instance_number, container_file, disk_name=None, preemptible_override=None):
+    print("Attempting to spawn a machine..")
     instance_name = f'{platform.node()}-auto-spawned{instance_number}'
     try:
         external_disk = get_gcp_disk(
