@@ -108,6 +108,7 @@ namespace GitHub.Runner.Worker
                 // Interpret special variables.
                 var externalDisk = String.Empty;
                 var preemptibleOverride = String.Empty;
+                var machineType = String.Empty;
 
                 // The following sorcery is done so that templating in environment variables works properly.
                 foreach (var token in message.EnvironmentVariables)
@@ -133,6 +134,11 @@ namespace GitHub.Runner.Worker
 
                                 preemptibleOverride = val;
                                 break;
+                            case "GHA_MACHINE_TYPE":
+                                Trace.Info("Machine type variable is present.");
+
+                                machineType = val;
+                                break;
                             default:
                                 Trace.Info($"Ignoring variable {pair.Key}");
                                 break;
@@ -140,7 +146,7 @@ namespace GitHub.Runner.Worker
                     }
                 }
                 
-                Trace.Info($"External disk: {externalDisk}; Preemptible override: {preemptibleOverride}");
+                Trace.Info($"External disk: {externalDisk}; Preemptible override: {preemptibleOverride}; Machine type: {machineType}");
 
                 if (!JobPassesSecurityRestrictions(jobContext))
                 {
@@ -158,6 +164,11 @@ namespace GitHub.Runner.Worker
                 if (!String.IsNullOrEmpty(externalDisk))
                 {
                     spawnMachineArgs += $" -d {externalDisk}";
+                }
+
+                if (!String.IsNullOrEmpty(machineType))
+                {
+                    spawnMachineArgs += $" -m {machineType}";
                 }
 
                 if (!String.IsNullOrEmpty(preemptibleOverride))

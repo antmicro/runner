@@ -54,8 +54,25 @@ def export_runner_ip_addr(create_instance_output, runner_name, preemptible):
                 print("Couldn't find runner ip address! Exiting!")
                 os.exit(1)
 
-def create_vm(instance_number, container_file, disk_name=None, preemptible_override=None):
+def check_machine_type(machine_type):
+    if machine_type is None:
+        print("Machine type is None! Please check your configuration, exiting!")
+        os.exit(1)
+    try:
+        allow_list = CONFIG.gcp.allowed_machine_types
+    except AttributeError:
+        # We have old config without this field, assume only CONFIG.gcp.type is in allow list
+        allow_list = [CONFIG.gcp.type]
+
+    if machine_type not in allow_list:
+        print(f"Requested machine type {machine_type} was not found in the allow list! Please use a different machine type. Exiting!")
+        os.exit(1)
+
+def create_vm(instance_number, container_file, disk_name=None, preemptible_override=None, machine_type=None):
     print("Attempting to spawn a machine..")
+    if machine_type is None:
+        machine_type = CONFIG.gcp.type
+    check_machine_type(machine_type)
     instance_name = f'{platform.node()}-auto-spawned{instance_number}'
     try:
         external_disk = get_gcp_disk(
@@ -88,7 +105,7 @@ def create_vm(instance_number, container_file, disk_name=None, preemptible_overr
 
     print(f'Spawning a GCP machine in {CONFIG.gcp.zone}...')
     print(f'Instance name:\t {instance_name}')
-    print(f'Instance type:\t {CONFIG.gcp.type}')
+    print(f'Instance type:\t {machine_type}')
     print(f'Disk type:\t {CONFIG.gcp.disk_type}')
 
     key = (open('/home/runner/.ssh/id_rsa.pub')
@@ -123,7 +140,7 @@ def create_vm(instance_number, container_file, disk_name=None, preemptible_overr
     instance_cmd = 'gcloud beta compute --verbosity=error ' \
             f'--project={CONFIG.gcp.project} ' \
             f'instances create {instance_name} --zone={CONFIG.gcp.zone} ' \
-            f'--machine-type={CONFIG.gcp.type} --subnet={CONFIG.gcp.subnet} ' \
+            f'--machine-type={machine_type} --subnet={CONFIG.gcp.subnet} ' \
             '--no-address --network-tier=PREMIUM ' \
             '--metadata=serial-port-enable=true,' \
             'ssh-keys=coordinator:' \
@@ -364,12 +381,13 @@ def detect_preempted_signal(instance_number):
 @click.option('-s', '--container-file', help='Container file', required=False, default=None)
 @click.option('-d', '--disk-name', help='External disk name', required=False, default=None)
 @click.option('-p', '--preemptible-override', help='Override preemptible setting', required=False, type=int, default=None)
-def main(mode, instance_number, container_file=None, disk_name=None, preemptible_override=None):
+@click.option('-m', '--machine-type', help='Machine type to use', required=False, default=None)
+def main(mode, instance_number, container_file=None, disk_name=None, preemptible_override=None, machine_type=None):
     if mode == "create_vm":
         if container_file is None or not container_file:
             print("Required 'container_file' parameter in create_vm missing or is empty!")
             sys.exit(1)
-        create_vm(instance_number, container_file, disk_name, preemptible_override)
+        create_vm(instance_number, container_file, disk_name, preemptible_override, machine_type)
     elif mode == "check-rsyslog":
         check_rsyslog(instance_number)
     elif mode == "detect_preempted_signal":

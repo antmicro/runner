@@ -1,6 +1,7 @@
 {
   "gcp": {
     "type": "n2-standard-4",
+    "allowed_machine_types": ["n2-standard-4", "n2-highmem-4"],
     "disk_type": "pd-ssd",
     "zone": "us-west1-a",
     "project": "my-cool-project",
