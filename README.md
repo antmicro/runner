@@ -162,6 +162,16 @@ any auto-spawned instances running for more than 12h.
 
 To enable this feature, simply run `./scripts/install_stale_vm_remover.sh`.
 
+### Enable logs compression and rotation (optional)
+
+By default logs are stored 10 days until they are deleted.
+
+It is possible to enable a cron job that compresses all log files that are at least 2 days old and removes old archives until there is enough free disc space.
+
+To enable this feature, simply run `./scripts/install_compress_log_files_cron.sh`.
+
+After completing this step, logs will be automatically compressed every day at 3 AM.
+
 ## Starting the runner
 
 ### Manual method
