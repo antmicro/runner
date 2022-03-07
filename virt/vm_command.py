@@ -1,5 +1,7 @@
 #!/usr/bin/python3
-import os, sys, subprocess, json, click, paramiko, time, functools, platform, shlex, shutil
+import os, sys, subprocess, json, click, paramiko, time, functools, platform, shlex, shutil, requests, uuid
+import google.auth
+from google.auth.transport.requests import AuthorizedSession
 from collections import namedtuple
 
 print = functools.partial(print, flush=True)
@@ -8,10 +10,10 @@ USER = 'scalerunner'
 PUBKEY = os.path.join(os.path.expanduser('~'), '.ssh/id_rsa.pub'), f'/home/{USER}/.ssh/authorized_keys'
 SARGRAPH = os.path.realpath('../sargraph/sargraph.py'), f'/home/{USER}/sargraph.py'
 GCLOUD = shutil.which('gcloud')
-PREEMPT = '--preemptible'
+PREEMPT = 'true'
 GH_ENV_LIST = ["GITHUB_JOB_FULL", "GITHUB_SHA", "GITHUB_RUN_ID"]
 
-LABELS = ','.join(["{}={}".format(e.lower(), (os.environ.get(e) or 'null')[:63].lower()) for e in GH_ENV_LIST])
+LABELS = [{e.lower(): (os.environ.get(e) or 'null')[:63].lower() for e in GH_ENV_LIST}]
 
 def load_config():
     with open('../.vm_specs.json', 'r') as f:
@@ -19,40 +21,123 @@ def load_config():
 
 CONFIG = load_config()
 
+def wait_for_gcp(authed_session, link):
+    start = time.time()
+    # set timeout to 60s
+    while elapsed(start) < 60:
+        r = authed_session.get(link)
+        result = json.loads(r.text)
+
+        if "status" not in result:
+            print("Unexpected output while waiting for response! Exiting!")
+            os.exit(1)
+
+        if result['status'] == 'DONE':
+            if 'error' in result:
+                print(f"Error occured while processing request: {result['error']}")
+                os.exit(1)
+            return result
+
+        time.sleep(1)
+    print("Timeout while waiting for response! Exiting!")
+    os.exit(1)
+
+def export_gcp_ip(authed_session, link, runner_name):
+    r = authed_session.get(link)
+    result = json.loads(r.text)
+    if "networkInterfaces" not in result or len(result['networkInterfaces']) < 0 or "networkIP" not in result['networkInterfaces'][0]:
+        print("Unexpected output while processing response! Exiting!")
+        os.exit(1)
+    ip = result['networkInterfaces'][0]['networkIP']
+    os.environ[runner_name] = ip
+    # Environment variables doesn't get exported
+    # to the parent process, this export is only for
+    # current script, later runner parses below output
+    # and sets correct ip in the parent process
+    print(f"export {runner_name}={ip}")
+    return
+
+def describe_instance(authed_session, id):
+    URL = f"https://compute.googleapis.com/compute/v1/projects/{CONFIG.gcp.project}/zones/{CONFIG.gcp.zone}/instances/{id}"
+    r = authed_session.get(URL)
+    result = json.loads(r.text)
+    if "machineType" not in result:
+        print("Unexpected output while processing response! Exiting!")
+        os.exit(1)
+    return result['machineType']
+
+def create_instance(authed_session, instance_number, instance_name, key, boot_disk_name, external_disk_info, preemptible_machine):
+    request_uuid = str(uuid.uuid4())
+    URL = f"https://compute.googleapis.com/compute/v1/projects/{CONFIG.gcp.project}/zones/{CONFIG.gcp.zone}/instances?requestId={request_uuid}"
+    data = {
+        "name": f"{instance_name}",
+        "machineType": f"zones/{CONFIG.gcp.zone}/machineTypes/{CONFIG.gcp.type}",
+        "networkInterfaces": [{
+            "subnetwork": f"regions/{CONFIG.gcp.zone.rsplit('-', 1)[0]}/subnetworks/{CONFIG.gcp.subnet}",
+        }],
+        "metadata": {
+            "items": [
+                {
+                    "key": "serial-port-enable",
+                    "value": "true",
+                },
+                {
+                    "key": "ssh-key",
+                    "value": f"coordinator:{key}",
+                },
+            ],
+        },
+        "scheduling": {
+            "automaticRestart": "false",
+            "onHostMaintenance": "TERMINATE",
+            "preemptible": f"{preemptible_machine}",
+        },
+        "tags": {
+            "items": [
+                "runners"
+            ],
+        },
+        "disks": [{
+            "type": f"{CONFIG.gcp.disk_type}",
+            "boot": "true",
+            "autoDelete": "true",
+            "deviceName": f"{boot_disk_name}",
+            "initializeParams": {
+                "diskSizeGb": f"{CONFIG.machine.disk}",
+                "sourceImage": f"projects/{CONFIG.gcp.project}/global/images/{CONFIG.gcp.image}", 
+            },
+        },
+            external_disk_info
+        ],
+        "reservationAffinity": {
+            "consumeReservationType": "any"
+        },
+        "labels": LABELS,
+    }
+    r = authed_session.post(url=URL, json=data)
+    if not r.ok or r.text is None:
+        print("Failed to create VM machine! Exiting!")
+        os.exit(1)
+    result = json.loads(r.text)
+    if "selfLink" not in result or "targetLink" not in result:
+        print("Unexpected response when creating VM! Exiting!")
+        os.exit(1)
+    wait_for_gcp(authed_session, result['selfLink'])
+    export_gcp_ip(authed_session, result['targetLink'], instance_name)
+
+
 def elapsed(start):
     return round(time.time() - start, 2)
 
-def get_gcp_disk(disk_name, zone):
+def get_gcp_disk(authed_session, project, zone, disk_name):
     if not disk_name or not zone:
         return None
 
-    cmd = "{} compute disks describe {} --zone={} --format=json".format(
-            GCLOUD, disk_name, zone)
+    URL = "https://compute.googleapis.com/compute/v1/projects/{project}/zones/{zone}/disks/{resourceId}"
 
-    return json.loads(
-            subprocess.check_output(
-                shlex.split(cmd),
-                stderr=subprocess.DEVNULL
-                )
-            )
 
-def export_runner_ip_addr(create_instance_output, runner_name, preemptible):
-    ip_index = 4 if preemptible else 3
-
-    for line in create_instance_output.splitlines():
-        splitted_line = line.split()
-        if runner_name in splitted_line[0]:
-            if len(splitted_line) > ip_index:
-                ip = splitted_line[ip_index]
-                # Environment variables doesn't get exported
-                # to the parent process, this export is only for
-                # current script, later runner parses below output
-                # and sets correct ip in the parent process
-                os.environ[runner_name] = ip
-                print(f"export {runner_name}={ip}")
-            else:
-                print("Couldn't find runner ip address! Exiting!")
-                os.exit(1)
+    r = authed_session.get(URL.format(project=project, zone=zone, resourceId=disk_name))
+    return json.loads(r.text)
 
 def check_machine_type(machine_type):
     if machine_type is None:
@@ -74,39 +159,14 @@ def create_vm(instance_number, container_file, disk_name=None, preemptible_overr
         machine_type = CONFIG.gcp.type
     check_machine_type(machine_type)
     instance_name = f'{platform.node()}-auto-spawned{instance_number}'
-    try:
-        external_disk = get_gcp_disk(
-                disk_name=disk_name,
-                zone=CONFIG.gcp.zone,
-                )
-    except subprocess.CalledProcessError:
-        print('Unable to access requested external disk!')
-        sys.exit(1)
-
-    coordinator_type_cmd = 'gcloud compute instances describe ' \
-                           '$(hostname) ' \
-                           f'--zone {CONFIG.gcp.zone} ' \
-                           '--format=\'table(machineType)\''
-
-    try:
-        coordinator_type = subprocess.check_output(
-                coordinator_type_cmd,
-                shell=True,
-                stderr=subprocess.STDOUT,
-        ).decode("utf-8")
-
-        coordinator_type = coordinator_type[coordinator_type.rfind("/") + 1:].replace(CONFIG.gcp.project, '***')
-        print(f'Using coordinator machine: {coordinator_type}')
-
-    except subprocess.CalledProcessError as err:
-        print('Failed to get coordinator machine type!')
-        print('\n'+coordinator_type.output.decode().replace(CONFIG.gcp.project, '***'))
-        sys.exit(1)
-
+    credentials, _ = google.auth.default()
+    authed_session = AuthorizedSession(credentials)
+    print(f"Using coordinator machine: {describe_instance(authed_session, platform.node()).rsplit('/', 1)[-1]}")
     print(f'Spawning a GCP machine in {CONFIG.gcp.zone}...')
     print(f'Instance name:\t {instance_name}')
     print(f'Instance type:\t {machine_type}')
     print(f'Disk type:\t {CONFIG.gcp.disk_type}')
+
 
     key = (open('/home/runner/.ssh/id_rsa.pub')
           .read()
@@ -120,88 +180,41 @@ def create_vm(instance_number, container_file, disk_name=None, preemptible_overr
 
     # Ensure compatibility with pre-67adc3a .vm_specs file.
     try:
-        preemptible_machine = PREEMPT if CONFIG.machine.preemptible else ''
+        preemptible_machine = PREEMPT if CONFIG.machine.preemptible else 'false'
     except AttributeError:
         preemptible_machine = PREEMPT
 
     # Allow overriding the setting at workflow level.
     if preemptible_override is not None:
-        preemptible_machine = PREEMPT if bool(preemptible_override) else ''
+        preemptible_machine = PREEMPT if bool(preemptible_override) else 'false'
 
     print(f'Preemptible: {bool(preemptible_machine)}')
 
     # Create and start the virtual machine.
     gcloud_start = time.time()
-
-    boot_disk_name = "scalerunner-boot-disk"
+    boot_disk_name = f"scalerunner-boot-disk"
     boot_disk_path = f"/dev/disk/by-id/scsi-0Google_PersistentDisk_{boot_disk_name}"
     boot_disk_ext_part = f"{boot_disk_path}-part2"
 
-    instance_cmd = 'gcloud beta compute --verbosity=error ' \
-            f'--project={CONFIG.gcp.project} ' \
-            f'instances create {instance_name} --zone={CONFIG.gcp.zone} ' \
-            f'--machine-type={machine_type} --subnet={CONFIG.gcp.subnet} ' \
-            '--no-address --network-tier=PREMIUM ' \
-            '--metadata=serial-port-enable=true,' \
-            'ssh-keys=coordinator:' \
-            f'{key} ' \
-            f'--labels=' \
-            f'{LABELS} ' \
-            '--no-restart-on-failure --tags=runners ' \
-            '--maintenance-policy=TERMINATE ' \
-            f'{preemptible_machine} ' \
-            '--no-service-account ' \
-            '--no-scopes ' \
-            f'--image={CONFIG.gcp.image} --image-project={CONFIG.gcp.project} ' \
-            f'--boot-disk-size={CONFIG.machine.disk}GB ' \
-            f'--boot-disk-type={CONFIG.gcp.disk_type} ' \
-            f'--boot-disk-device-name={boot_disk_name} ' \
-            '--reservation-affinity=any'
-
-    try:
-        output = subprocess.check_output(
-                instance_cmd,
-                shell=True,
-                stderr=subprocess.STDOUT,
-        ).decode("utf-8")
-
-        output = output.replace(CONFIG.gcp.project, '***')
-
-        print('\n'+output)
-
-        export_runner_ip_addr(output, instance_name, preemptible_machine is PREEMPT)
-
-    except subprocess.CalledProcessError as err:
-        print('\n'+err.output.decode().replace(CONFIG.gcp.project, '***'))
-        sys.exit(1)
-
-    print(f'Machine spawned in {elapsed(gcloud_start)} seconds.')
-
+    external_disk_info = None
     # Attach an external disk (if applicable)
     external_disk_cmd = 'true'
-
-    if external_disk is not None:
+    if disk_name:
+        external_disk = get_gcp_disk(authed_session, CONFIG.gcp.project, CONFIG.gcp.zone, disk_name)
+        if "name" not in external_disk or "sizeGb" not in external_disk:
+            print("Unexpected output while processing response! Exiting!")
+            os.exit(1)
         print("Attaching external disk {} ({}GB)".format(external_disk['name'], external_disk['sizeGb']))
-
-        attach_disk = "gcloud compute instances attach-disk {} --disk={} --device-name=aux --zone={} --mode=ro".format(
-                instance_name, external_disk['name'], CONFIG.gcp.zone
-                )
-
         external_disk_cmd = 'sudo mount /dev/disk/by-id/scsi-0Google_PersistentDisk_aux-part1 /mnt/aux'
+        external_disk_info = {
+                "autoDelete": "false",
+                "deviceName": "aux",
+                "mode": "READ_ONLY",
+                "source": f"projects/{CONFIG.gcp.project}/zones/{CONFIG.gcp.zone}/disks/{external_disk['name']}"
+            }
+    create_instance(authed_session, instance_number, instance_name, key, boot_disk_name, external_disk_info, preemptible_machine)
+    print(f'Machine spawned in {elapsed(gcloud_start)} seconds.')
 
-        try:
-            output = subprocess.check_output(
-                    attach_disk,
-                    shell=True,
-                    stderr=subprocess.STDOUT,
-            ).decode("utf-8")
-
-            print('\n'+output.replace(CONFIG.gcp.project, '***'))
-        except subprocess.CalledProcessError as err:
-            print('\n'+err.output.decode().replace(CONFIG.gcp.project, '***'))
-            sys.exit(1)
-    
-    # this is the name recognized by DNS in Google
     target = os.environ[instance_name]
 
     ssh = paramiko.SSHClient()
@@ -309,6 +322,21 @@ def create_vm(instance_number, container_file, disk_name=None, preemptible_overr
         for l in stderr_lines:
             print(l.strip())
 
+def delete_vm(instance_number):
+    print("Attempting to delete a machine..")
+    instance_name = f'{platform.node()}-auto-spawned{instance_number}'
+    request_uuid = str(uuid.uuid4())
+    URL = f"https://compute.googleapis.com/compute/v1/projects/{CONFIG.gcp.project}/zones/{CONFIG.gcp.zone}/instances/{instance_name}?requestID={request_uuid}"
+    credentials, _ = google.auth.default()
+    authed_session = AuthorizedSession(credentials)
+    r = authed_session.delete(URL)
+    result = json.loads(r.text)
+    if "selfLink" not in result:
+        print("Unexpected output while processing response! Exiting!")
+        os.exit(1)
+    wait_for_gcp(authed_session, result['selfLink'])
+
+
 def check_preempted(current_log):
     for line in current_log:
         if "VM shutting down" in line:
@@ -339,44 +367,26 @@ def check_rsyslog(instance_number):
 
 def detect_preempted_signal(instance_number):
     instance_name = f'{platform.node()}-auto-spawned{instance_number}'
+    credentials, _ = google.auth.default()
+    authed_session = AuthorizedSession(credentials)
 
-    operation_list_cmd = f'gcloud compute operations list ' \
-                         f'--project={CONFIG.gcp.project} ' \
-                         f'--filter="zone={CONFIG.gcp.zone} AND targetLink.basename()={instance_name} AND operationType=compute.instances.preempted" ' \
-                         f'--format=json ' \
-                         f'--sort-by=~startTime'
-    try:
-        operation_list = subprocess.check_output(
-                operation_list_cmd,
-                shell=True,
-                stderr=subprocess.STDOUT,
-        ).decode("utf-8")
-        json_output = ""
-        for line in operation_list.splitlines():
-            # gcloud returns WARNING message, if there isn't any operations
-            # matching filter, we need to skip this warning to get parsable json
-            if not line.startswith("WARNING:"):
-                json_output += line
+    URL = f'https://compute.googleapis.com/compute/v1/projects/{CONFIG.gcp.project}/global/operations?filter="zone={CONFIG.gcp.zone} AND targetLink.basename()={instance_name} AND operationType=compute.instances.preempted"&orderBy=~startTime'
+    r = authed_session.get(URL)
+    operations_dict = json.loads(r)
 
-        operations_dict = json.loads(json_output)
-
-        for operation in operations_dict:
-            event_time = datetime.datetime.strptime(operation["startTime"], "%Y-%m-%dT%H:%M:%S.%f%z")
-            now = datetime.datetime.utcnow().replace(tzinfo=datetime.timezone.utc)
-            diff = now - event_time
-            print(f"Found preempted event for instance: {instance_name} that occured: {diff} time ago")
-            if diff.days == 0 and diff.seconds < 120:
-                print("Found preempted event with diff lower than 2 minutes!")
-                print(f"Instance {instance_name} killed by preempted event!")
-                sys.exit(1)
-        print(f"Couldn't find preempted event for instance: {instance_name}!")
-    except subprocess.CalledProcessError as err:
-        print('Failed to get operation list!')
-        print('\n'+operation_list_cmd.replace(CONFIG.gcp.project, '***'))
-        sys.exit(1)
+    for operation in operations_dict:
+        event_time = datetime.datetime.strptime(operation["startTime"], "%Y-%m-%dT%H:%M:%S.%f%z")
+        now = datetime.datetime.utcnow().replace(tzinfo=datetime.timezone.utc)
+        diff = now - event_time
+        print(f"Found preempted event for instance: {instance_name} that occured: {diff} time ago")
+        if diff.days == 0 and diff.seconds < 120:
+            print("Found preempted event with diff lower than 2 minutes!")
+            print(f"Instance {instance_name} killed by preempted event!")
+            sys.exit(1)
+    print(f"Couldn't find preempted event for instance: {instance_name}!")
 
 @click.command()
-@click.option('--mode', type=click.Choice(['create_vm', 'check-rsyslog', 'detect_preempted_signal']), required = True)
+@click.option('--mode', type=click.Choice(['create_vm', 'delete_vm', 'check-rsyslog', 'detect_preempted_signal']), required = True)
 @click.option('-n', '--instance-number', help='Instance number', required=True)
 @click.option('-s', '--container-file', help='Container file', required=False, default=None)
 @click.option('-d', '--disk-name', help='External disk name', required=False, default=None)
@@ -387,7 +397,9 @@ def main(mode, instance_number, container_file=None, disk_name=None, preemptible
         if container_file is None or not container_file:
             print("Required 'container_file' parameter in create_vm missing or is empty!")
             sys.exit(1)
-        create_vm(instance_number, container_file, disk_name, preemptible_override, machine_type)
+        create_vm(instance_number, container_file, disk_name, preemptible_override)
+    elif mode == "delete_vm":
+        delete_vm(instance_number)
     elif mode == "check-rsyslog":
         check_rsyslog(instance_number)
     elif mode == "detect_preempted_signal":

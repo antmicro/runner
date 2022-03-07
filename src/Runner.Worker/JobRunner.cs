@@ -356,27 +356,6 @@ namespace GitHub.Runner.Worker
             }
         }
 
-        private bool IsGcpMachineRunning(string hostname, dynamic vmSpecs)
-        {
-            Trace.Entering();
-
-            var zone = vmSpecs.gcp.zone;
-            var gcloud = new Process();
-            gcloud.StartInfo.FileName = WhichUtil.Which("gcloud", trace: Trace);
-            gcloud.StartInfo.Arguments = $"beta compute instances describe {hostname} --zone={zone} --quiet";
-            gcloud.StartInfo.UseShellExecute = false;
-            gcloud.StartInfo.RedirectStandardError = true;
-            gcloud.StartInfo.RedirectStandardOutput = true;
-
-            gcloud.OutputDataReceived += (_, args) => Trace.Info(args.Data ?? "");
-            gcloud.ErrorDataReceived += (_, args) => Trace.Error(args.Data ?? "");
-
-            gcloud.Start();
-            gcloud.WaitForExit();
-
-            return gcloud.ExitCode == 0;
-        }
-
         private bool FinalizeGcp(IExecutionContext jobContext, Pipelines.AgentJobRequestMessage message, dynamic vmSpecs)
         {
             IExecutionContext vmCtx = jobContext.CreateChild(Guid.NewGuid(), "Teardown VM", "VM_teardown", null, null);
@@ -407,16 +386,16 @@ namespace GitHub.Runner.Worker
             };
 
             var gZone = vmSpecs.gcp.zone;
-            var gcloudDelProc = new Process();
-            gcloudDelProc.StartInfo.FileName = WhichUtil.Which("gcloud", trace: Trace);
-            gcloudDelProc.StartInfo.Arguments = $"compute instances delete --delete-disks=boot --zone={gZone} {Constants.RunnerIPVariable}";
-            gcloudDelProc.StartInfo.WorkingDirectory = virtDir;
-            gcloudDelProc.StartInfo.UseShellExecute = false;
-            gcloudDelProc.StartInfo.RedirectStandardError = true;
-            gcloudDelProc.StartInfo.RedirectStandardOutput = true;
+            var deleteVmProc = new Process();
+            deleteVmProc.StartInfo.FileName = WhichUtil.Which("python3", trace: Trace);
+            deleteVmProc.StartInfo.Arguments = $"vm_command.py --mode delete_vm -n {instanceNumber}";
+            deleteVmProc.StartInfo.WorkingDirectory = virtDir;
+            deleteVmProc.StartInfo.UseShellExecute = false;
+            deleteVmProc.StartInfo.RedirectStandardError = true;
+            deleteVmProc.StartInfo.RedirectStandardOutput = true;
 
-            gcloudDelProc.OutputDataReceived += (_, args) => Trace.Info(args.Data ?? "");
-            gcloudDelProc.ErrorDataReceived += (_, args) => Trace.Error(args.Data ?? "");
+            deleteVmProc.OutputDataReceived += (_, args) => Trace.Info(args.Data ?? "");
+            deleteVmProc.ErrorDataReceived += (_, args) => Trace.Error(args.Data ?? "");
 
             Trace.Info($"Unmouting sshfs from {WorkspaceDirectory}");
             umountProc.Start();
@@ -426,10 +405,10 @@ namespace GitHub.Runner.Worker
 
             Trace.Info($"Destroying {Constants.RunnerIPVariable} from {gZone}");
 
-            gcloudDelProc.Start();
-            gcloudDelProc.BeginOutputReadLine();
-            gcloudDelProc.BeginErrorReadLine();
-            gcloudDelProc.WaitForExit();
+            deleteVmProc.Start();
+            deleteVmProc.BeginOutputReadLine();
+            deleteVmProc.BeginErrorReadLine();
+            deleteVmProc.WaitForExit();
 
             // check rsyslog for shutdown reason
             var checkRsyslog = new Process();
