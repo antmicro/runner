@@ -4,3 +4,9 @@
 [submodule "distribution-library-image"]
 	path = distribution-library-image
 	url = https://github.com/docker/distribution-library-image
+[submodule "extra_python_deps/google-auth-library-python"]
+	path = extra_python_deps/google-auth-library-python
+	url = https://github.com/googleapis/google-auth-library-python.git
+[submodule "extra_python_deps/cachetools"]
+	path = extra_python_deps/cachetools
+	url = https://github.com/tkem/cachetools.git

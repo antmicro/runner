@@ -1,10 +1,16 @@
 #!/usr/bin/python3
 import os, sys, subprocess, json, click, paramiko, time, functools, platform, shlex, shutil, requests, uuid
-import google.auth
-from google.auth.transport.requests import AuthorizedSession
 from collections import namedtuple
 
 print = functools.partial(print, flush=True)
+
+libs = ['google-auth-library-python', 'cachetools/src']
+
+for l in libs:
+    sys.path.insert(0, os.path.dirname(os.path.realpath(__file__))+f'/../extra_python_deps/{l}')
+
+import google.auth
+from google.auth.transport.requests import AuthorizedSession
 
 USER = 'scalerunner'
 PUBKEY = os.path.join(os.path.expanduser('~'), '.ssh/id_rsa.pub'), f'/home/{USER}/.ssh/authorized_keys'
