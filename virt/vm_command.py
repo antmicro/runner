@@ -202,12 +202,15 @@ def execute_ssh_commands(ssh, commands):
         for l in stderr_lines:
             print(l.strip())
 
+def get_instance_name(instance_number):
+    return f'{platform.node()}-auto-spawned{instance_number}'
+
 def create_vm(instance_number, container_file, disk_name=None, preemptible_override=None, machine_type=None):
     print("Attempting to spawn a machine..")
     if machine_type is None:
         machine_type = CONFIG.gcp.type
     check_machine_type(machine_type)
-    instance_name = f'{platform.node()}-auto-spawned{instance_number}'
+    instance_name = get_instance_name(instance_number)
     credentials, _ = google.auth.default()
     authed_session = AuthorizedSession(credentials)
     print(f"Using coordinator machine: {describe_instance(authed_session, platform.node()).rsplit('/', 1)[-1]}")
@@ -336,7 +339,7 @@ def create_vm(instance_number, container_file, disk_name=None, preemptible_overr
 
 def delete_vm(instance_number):
     print("Attempting to delete a machine..")
-    instance_name = f'{platform.node()}-auto-spawned{instance_number}'
+    instance_name = get_instance_name(instance_number)
     request_uuid = str(uuid.uuid4())
     URL = f"https://compute.googleapis.com/compute/v1/projects/{CONFIG.gcp.project}/zones/{CONFIG.gcp.zone}/instances/{instance_name}?requestID={request_uuid}"
     credentials, _ = google.auth.default()
@@ -356,7 +359,7 @@ def check_preempted(current_log):
     return None
 
 def check_rsyslog(instance_number):
-    instance_name = f'{platform.node()}-auto-spawned{instance_number}.c.{CONFIG.gcp.project}.internal'
+    instance_name = f'{get_instance_name(instance_number)}.c.{CONFIG.gcp.project}.internal'
 
     current_log = []
     found_labels = False
@@ -378,7 +381,7 @@ def check_rsyslog(instance_number):
         print(status)
 
 def detect_preempted_signal(instance_number):
-    instance_name = f'{platform.node()}-auto-spawned{instance_number}'
+    instance_name = get_instance_name(instance_number)
     credentials, _ = google.auth.default()
     authed_session = AuthorizedSession(credentials)
 
@@ -398,7 +401,7 @@ def detect_preempted_signal(instance_number):
     print(f"Couldn't find preempted event for instance: {instance_name}!")
 
 def check_dmesg(instance_number):
-    instance_name = f'{platform.node()}-auto-spawned{instance_number}'
+    instance_name = get_instance_name(instance_number)
     target = os.environ[instance_name]
     ssh = create_ssh_connection(target)
 
@@ -407,7 +410,6 @@ def check_dmesg(instance_number):
     )
 
     execute_ssh_commands(ssh, commands)
-
 
 @click.command()
 @click.option('--mode', type=click.Choice(['create_vm', 'delete_vm', 'check-rsyslog', 'detect_preempted_signal', 'check_dmesg']), required = True)
