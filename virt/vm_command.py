@@ -72,12 +72,12 @@ def describe_instance(authed_session, id):
         os.exit(1)
     return result['machineType']
 
-def create_instance(authed_session, instance_number, instance_name, key, boot_disk_name, external_disk_info, preemptible_machine):
+def create_instance(authed_session, instance_number, instance_name, key, boot_disk_name, external_disk_info, preemptible_machine, machine_type):
     request_uuid = str(uuid.uuid4())
     URL = f"https://compute.googleapis.com/compute/v1/projects/{CONFIG.gcp.project}/zones/{CONFIG.gcp.zone}/instances?requestId={request_uuid}"
     data = {
         "name": f"{instance_name}",
-        "machineType": f"zones/{CONFIG.gcp.zone}/machineTypes/{CONFIG.gcp.type}",
+        "machineType": f"zones/{CONFIG.gcp.zone}/machineTypes/{machine_type}",
         "networkInterfaces": [{
             "subnetwork": f"regions/{CONFIG.gcp.zone.rsplit('-', 1)[0]}/subnetworks/{CONFIG.gcp.subnet}",
         }],
@@ -218,7 +218,7 @@ def create_vm(instance_number, container_file, disk_name=None, preemptible_overr
                 "mode": "READ_ONLY",
                 "source": f"projects/{CONFIG.gcp.project}/zones/{CONFIG.gcp.zone}/disks/{external_disk['name']}"
             }
-    create_instance(authed_session, instance_number, instance_name, key, boot_disk_name, external_disk_info, preemptible_machine)
+    create_instance(authed_session, instance_number, instance_name, key, boot_disk_name, external_disk_info, preemptible_machine, machine_type)
     print(f'Machine spawned in {elapsed(gcloud_start)} seconds.')
 
     target = os.environ[instance_name]
