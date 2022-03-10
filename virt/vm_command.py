@@ -403,7 +403,7 @@ def main(mode, instance_number, container_file=None, disk_name=None, preemptible
         if container_file is None or not container_file:
             print("Required 'container_file' parameter in create_vm missing or is empty!")
             sys.exit(1)
-        create_vm(instance_number, container_file, disk_name, preemptible_override)
+        create_vm(instance_number, container_file, disk_name, preemptible_override, machine_type)
     elif mode == "delete_vm":
         delete_vm(instance_number)
     elif mode == "check-rsyslog":
