@@ -332,6 +332,26 @@ namespace GitHub.Runner.Worker
                 finally
                 {
                     Trace.Info("Finalize job.");
+                    var checkDmesgProc = new Process();
+
+                    checkDmesgProc.StartInfo.FileName = WhichUtil.Which("python3", trace: Trace);
+                    checkDmesgProc.StartInfo.Arguments = $"vm_command.py --mode check_dmesg -n {instanceNumber}";
+                    checkDmesgProc.StartInfo.WorkingDirectory = virtDir;
+                    checkDmesgProc.StartInfo.UseShellExecute = false;
+                    checkDmesgProc.StartInfo.RedirectStandardError = true;
+                    checkDmesgProc.StartInfo.RedirectStandardOutput = true;
+
+                    checkDmesgProc.OutputDataReceived += (_, args) =>
+                    {
+                        Trace.Info(args.Data ?? "");
+                        jobContext.Warning(args.Data ?? "");
+                    };
+
+                    checkDmesgProc.ErrorDataReceived += (_, args) => Trace.Error(args.Data ?? "");
+                    checkDmesgProc.Start();
+                    checkDmesgProc.BeginOutputReadLine();
+                    checkDmesgProc.BeginErrorReadLine();
+                    checkDmesgProc.WaitForExit();
 
                     FinalizeGcp(jobContext, message, vmSpecs);
 

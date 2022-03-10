@@ -159,6 +159,49 @@ def check_machine_type(machine_type):
         print(f"Requested machine type {machine_type} was not found in the allow list! Please use a different machine type. Exiting!")
         os.exit(1)
 
+def create_ssh_connection(target):
+    ssh = paramiko.SSHClient()
+    ssh.set_missing_host_key_policy(paramiko.client.AutoAddPolicy())
+
+    ssh_timeout = ssh_timeout_c = 50
+
+    while ssh_timeout_c > 0:
+        try:
+            ssh.connect(
+                    target,
+                    username=USER,
+                    password=USER,
+                    timeout=1,
+                    auth_timeout=1,
+                    banner_timeout=1,
+            )
+            break
+        except Exception as e:
+            if ssh_timeout_c % 10 == 0:
+                print('Waiting for SSH... [{}/{}] '.format((int)(((ssh_timeout - ssh_timeout_c) / 10) + 1), (int)(ssh_timeout / 10)))
+            ssh_timeout_c -= 1
+
+            if ssh_timeout_c == 0:
+                print('Timeout while waiting for SSH!')
+                print(e)
+                sys.exit(1)
+
+            time.sleep(1)
+    return ssh
+
+def execute_ssh_commands(ssh, commands):
+    for cmd in commands:
+        _, stdout, stderr = ssh.exec_command(cmd)
+
+        stdout_lines = stdout.readlines()
+        stderr_lines = stderr.readlines()
+
+        for l in stdout_lines:
+            print(l.strip())
+
+        for l in stderr_lines:
+            print(l.strip())
+
 def create_vm(instance_number, container_file, disk_name=None, preemptible_override=None, machine_type=None):
     print("Attempting to spawn a machine..")
     if machine_type is None:
@@ -222,46 +265,18 @@ def create_vm(instance_number, container_file, disk_name=None, preemptible_overr
     print(f'Machine spawned in {elapsed(gcloud_start)} seconds.')
 
     target = os.environ[instance_name]
+    ssh = create_ssh_connection(target)
+    print('Machine ready')
 
-    ssh = paramiko.SSHClient()
-    ssh.set_missing_host_key_policy(paramiko.client.AutoAddPolicy())
+    _, stdout, stderr = ssh.exec_command('sudo chown -R {0}:{0} /home/{0}'.format(USER))
+    stdout_lines = stdout.readlines()
+    stderr_lines = stderr.readlines()
 
-    ssh_timeout = ssh_timeout_c = 50
+    for l in stdout_lines:
+        print(l.strip())
 
-    while ssh_timeout_c > 0:
-        try:
-            ssh.connect(
-                    target,
-                    username=USER,
-                    password=USER,
-                    timeout=1,
-                    auth_timeout=1,
-                    banner_timeout=1,
-            )
-            print('Machine ready')
-
-            _, stdout, stderr = ssh.exec_command('sudo chown -R {0}:{0} /home/{0}'.format(USER))
-            stdout_lines = stdout.readlines()
-            stderr_lines = stderr.readlines()
-
-            for l in stdout_lines:
-                print(l.strip())
-
-            for l in stderr_lines:
-                print(l.strip())
-
-            break
-        except Exception as e:
-            if ssh_timeout_c % 10 == 0:
-                print('Waiting for SSH... [{}/{}] '.format((int)(((ssh_timeout - ssh_timeout_c) / 10) + 1), (int)(ssh_timeout / 10)))
-            ssh_timeout_c -= 1
-
-            if ssh_timeout_c == 0:
-                print('Timeout while waiting for SSH!')
-                print(e)
-                sys.exit(1)
-
-            time.sleep(1)
+    for l in stderr_lines:
+        print(l.strip())
 
     try:
         ssh_sftp = ssh.open_sftp()
@@ -316,17 +331,8 @@ def create_vm(instance_number, container_file, disk_name=None, preemptible_overr
             'sudo singularity exec -e instance://i df -h /',
     )
 
-    for cmd in commands:
-        _, stdout, stderr = ssh.exec_command(cmd)
+    execute_ssh_commands(ssh, commands)
 
-        stdout_lines = stdout.readlines()
-        stderr_lines = stderr.readlines()
-
-        for l in stdout_lines:
-            print(l.strip())
-
-        for l in stderr_lines:
-            print(l.strip())
 
 def delete_vm(instance_number):
     print("Attempting to delete a machine..")
@@ -391,8 +397,20 @@ def detect_preempted_signal(instance_number):
             sys.exit(1)
     print(f"Couldn't find preempted event for instance: {instance_name}!")
 
+def check_dmesg(instance_number):
+    instance_name = f'{platform.node()}-auto-spawned{instance_number}'
+    target = os.environ[instance_name]
+    ssh = create_ssh_connection(target)
+
+    commands = (
+            'sudo dmesg -T | grep -i "killed process"',
+    )
+
+    execute_ssh_commands(ssh, commands)
+
+
 @click.command()
-@click.option('--mode', type=click.Choice(['create_vm', 'delete_vm', 'check-rsyslog', 'detect_preempted_signal']), required = True)
+@click.option('--mode', type=click.Choice(['create_vm', 'delete_vm', 'check-rsyslog', 'detect_preempted_signal', 'check_dmesg']), required = True)
 @click.option('-n', '--instance-number', help='Instance number', required=True)
 @click.option('-s', '--container-file', help='Container file', required=False, default=None)
 @click.option('-d', '--disk-name', help='External disk name', required=False, default=None)
@@ -410,6 +428,8 @@ def main(mode, instance_number, container_file=None, disk_name=None, preemptible
         check_rsyslog(instance_number)
     elif mode == "detect_preempted_signal":
         detect_preempted_signal(instance_number)
+    elif mode == "check_dmesg":
+        check_dmesg(instance_number)
     else:
         print(f"Unknown mode: {mode}! Exiting!")
         sys.exit(1)
