@@ -260,7 +260,7 @@ def create_vm(instance_number, container_file, disk_name=None, preemptible_overr
 
     github_job_name = (os.environ.get('GITHUB_JOB_FULL') or 'unknown').lower()
 
-    print(LABELS)
+    print(f"LABELS: {str(LABELS)}")
 
     # Ensure compatibility with pre-67adc3a .vm_specs file.
     try:
@@ -345,7 +345,7 @@ def create_vm(instance_number, container_file, disk_name=None, preemptible_overr
             'sudo mkdir -p /opt/sif',
             r'echo "SYSLOGD_ARGS=\"-R {}:5140 -L\"" | sudo cp /dev/stdin /etc/default/syslogd'.format(infer_dns_cmd),
             'sudo /etc/init.d/S01syslogd restart',
-            f'logger {LABELS}',
+            f'logger {str(LABELS)}',
             external_disk_cmd,
             'echo "::group::Checking disks..."',
             'echo "------------------"',
@@ -395,7 +395,7 @@ def check_rsyslog(instance_number):
     found_labels = False
 
     for line in reversed(list(open(f"work/{instance_name}.log"))):
-        if LABELS in line.rstrip():
+        if str(LABELS).replace("\'", "") in line.rstrip():
             found_labels = True
             break
         current_log.append(line.rstrip())
