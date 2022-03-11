@@ -36,24 +36,24 @@ def wait_for_gcp(authed_session, link):
 
         if "status" not in result:
             print("Unexpected output while waiting for response! Exiting!")
-            os.exit(1)
+            sys.exit(1)
 
         if result['status'] == 'DONE':
             if 'error' in result:
                 print(f"Error occured while processing request: {result['error']}")
-                os.exit(1)
+                sys.exit(1)
             return result
 
         time.sleep(1)
     print("Timeout while waiting for response! Exiting!")
-    os.exit(1)
+    sys.exit(1)
 
 def export_gcp_ip(authed_session, link, runner_name):
     r = authed_session.get(link)
     result = json.loads(r.text)
     if "networkInterfaces" not in result or len(result['networkInterfaces']) < 0 or "networkIP" not in result['networkInterfaces'][0]:
         print("Unexpected output while processing response! Exiting!")
-        os.exit(1)
+        sys.exit(1)
     ip = result['networkInterfaces'][0]['networkIP']
     os.environ[runner_name] = ip
     # Environment variables doesn't get exported
@@ -69,7 +69,7 @@ def describe_instance(authed_session, id):
     result = json.loads(r.text)
     if "machineType" not in result:
         print("Unexpected output while processing response! Exiting!")
-        os.exit(1)
+        sys.exit(1)
     return result['machineType']
 
 def create_instance(authed_session, instance_number, instance_name, key, boot_disk_name, external_disk_info, preemptible_machine, machine_type):
@@ -123,11 +123,11 @@ def create_instance(authed_session, instance_number, instance_name, key, boot_di
     r = authed_session.post(url=URL, json=data)
     if not r.ok or r.text is None:
         print("Failed to create VM machine! Exiting!")
-        os.exit(1)
+        sys.exit(1)
     result = json.loads(r.text)
     if "selfLink" not in result or "targetLink" not in result:
         print("Unexpected response when creating VM! Exiting!")
-        os.exit(1)
+        sys.exit(1)
     wait_for_gcp(authed_session, result['selfLink'])
     export_gcp_ip(authed_session, result['targetLink'], instance_name)
 
@@ -148,7 +148,7 @@ def get_gcp_disk(authed_session, project, zone, disk_name):
 def check_machine_type(machine_type):
     if machine_type is None:
         print("Machine type is None! Please check your configuration, exiting!")
-        os.exit(1)
+        sys.exit(1)
     try:
         allow_list = CONFIG.gcp.allowed_machine_types
     except AttributeError:
@@ -157,7 +157,7 @@ def check_machine_type(machine_type):
 
     if machine_type not in allow_list:
         print(f"Requested machine type {machine_type} was not found in the allow list! Please use a different machine type. Exiting!")
-        os.exit(1)
+        sys.exit(1)
 
 def create_ssh_connection(target):
     ssh = paramiko.SSHClient()
@@ -255,7 +255,7 @@ def create_vm(instance_number, container_file, disk_name=None, preemptible_overr
         external_disk = get_gcp_disk(authed_session, CONFIG.gcp.project, CONFIG.gcp.zone, disk_name)
         if "name" not in external_disk or "sizeGb" not in external_disk:
             print("Unexpected output while processing response! Exiting!")
-            os.exit(1)
+            sys.exit(1)
         print("Attaching external disk {} ({}GB)".format(external_disk['name'], external_disk['sizeGb']))
         external_disk_cmd = 'sudo mount /dev/disk/by-id/scsi-0Google_PersistentDisk_aux-part1 /mnt/aux'
         external_disk_info = {
@@ -352,7 +352,7 @@ def delete_vm(instance_number):
     result = json.loads(r.text)
     if "selfLink" not in result:
         print("Unexpected output while processing response! Exiting!")
-        os.exit(1)
+        sys.exit(1)
     wait_for_gcp(authed_session, result['selfLink'])
 
 
@@ -381,7 +381,7 @@ def check_rsyslog(instance_number):
         status = check_preempted(current_log)
         if status is None:
             print("Could not get status of shutdown!")
-            os.exit(1)
+            sys.exit(1)
         print(status)
 
 def detect_preempted_signal(instance_number):
