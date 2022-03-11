@@ -465,11 +465,14 @@ namespace GitHub.Runner.Worker
             spawnMachineProc.StartInfo.RedirectStandardError = true;
             spawnMachineProc.StartInfo.RedirectStandardOutput = true;
 
+            var acm = HostContext.CreateService<IActionCommandManager>();
 
             spawnMachineProc.OutputDataReceived += (_, args) => 
             {
                 output_string.Append(args.Data + "\n" ?? "");
-                vmCtx.Output(args.Data ?? "");
+                if (!acm.TryProcessCommand(vmCtx, args.Data ?? "", null)) {
+                    vmCtx.Output(args.Data ?? "");
+                }
                 Trace.Info(args.Data ?? "");
             };
             // Log stderr to local logfile only to avoid potential leaks.
