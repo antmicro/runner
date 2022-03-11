@@ -138,7 +138,7 @@ def create_instance(authed_session, instance_number, instance_name, key, boot_di
         success = True
         break
     if success is False:
-        print("Couldn't create instance: {instance_name}! Exiting!")
+        print(f"Couldn't create instance: {instance_name}! Exiting!")
         sys.exit(1)
 
 def elapsed(start):
@@ -234,7 +234,7 @@ def delete_instance(authed_session, instance_name):
         success = True
         break
     if success is False:
-        print("Couldn't delete instance: {instance_name}! Exiting!")
+        print(f"Couldn't delete instance: {instance_name}! Exiting!")
         sys.exit(1)
 
 def create_vm(instance_number, container_file, disk_name=None, preemptible_override=None, machine_type=None):
@@ -375,11 +375,11 @@ def create_vm(instance_number, container_file, disk_name=None, preemptible_overr
 
 def delete_vm(instance_number):
     instance_name = get_instance_name(instance_number)
-    print("Attempting to delete a machine ({instance_name})..")
+    print(f"Attempting to delete a machine ({instance_name})..")
     credentials, _ = google.auth.default()
     authed_session = AuthorizedSession(credentials)
     delete_instance(authed_session, instance_name)
-    print("Machine deleted ({instance_name})")
+    print(f"Machine deleted ({instance_name})")
 
 
 def check_preempted(current_log):
