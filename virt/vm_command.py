@@ -34,11 +34,7 @@ def wait_for_gcp(authed_session, link):
         r = authed_session.get(link)
         result = json.loads(r.text)
 
-        if "status" not in result:
-            print("Unexpected output while waiting for response! Exiting!")
-            sys.exit(1)
-
-        if result['status'] == 'DONE':
+        if "status" in result and result['status'] == 'DONE':
             if 'error' in result:
                 print(f"Error occured while processing request: {result['error']}")
                 sys.exit(1)
