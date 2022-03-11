@@ -72,9 +72,8 @@ def describe_instance(authed_session, id):
         sys.exit(1)
     return result['machineType']
 
-def create_instance(authed_session, instance_number, instance_name, key, boot_disk_name, external_disk_info, preemptible_machine, machine_type):
-    request_uuid = str(uuid.uuid4())
-    URL = f"https://compute.googleapis.com/compute/v1/projects/{CONFIG.gcp.project}/zones/{CONFIG.gcp.zone}/instances?requestId={request_uuid}"
+def create_instance_call(authed_session, instance_number, instance_name, key, boot_disk_name, external_disk_info, preemptible_machine, machine_type, uuid):
+    URL = f"https://compute.googleapis.com/compute/v1/projects/{CONFIG.gcp.project}/zones/{CONFIG.gcp.zone}/instances?requestId={uuid}"
     data = {
         "name": f"{instance_name}",
         "machineType": f"zones/{CONFIG.gcp.zone}/machineTypes/{machine_type}",
@@ -110,7 +109,7 @@ def create_instance(authed_session, instance_number, instance_name, key, boot_di
             "deviceName": f"{boot_disk_name}",
             "initializeParams": {
                 "diskSizeGb": f"{CONFIG.machine.disk}",
-                "sourceImage": f"projects/{CONFIG.gcp.project}/global/images/{CONFIG.gcp.image}", 
+                "sourceImage": f"projects/{CONFIG.gcp.project}/global/images/{CONFIG.gcp.image}",
             },
         },
             external_disk_info
@@ -121,16 +120,26 @@ def create_instance(authed_session, instance_number, instance_name, key, boot_di
         "labels": LABELS,
     }
     r = authed_session.post(url=URL, json=data)
-    if not r.ok or r.text is None:
-        print("Failed to create VM machine! Exiting!")
-        sys.exit(1)
-    result = json.loads(r.text)
-    if "selfLink" not in result or "targetLink" not in result:
-        print("Unexpected response when creating VM! Exiting!")
-        sys.exit(1)
-    wait_for_gcp(authed_session, result['selfLink'])
-    export_gcp_ip(authed_session, result['targetLink'], instance_name)
+    return json.loads(r.text)
 
+def create_instance(authed_session, instance_number, instance_name, key, boot_disk_name, external_disk_info, preemptible_machine, machine_type):
+    success = False
+    retries = 5
+    request_uuid = str(uuid.uuid4())
+    while retries > 0:
+        retries = retries - 1
+        # Same UUID makes sure that we won't create multiple VMs
+        result = create_instance_call(authed_session, instance_number, instance_name, key, boot_disk_name, external_disk_info, preemptible_machine, machine_type, request_uuid)
+        if "selfLink" not in result or "targetLink" not in result:
+            print("Unexpected response when creating VM!")
+            continue
+        wait_for_gcp(authed_session, result['selfLink'])
+        export_gcp_ip(authed_session, result['targetLink'], instance_name)
+        success = True
+        break
+    if success is False:
+        print("Couldn't create instance: {instance_name}! Exiting!")
+        sys.exit(1)
 
 def elapsed(start):
     return round(time.time() - start, 2)
@@ -204,6 +213,29 @@ def execute_ssh_commands(ssh, commands):
 
 def get_instance_name(instance_number):
     return f'{platform.node()}-auto-spawned{instance_number}'
+
+def delete_instance_call(authed_session, instance_name, uuid):
+    URL = f"https://compute.googleapis.com/compute/v1/projects/{CONFIG.gcp.project}/zones/{CONFIG.gcp.zone}/instances/{instance_name}?requestID={uuid}"
+    r = authed_session.delete(URL)
+    return json.loads(r.text)
+
+def delete_instance(authed_session, instance_name):
+    success = False
+    retries = 5
+    request_uuid = str(uuid.uuid4())
+    while retries > 0:
+        retries = retries - 1
+        # Same UUID makes sure that we won't delete multiple VMs
+        result = delete_instance_call(authed_session, instance_name, request_uuid)
+        if "selfLink" not in result:
+            print("Unexpected output while processing response!")
+            continue
+        wait_for_gcp(authed_session, result['selfLink'])
+        success = True
+        break
+    if success is False:
+        print("Couldn't delete instance: {instance_name}! Exiting!")
+        sys.exit(1)
 
 def create_vm(instance_number, container_file, disk_name=None, preemptible_override=None, machine_type=None):
     print("Attempting to spawn a machine..")
@@ -342,18 +374,12 @@ def create_vm(instance_number, container_file, disk_name=None, preemptible_overr
 
 
 def delete_vm(instance_number):
-    print("Attempting to delete a machine..")
     instance_name = get_instance_name(instance_number)
-    request_uuid = str(uuid.uuid4())
-    URL = f"https://compute.googleapis.com/compute/v1/projects/{CONFIG.gcp.project}/zones/{CONFIG.gcp.zone}/instances/{instance_name}?requestID={request_uuid}"
+    print("Attempting to delete a machine ({instance_name})..")
     credentials, _ = google.auth.default()
     authed_session = AuthorizedSession(credentials)
-    r = authed_session.delete(URL)
-    result = json.loads(r.text)
-    if "selfLink" not in result:
-        print("Unexpected output while processing response! Exiting!")
-        sys.exit(1)
-    wait_for_gcp(authed_session, result['selfLink'])
+    delete_instance(authed_session, instance_name)
+    print("Machine deleted ({instance_name})")
 
 
 def check_preempted(current_log):
