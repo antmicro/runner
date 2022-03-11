@@ -155,6 +155,13 @@ To enable this feature, simply run `./scripts/setup_ext_log_disk.sh`.
 
 After completing this step, restart the runner and the new mount point (`/var/log/runner`) will be picked up automatically.
 
+### Stale VMs remover (optional)
+
+To make sure there aren't any stale long-running runner VMs, it is possible to enable a cron job that automatically removes
+any auto-spawned instances running for more than 12h.
+
+To enable this feature, simply run `./scripts/install_stale_vm_remover.sh`.
+
 ## Starting the runner
 
 ### Manual method

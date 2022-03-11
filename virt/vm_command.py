@@ -1,5 +1,5 @@
 #!/usr/bin/python3
-import os, sys, subprocess, json, click, paramiko, time, functools, platform, shlex, shutil, requests, uuid
+import os, sys, subprocess, json, click, paramiko, time, functools, platform, shlex, shutil, requests, uuid, datetime
 from collections import namedtuple
 
 print = functools.partial(print, flush=True)
@@ -441,18 +441,58 @@ def check_dmesg(instance_number):
 
     execute_ssh_commands(ssh, commands)
 
+def list_auto_spawned_instances(authed_session):
+    # Due to bug in GCP API, we can't filter based on creationTimestamp
+    # https://issuetracker.google.com/issues/132365111
+    # https://issuetracker.google.com/issues/132676194
+    URL = f"https://compute.googleapis.com/compute/v1/projects/{CONFIG.gcp.project}/zones/{CONFIG.gcp.zone}/instances?filter=(name={platform.node()}-auto-spawned*)"
+    r = authed_session.get(URL)
+    return json.loads(r.text)
+
+def delete_stale_instances():
+    credentials, _ = google.auth.default()
+    authed_session = AuthorizedSession(credentials)
+
+    result = list_auto_spawned_instances(authed_session)
+    if "items" not in result:
+        print("Unexpected response while listing instances! Exiting!")
+        sys.exit(1)
+    now = datetime.datetime.utcnow().replace(tzinfo=datetime.timezone.utc)
+    for instance in result['items']:
+        if "creationTimestamp" not in instance or "name" not in instance:
+            print("Unexpected response while listing instances! Exiting!")
+            sys.exit(1)
+        print(f"Checking {instance['name']}..")
+        event_time = datetime.datetime.strptime(instance["creationTimestamp"], "%Y-%m-%dT%H:%M:%S.%f%z")
+        diff = now - event_time
+        hours = diff.seconds/60/60
+        # self hosted runners can run jobs for more then 6 hours:
+        # https://github.community/t/is-that-possible-to-run-job-which-takes-more-than-6-hours-on-self-hosted-runner/17121/8
+        # assume maximum timeout 12h
+        if diff.days > 0 or hours > 12:
+            print(f"Attempting to delete a stale machine({instance['name']}) spawned {instance['creationTimestamp']}..")
+            delete_instance(authed_session, instance['name'])
+
+def check_mode_parameters(mode, instance_number, container_file):
+    if mode == "create_vm":
+        if container_file is None or not container_file:
+            print(f"Required 'container_file' parameter in {mode} is missing or is empty!")
+            sys.exit(1)
+    if mode in ["create_vm", "delete_vm", "check-rsyslog", "detect_preempted_signal", "check_dmesg"]:
+        if instance_number is None:
+            print(f"Required 'instance-number' parameter in {mode} is missing!")
+            sys.exit(1)
+
 @click.command()
-@click.option('--mode', type=click.Choice(['create_vm', 'delete_vm', 'check-rsyslog', 'detect_preempted_signal', 'check_dmesg']), required = True)
-@click.option('-n', '--instance-number', help='Instance number', required=True)
+@click.option('--mode', type=click.Choice(['create_vm', 'delete_vm', 'check-rsyslog', 'detect_preempted_signal', 'check_dmesg', 'delete_stale_instances']), required = True)
+@click.option('-n', '--instance-number', help='Instance number', required=False, default=None)
 @click.option('-s', '--container-file', help='Container file', required=False, default=None)
 @click.option('-d', '--disk-name', help='External disk name', required=False, default=None)
 @click.option('-p', '--preemptible-override', help='Override preemptible setting', required=False, type=int, default=None)
 @click.option('-m', '--machine-type', help='Machine type to use', required=False, default=None)
 def main(mode, instance_number, container_file=None, disk_name=None, preemptible_override=None, machine_type=None):
+    check_mode_parameters(mode, instance_number, container_file)
     if mode == "create_vm":
-        if container_file is None or not container_file:
-            print("Required 'container_file' parameter in create_vm missing or is empty!")
-            sys.exit(1)
         create_vm(instance_number, container_file, disk_name, preemptible_override, machine_type)
     elif mode == "delete_vm":
         delete_vm(instance_number)
@@ -462,6 +502,8 @@ def main(mode, instance_number, container_file=None, disk_name=None, preemptible
         detect_preempted_signal(instance_number)
     elif mode == "check_dmesg":
         check_dmesg(instance_number)
+    elif mode == "delete_stale_instances":
+        delete_stale_instances()
     else:
         print(f"Unknown mode: {mode}! Exiting!")
         sys.exit(1)
