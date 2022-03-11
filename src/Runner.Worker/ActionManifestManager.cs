@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Threading;
@@ -451,7 +451,8 @@ namespace GitHub.Runner.Worker
                         };
                     }
                 }
-                else if (string.Equals(usingToken.Value, "node12", StringComparison.OrdinalIgnoreCase))
+                else if (string.Equals(usingToken.Value, "node12", StringComparison.OrdinalIgnoreCase) ||
+                         string.Equals(usingToken.Value, "node16", StringComparison.OrdinalIgnoreCase))
                 {
                     if (string.IsNullOrEmpty(mainToken?.Value))
                     {
@@ -486,7 +487,7 @@ namespace GitHub.Runner.Worker
                 }
                 else
                 {
-                    throw new ArgumentOutOfRangeException($"'using: {usingToken.Value}' is not supported, use 'docker' or 'node12' instead.");
+                    throw new ArgumentOutOfRangeException($"'using: {usingToken.Value}' is not supported, use 'docker', 'node12' or 'node16' instead.");
                 }
             }
             else if (pluginToken != null)
