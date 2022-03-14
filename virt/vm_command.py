@@ -337,6 +337,16 @@ def create_vm(instance_number, container_file, disk_name=None, preemptible_overr
     node_zip_dst = '/mnt/node.zip'
     infer_dns_cmd = "$(echo $SSH_CONNECTION | awk '{ print $1 }')"
 
+    # Truncate local rsyslog log file
+    log_name = f'work/{get_instance_name(instance_number)}.c.{CONFIG.gcp.project}.internal.log'
+    command = f"{shutil.which('truncate')} -s0 {log_name}"
+    try:
+        subprocess.run(shlex.split(command),stderr=subprocess.STDOUT)
+    except subprocess.CalledProcessError as err:
+        print("Error while truncating local rsyslog file!")
+        print(err)
+        # Don't error out here, as it is not critical task
+
     container_file = container_file if "/" in container_file else "library/" + container_file
 
     # The layout of the /mnt partition is as follows:
