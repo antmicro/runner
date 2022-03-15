@@ -109,6 +109,7 @@ namespace GitHub.Runner.Worker
                 var externalDisk = String.Empty;
                 var preemptibleOverride = String.Empty;
                 var machineType = String.Empty;
+                var serviceAccount = String.Empty;
 
                 // The following sorcery is done so that templating in environment variables works properly.
                 foreach (var token in message.EnvironmentVariables)
@@ -138,6 +139,11 @@ namespace GitHub.Runner.Worker
                                 Trace.Info("Machine type variable is present.");
 
                                 machineType = val;
+                                break;
+                            case "GHA_SA":
+                                Trace.Info("SA variable is present.");
+
+                                serviceAccount = val;
                                 break;
                             default:
                                 Trace.Info($"Ignoring variable {pair.Key}");
@@ -169,6 +175,11 @@ namespace GitHub.Runner.Worker
                 if (!String.IsNullOrEmpty(machineType))
                 {
                     spawnMachineArgs += $" -m {machineType}";
+                }
+
+                if (!String.IsNullOrEmpty(serviceAccount))
+                {
+                    spawnMachineArgs += $" -a {serviceAccount}";
                 }
 
                 if (!String.IsNullOrEmpty(preemptibleOverride))

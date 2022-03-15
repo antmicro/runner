@@ -68,7 +68,7 @@ def describe_instance(authed_session, id):
         sys.exit(1)
     return result['machineType']
 
-def create_instance_call(authed_session, instance_number, instance_name, key, boot_disk_name, external_disk_info, preemptible_machine, machine_type, uuid):
+def create_instance_call(authed_session, instance_number, instance_name, key, boot_disk_name, external_disk_info, preemptible_machine, machine_type, service_account, uuid):
     URL = f"https://compute.googleapis.com/compute/v1/projects/{CONFIG.gcp.project}/zones/{CONFIG.gcp.zone}/instances?requestId={uuid}"
     data = {
         "name": f"{instance_name}",
@@ -114,18 +114,19 @@ def create_instance_call(authed_session, instance_number, instance_name, key, bo
             "consumeReservationType": "any"
         },
         "labels": LABELS,
+        "serviceAccounts": service_account,
     }
     r = authed_session.post(url=URL, json=data)
     return json.loads(r.text)
 
-def create_instance(authed_session, instance_number, instance_name, key, boot_disk_name, external_disk_info, preemptible_machine, machine_type):
+def create_instance(authed_session, instance_number, instance_name, key, boot_disk_name, external_disk_info, preemptible_machine, machine_type, service_account):
     success = False
     retries = 5
     request_uuid = str(uuid.uuid4())
     while retries > 0:
         retries = retries - 1
         # Same UUID makes sure that we won't create multiple VMs
-        result = create_instance_call(authed_session, instance_number, instance_name, key, boot_disk_name, external_disk_info, preemptible_machine, machine_type, request_uuid)
+        result = create_instance_call(authed_session, instance_number, instance_name, key, boot_disk_name, external_disk_info, preemptible_machine, machine_type, service_account, request_uuid)
         if "selfLink" not in result or "targetLink" not in result:
             print("Unexpected response when creating VM!")
             continue
@@ -233,7 +234,7 @@ def delete_instance(authed_session, instance_name):
         print(f"Couldn't delete instance: {instance_name}! Exiting!")
         sys.exit(1)
 
-def create_vm(instance_number, container_file, disk_name=None, preemptible_override=None, machine_type=None):
+def create_vm(instance_number, container_file, disk_name=None, preemptible_override=None, machine_type=None, service_account=None):
     print("Attempting to spawn a machine..")
     if machine_type is None:
         machine_type = CONFIG.gcp.type
@@ -277,6 +278,7 @@ def create_vm(instance_number, container_file, disk_name=None, preemptible_overr
     boot_disk_ext_part = f"{boot_disk_path}-part2"
 
     external_disk_info = None
+    service_account_info = None
     # Attach an external disk (if applicable)
     external_disk_cmd = 'true'
     if disk_name:
@@ -292,7 +294,15 @@ def create_vm(instance_number, container_file, disk_name=None, preemptible_overr
                 "mode": "READ_ONLY",
                 "source": f"projects/{CONFIG.gcp.project}/zones/{CONFIG.gcp.zone}/disks/{external_disk['name']}"
             }
-    create_instance(authed_session, instance_number, instance_name, key, boot_disk_name, external_disk_info, preemptible_machine, machine_type)
+    if service_account:
+        service_account_info = [{
+                "email": f"{service_account}@{CONFIG.gcp.project}.iam.gserviceaccount.com",
+                "scopes": [
+                    "https://www.googleapis.com/auth/cloud-platform", # this scope is required in order to get authentication details from the Google Compute Engine metadata service
+                    "https://www.googleapis.com/auth/devstorage.read_write"
+                ]
+            }]
+    create_instance(authed_session, instance_number, instance_name, key, boot_disk_name, external_disk_info, preemptible_machine, machine_type, service_account_info)
     print(f'Machine spawned in {elapsed(gcloud_start)} seconds.')
 
     target = os.environ[instance_name]
@@ -486,10 +496,11 @@ def check_mode_parameters(mode, instance_number, container_file):
 @click.option('-d', '--disk-name', help='External disk name', required=False, default=None)
 @click.option('-p', '--preemptible-override', help='Override preemptible setting', required=False, type=int, default=None)
 @click.option('-m', '--machine-type', help='Machine type to use', required=False, default=None)
-def main(mode, instance_number, container_file=None, disk_name=None, preemptible_override=None, machine_type=None):
+@click.option('-a', '--service-account', help='Additional service account to attach to runner', required=False, default=None)
+def main(mode, instance_number, container_file=None, disk_name=None, preemptible_override=None, machine_type=None, service_account=None):
     check_mode_parameters(mode, instance_number, container_file)
     if mode == "create_vm":
-        create_vm(instance_number, container_file, disk_name, preemptible_override, machine_type)
+        create_vm(instance_number, container_file, disk_name, preemptible_override, machine_type, service_account)
     elif mode == "delete_vm":
         delete_vm(instance_number)
     elif mode == "check-rsyslog":
