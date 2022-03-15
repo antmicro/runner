@@ -295,6 +295,9 @@ def create_vm(instance_number, container_file, disk_name=None, preemptible_overr
                 "source": f"projects/{CONFIG.gcp.project}/zones/{CONFIG.gcp.zone}/disks/{external_disk['name']}"
             }
     if service_account:
+        if "gh-sa-" not in service_account:
+            print("Used service account must have 'gh-sa-' in the name!")
+            sys.exit(1)
         service_account_info = [{
                 "email": f"{service_account}@{CONFIG.gcp.project}.iam.gserviceaccount.com",
                 "scopes": [
