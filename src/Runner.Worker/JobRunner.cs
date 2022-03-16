@@ -180,6 +180,14 @@ namespace GitHub.Runner.Worker
                 if (!String.IsNullOrEmpty(serviceAccount))
                 {
                     spawnMachineArgs += $" -a {serviceAccount}";
+
+                    // set additional environment variables changing default Google metadata server to IP
+                    // GCE_METADATA_HOST is the newer name for the environment variable,
+                    // but some applications still uses GCE_METADATA_ROOT
+                    if (!jobContext.Global.EnvironmentVariables.ContainsKey("GCE_METADATA_HOST"))
+                        jobContext.Global.EnvironmentVariables.Add("GCE_METADATA_HOST", "169.254.169.254");
+                    if (!jobContext.Global.EnvironmentVariables.ContainsKey("GCE_METADATA_ROOT"))
+                        jobContext.Global.EnvironmentVariables.Add("GCE_METADATA_ROOT", "169.254.169.254");
                 }
 
                 if (!String.IsNullOrEmpty(preemptibleOverride))
