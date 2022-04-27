@@ -351,30 +351,35 @@ namespace GitHub.Runner.Worker
                 finally
                 {
                     Trace.Info("Finalize job.");
-                    var checkDmesgProc = new Process();
+                    try {
+                        var checkDmesgProc = new Process();
 
-                    checkDmesgProc.StartInfo.FileName = WhichUtil.Which("python3", trace: Trace);
-                    checkDmesgProc.StartInfo.Arguments = $"vm_command.py --mode check_dmesg -n {instanceNumber}";
-                    checkDmesgProc.StartInfo.WorkingDirectory = virtDir;
-                    checkDmesgProc.StartInfo.UseShellExecute = false;
-                    checkDmesgProc.StartInfo.RedirectStandardError = true;
-                    checkDmesgProc.StartInfo.RedirectStandardOutput = true;
+                        checkDmesgProc.StartInfo.FileName = WhichUtil.Which("python3", trace: Trace);
+                        checkDmesgProc.StartInfo.Arguments = $"vm_command.py --mode check_dmesg -n {instanceNumber}";
+                        checkDmesgProc.StartInfo.WorkingDirectory = virtDir;
+                        checkDmesgProc.StartInfo.UseShellExecute = false;
+                        checkDmesgProc.StartInfo.RedirectStandardError = true;
+                        checkDmesgProc.StartInfo.RedirectStandardOutput = true;
 
-                    checkDmesgProc.OutputDataReceived += (_, args) =>
-                    {
-                        Trace.Info(args.Data ?? "");
-                        jobContext.Warning(args.Data ?? "");
-                    };
+                        checkDmesgProc.OutputDataReceived += (_, args) =>
+                        {
+                            Trace.Info(args.Data ?? "");
+                            jobContext.Warning(args.Data ?? "");
+                        };
 
-                    checkDmesgProc.ErrorDataReceived += (_, args) => Trace.Error(args.Data ?? "");
-                    checkDmesgProc.Start();
-                    checkDmesgProc.BeginOutputReadLine();
-                    checkDmesgProc.BeginErrorReadLine();
-                    checkDmesgProc.WaitForExit();
+                        checkDmesgProc.ErrorDataReceived += (_, args) => Trace.Error(args.Data ?? "");
+                        checkDmesgProc.Start();
+                        checkDmesgProc.BeginOutputReadLine();
+                        checkDmesgProc.BeginErrorReadLine();
+                        checkDmesgProc.WaitForExit();
 
-                    FinalizeGcp(jobContext, message, vmSpecs);
+                        FinalizeGcp(jobContext, message, vmSpecs);
 
-                    jobExtension.FinalizeJob(jobContext, message, jobStartTimeUtc);
+                        jobExtension.FinalizeJob(jobContext, message, jobStartTimeUtc);
+                    } catch (Exception e) {
+                        Trace.Info("Exception when checking rsyslog!");
+                        Trace.Info(e.Message);
+                    }
                 }
 
                 Trace.Info($"Job result after all job steps finish: {jobContext.Result ?? TaskResult.Succeeded}");
@@ -408,104 +413,114 @@ namespace GitHub.Runner.Worker
             var virtDir = message.Variables["system.qemuDir"].Value;
             var WorkspaceDirectory = message.Variables["system.containerWorkspace"].Value;
 
-            var umountProc = new Process();
+            try {
+                var umountProc = new Process();
 
-            umountProc.StartInfo.FileName = WhichUtil.Which("bash", trace: Trace);
-            umountProc.StartInfo.Arguments = $"sshfs.sh umount {instanceNumber} {sshIp}";
-            umountProc.StartInfo.WorkingDirectory = virtDir;
-            umountProc.StartInfo.UseShellExecute = false;
-            umountProc.StartInfo.RedirectStandardError = true;
-            umountProc.StartInfo.RedirectStandardOutput = true;
+                umountProc.StartInfo.FileName = WhichUtil.Which("bash", trace: Trace);
+                umountProc.StartInfo.Arguments = $"sshfs.sh umount {instanceNumber} {sshIp}";
+                umountProc.StartInfo.WorkingDirectory = virtDir;
+                umountProc.StartInfo.UseShellExecute = false;
+                umountProc.StartInfo.RedirectStandardError = true;
+                umountProc.StartInfo.RedirectStandardOutput = true;
 
-            umountProc.OutputDataReceived += (_, args) => Trace.Info(args.Data ?? "");
-            umountProc.ErrorDataReceived += (_, args) =>
-            {
-                Trace.Error(args.Data ?? "");
-                jobContext.Warning(args.Data ?? "");
-            };
+                umountProc.OutputDataReceived += (_, args) => Trace.Info(args.Data ?? "");
+                umountProc.ErrorDataReceived += (_, args) =>
+                {
+                    Trace.Error(args.Data ?? "");
+                    jobContext.Warning(args.Data ?? "");
+                };
 
-            var gZone = vmSpecs.gcp.zone;
-            var deleteVmProc = new Process();
-            deleteVmProc.StartInfo.FileName = WhichUtil.Which("python3", trace: Trace);
-            deleteVmProc.StartInfo.Arguments = $"vm_command.py --mode delete_vm -n {instanceNumber}";
-            deleteVmProc.StartInfo.WorkingDirectory = virtDir;
-            deleteVmProc.StartInfo.UseShellExecute = false;
-            deleteVmProc.StartInfo.RedirectStandardError = true;
-            deleteVmProc.StartInfo.RedirectStandardOutput = true;
+                var gZone = vmSpecs.gcp.zone;
+                var deleteVmProc = new Process();
+                deleteVmProc.StartInfo.FileName = WhichUtil.Which("python3", trace: Trace);
+                deleteVmProc.StartInfo.Arguments = $"vm_command.py --mode delete_vm -n {instanceNumber}";
+                deleteVmProc.StartInfo.WorkingDirectory = virtDir;
+                deleteVmProc.StartInfo.UseShellExecute = false;
+                deleteVmProc.StartInfo.RedirectStandardError = true;
+                deleteVmProc.StartInfo.RedirectStandardOutput = true;
 
-            deleteVmProc.OutputDataReceived += (_, args) => Trace.Info(args.Data ?? "");
-            deleteVmProc.ErrorDataReceived += (_, args) => Trace.Error(args.Data ?? "");
+                deleteVmProc.OutputDataReceived += (_, args) => Trace.Info(args.Data ?? "");
+                deleteVmProc.ErrorDataReceived += (_, args) => Trace.Error(args.Data ?? "");
 
-            Trace.Info($"Unmouting sshfs from {WorkspaceDirectory}");
-            umountProc.Start();
-            umountProc.BeginOutputReadLine();
-            umountProc.BeginErrorReadLine();
-            umountProc.WaitForExit();
+                Trace.Info($"Unmouting sshfs from {WorkspaceDirectory}");
+                umountProc.Start();
+                umountProc.BeginOutputReadLine();
+                umountProc.BeginErrorReadLine();
+                umountProc.WaitForExit();
 
-            Trace.Info($"Destroying {Constants.RunnerIPVariable} from {gZone}");
+                Trace.Info($"Destroying {Constants.RunnerIPVariable} from {gZone}");
 
-            deleteVmProc.Start();
-            deleteVmProc.BeginOutputReadLine();
-            deleteVmProc.BeginErrorReadLine();
-            deleteVmProc.WaitForExit();
+                deleteVmProc.Start();
+                deleteVmProc.BeginOutputReadLine();
+                deleteVmProc.BeginErrorReadLine();
+                deleteVmProc.WaitForExit();
 
-            // check rsyslog for shutdown reason
-            var checkRsyslog = new Process();
-            checkRsyslog.StartInfo.FileName = WhichUtil.Which("python3", trace: Trace);
-            checkRsyslog.StartInfo.Arguments = $"vm_command.py --mode check-rsyslog -n {instanceNumber}";
-            checkRsyslog.StartInfo.WorkingDirectory = virtDir;
-            checkRsyslog.StartInfo.UseShellExecute = false;
-            checkRsyslog.StartInfo.RedirectStandardError = true;
-            checkRsyslog.StartInfo.RedirectStandardOutput = true;
+                // check rsyslog for shutdown reason
+                var checkRsyslog = new Process();
+                checkRsyslog.StartInfo.FileName = WhichUtil.Which("python3", trace: Trace);
+                checkRsyslog.StartInfo.Arguments = $"vm_command.py --mode check-rsyslog -n {instanceNumber}";
+                checkRsyslog.StartInfo.WorkingDirectory = virtDir;
+                checkRsyslog.StartInfo.UseShellExecute = false;
+                checkRsyslog.StartInfo.RedirectStandardError = true;
+                checkRsyslog.StartInfo.RedirectStandardOutput = true;
 
-            checkRsyslog.OutputDataReceived += (_, args) => 
-            {
-                vmCtx.Output(args.Data ?? "");
-                Trace.Info(args.Data ?? "");
-            };
-            // Log stderr to local logfile only to avoid potential leaks.
-            checkRsyslog.ErrorDataReceived += (_, args) => Trace.Error(args.Data ?? "");
-            checkRsyslog.Start();
-            checkRsyslog.BeginOutputReadLine();
-            checkRsyslog.BeginErrorReadLine();
+                checkRsyslog.OutputDataReceived += (_, args) => 
+                {
+                    vmCtx.Output(args.Data ?? "");
+                    Trace.Info(args.Data ?? "");
+                };
+                // Log stderr to local logfile only to avoid potential leaks.
+                checkRsyslog.ErrorDataReceived += (_, args) => Trace.Error(args.Data ?? "");
+                checkRsyslog.Start();
+                checkRsyslog.BeginOutputReadLine();
+                checkRsyslog.BeginErrorReadLine();
 
-            checkRsyslog.WaitForExit();
-            vmCtx.Complete();
+                checkRsyslog.WaitForExit();
+                vmCtx.Complete();
+            } catch (Exception e) {
+                Trace.Info("Exception!");
+                Trace.Info(e.Message);
+            }
 
             return true;
         }
 
         private int StartGcpMachine(String spawnMachineArgs, String virtDir, StringBuilder output_string, IExecutionContext vmCtx, IExecutionContext jobContext) {
-            var spawnMachineProc = new Process();
-            spawnMachineProc.StartInfo.FileName = WhichUtil.Which("python3", trace: Trace);
-            spawnMachineProc.StartInfo.Arguments = spawnMachineArgs; 
-            spawnMachineProc.StartInfo.WorkingDirectory = virtDir;
-            spawnMachineProc.StartInfo.UseShellExecute = false;
-            spawnMachineProc.StartInfo.RedirectStandardError = true;
-            spawnMachineProc.StartInfo.RedirectStandardOutput = true;
+            try {
+                var spawnMachineProc = new Process();
+                spawnMachineProc.StartInfo.FileName = WhichUtil.Which("python3", trace: Trace);
+                spawnMachineProc.StartInfo.Arguments = spawnMachineArgs; 
+                spawnMachineProc.StartInfo.WorkingDirectory = virtDir;
+                spawnMachineProc.StartInfo.UseShellExecute = false;
+                spawnMachineProc.StartInfo.RedirectStandardError = true;
+                spawnMachineProc.StartInfo.RedirectStandardOutput = true;
 
-            var acm = HostContext.CreateService<IActionCommandManager>();
+                var acm = HostContext.CreateService<IActionCommandManager>();
 
-            spawnMachineProc.OutputDataReceived += (_, args) => 
-            {
-                output_string.Append(args.Data + "\n" ?? "");
-                if (!acm.TryProcessCommand(vmCtx, args.Data ?? "", null)) {
-                    vmCtx.Output(args.Data ?? "");
-                }
-                Trace.Info(args.Data ?? "");
-            };
-            // Log stderr to local logfile only to avoid potential leaks.
-            spawnMachineProc.ErrorDataReceived += (_, args) => Trace.Error(args.Data ?? "");
+                spawnMachineProc.OutputDataReceived += (_, args) => 
+                {
+                    output_string.Append(args.Data + "\n" ?? "");
+                    if (!acm.TryProcessCommand(vmCtx, args.Data ?? "", null)) {
+                        vmCtx.Output(args.Data ?? "");
+                    }
+                    Trace.Info(args.Data ?? "");
+                };
+                // Log stderr to local logfile only to avoid potential leaks.
+                spawnMachineProc.ErrorDataReceived += (_, args) => Trace.Error(args.Data ?? "");
 
-            spawnMachineProc.Start();
-            spawnMachineProc.BeginOutputReadLine();
-            spawnMachineProc.BeginErrorReadLine();
+                spawnMachineProc.Start();
+                spawnMachineProc.BeginOutputReadLine();
+                spawnMachineProc.BeginErrorReadLine();
 
-            Trace.Info($"Starting VM with start script PID {spawnMachineProc.Id}");
+                Trace.Info($"Starting VM with start script PID {spawnMachineProc.Id}");
 
-            spawnMachineProc.WaitForExit();
+                spawnMachineProc.WaitForExit();
 
-            return spawnMachineProc.ExitCode;
+                return spawnMachineProc.ExitCode;
+            } catch (Exception e) {
+                Trace.Info("Exception when starting vm_command create!");
+                Trace.Info(e.Message);
+            }
         }
 
         private bool SetRunnerIP(String output) {
@@ -530,28 +545,33 @@ namespace GitHub.Runner.Worker
         }
 
         private int MountWorkerFilesystem(IExecutionContext vmCtx, String virtDir) {
-            var sshfsProc = new Process();
-            var instanceNumber = Environment.GetEnvironmentVariable(Constants.InstanceNumberVariable);
-            var sshIp = Environment.GetEnvironmentVariable(Constants.RunnerIPVariable);
-            sshfsProc.StartInfo.FileName = WhichUtil.Which("bash", trace: Trace);
-            sshfsProc.StartInfo.Arguments = $"sshfs.sh mount {instanceNumber} {sshIp}";
-            sshfsProc.StartInfo.WorkingDirectory = virtDir;
-            sshfsProc.StartInfo.UseShellExecute = false;
-            sshfsProc.StartInfo.RedirectStandardError = true;
-            sshfsProc.StartInfo.RedirectStandardOutput = true;
+            try {
+                var sshfsProc = new Process();
+                var instanceNumber = Environment.GetEnvironmentVariable(Constants.InstanceNumberVariable);
+                var sshIp = Environment.GetEnvironmentVariable(Constants.RunnerIPVariable);
+                sshfsProc.StartInfo.FileName = WhichUtil.Which("bash", trace: Trace);
+                sshfsProc.StartInfo.Arguments = $"sshfs.sh mount {instanceNumber} {sshIp}";
+                sshfsProc.StartInfo.WorkingDirectory = virtDir;
+                sshfsProc.StartInfo.UseShellExecute = false;
+                sshfsProc.StartInfo.RedirectStandardError = true;
+                sshfsProc.StartInfo.RedirectStandardOutput = true;
 
-            sshfsProc.OutputDataReceived += (_, args) => Trace.Info(args.Data ?? "");
-            sshfsProc.ErrorDataReceived += (_, args) => Trace.Error(args.Data ?? "");
+                sshfsProc.OutputDataReceived += (_, args) => Trace.Info(args.Data ?? "");
+                sshfsProc.ErrorDataReceived += (_, args) => Trace.Error(args.Data ?? "");
 
-            vmCtx.Output("Mounting worker filesystem...");
+                vmCtx.Output("Mounting worker filesystem...");
 
-            sshfsProc.Start();
-            sshfsProc.BeginOutputReadLine();
-            sshfsProc.BeginErrorReadLine();
-            sshfsProc.WaitForExit(30000);
-            sshfsProc.WaitForExit();
+                sshfsProc.Start();
+                sshfsProc.BeginOutputReadLine();
+                sshfsProc.BeginErrorReadLine();
+                sshfsProc.WaitForExit(30000);
+                sshfsProc.WaitForExit();
 
-            return sshfsProc.ExitCode;
+                return sshfsProc.ExitCode;
+            } catch (Exception e) {
+                Trace.Info("Exception when mounting!");
+                Trace.Info(e.Message);
+            }
         }
 
         private void RestartGcpMachine(int exitCode, IExecutionContext jobContext, Pipelines.AgentJobRequestMessage message, dynamic vmSpecs, ref IExecutionContext vmCtx) {
