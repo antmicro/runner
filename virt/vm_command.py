@@ -132,6 +132,7 @@ def create_instance(authed_session, instance_number, instance_name, key, boot_di
         result = create_instance_call(authed_session, instance_number, instance_name, key, boot_disk_name, external_disk_info, preemptible_machine, machine_type, service_account, request_uuid)
         if "selfLink" not in result or "targetLink" not in result:
             print("Unexpected response when creating VM!")
+            time.sleep(1)
             continue
         wait_for_gcp(authed_session, result['selfLink'])
         export_gcp_ip(authed_session, result['targetLink'], instance_name)
