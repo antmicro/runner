@@ -27,6 +27,9 @@ def load_config():
 
 CONFIG = load_config()
 
+def str2bool(v):
+    return v.lower() in ("yes", "true", "t", "1")
+
 def wait_for_gcp(authed_session, link):
     start = time.time()
     # set timeout to 60s
@@ -269,7 +272,7 @@ def create_vm(instance_number, container_file, disk_name=None, preemptible_overr
     if preemptible_override is not None:
         preemptible_machine = PREEMPT if bool(preemptible_override) else 'false'
 
-    print(f'Preemptible: {bool(preemptible_machine)}')
+    print(f'Preemptible: {str2bool(preemptible_machine)}')
 
     # Create and start the virtual machine.
     gcloud_start = time.time()
