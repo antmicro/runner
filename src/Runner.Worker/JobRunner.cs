@@ -520,6 +520,7 @@ namespace GitHub.Runner.Worker
             } catch (Exception e) {
                 Trace.Info("Exception when starting vm_command create!");
                 Trace.Info(e.Message);
+                return 255;
             }
         }
 
@@ -571,6 +572,7 @@ namespace GitHub.Runner.Worker
             } catch (Exception e) {
                 Trace.Info("Exception when mounting!");
                 Trace.Info(e.Message);
+                return 255;
             }
         }
 
