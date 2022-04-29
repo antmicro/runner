@@ -110,6 +110,8 @@ namespace GitHub.Runner.Worker
                 var preemptibleOverride = String.Empty;
                 var machineType = String.Empty;
                 var serviceAccount = String.Empty;
+                var tunnelConfig = String.Empty;
+                var tunnelKey = String.Empty; 
 
                 // The following sorcery is done so that templating in environment variables works properly.
                 foreach (var token in message.EnvironmentVariables)
@@ -145,6 +147,16 @@ namespace GitHub.Runner.Worker
 
                                 serviceAccount = val;
                                 break;
+                            case "GHA_SSH_TUNNEL_CONFIG":
+                                Trace.Info("Tunnel config was provided.");
+
+                                tunnelConfig = val;
+                                break;
+                            case "GHA_SSH_TUNNEL_KEY":
+                                Trace.Info("Tunnel key was provided.");
+
+                                tunnelKey = val;
+                                break;
                             default:
                                 Trace.Info($"Ignoring variable {pair.Key}");
                                 break;
@@ -166,6 +178,16 @@ namespace GitHub.Runner.Worker
                 Trace.Info($"Container: ${container.Image}");
 
                 var spawnMachineArgs = $"vm_command.py --mode create_vm -n {instanceNumber} -s {container.Image}";
+
+                if (!String.IsNullOrEmpty(tunnelConfig))
+                {
+                    spawnMachineArgs += $" --ssh-tunnel-config {tunnelConfig}";
+                }
+
+                if (!String.IsNullOrEmpty(tunnelKey))
+                {
+                    spawnMachineArgs += $" --ssh-tunnel-key {tunnelKey}";
+                }
 
                 if (!String.IsNullOrEmpty(externalDisk))
                 {

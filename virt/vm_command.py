@@ -238,7 +238,7 @@ def delete_instance(authed_session, instance_name):
         print(f"Couldn't delete instance: {instance_name}! Exiting!")
         sys.exit(1)
 
-def create_vm(instance_number, container_file, disk_name=None, preemptible_override=None, machine_type=None, service_account=None):
+def create_vm(instance_number, container_file, disk_name=None, preemptible_override=None, machine_type=None, service_account=None, ssh_tunnel_config=None, ssh_tunnel_key=None):
     print("Attempting to spawn a machine..")
     if machine_type is None:
         machine_type = CONFIG.gcp.type
@@ -280,6 +280,11 @@ def create_vm(instance_number, container_file, disk_name=None, preemptible_overr
     boot_disk_name = f"scalerunner-boot-disk"
     boot_disk_path = f"/dev/disk/by-id/scsi-0Google_PersistentDisk_{boot_disk_name}"
     boot_disk_ext_part = f"{boot_disk_path}-part2"
+
+    ssh_tunnel_cmd = 'true'
+
+    if ssh_tunnel_config and ssh_tunnel_key:
+        ssh_tunnel_cmd = f'sudo singularity run --app sshtunnel instance://util 1 "{ssh_tunnel_config}" "{ssh_tunnel_key}"'
 
     external_disk_info = None
     service_account_info = None
@@ -390,6 +395,7 @@ def create_vm(instance_number, container_file, disk_name=None, preemptible_overr
             f'sudo singularity pull --nohttps {container_sif_location} docker://{infer_dns_cmd}:5000/{container_file}',
             f'sudo singularity instance start -C -e --dns {infer_dns_cmd} --overlay /mnt/3 --bind /mnt/2:/root,/mnt/aux {node_sif_location} node',
             f'sudo singularity instance start -C -e --dns {infer_dns_cmd} --writable-tmpfs {util_sif_location} util',
+            ssh_tunnel_cmd,
             f'echo "::group::Starting {container_file}..."',
             f'sudo singularity --debug instance start -C -e --dns {infer_dns_cmd} --overlay /mnt/1 --bind /mnt/2:/root,/mnt/aux {container_sif_location} i',
             'echo "::endgroup::"',
@@ -522,10 +528,12 @@ def check_mode_parameters(mode, instance_number, container_file):
 @click.option('-p', '--preemptible-override', help='Override preemptible setting', required=False, type=int, default=None)
 @click.option('-m', '--machine-type', help='Machine type to use', required=False, default=None)
 @click.option('-a', '--service-account', help='Additional service account to attach to runner', required=False, default=None)
-def main(mode, instance_number, container_file=None, disk_name=None, preemptible_override=None, machine_type=None, service_account=None):
+@click.option('--ssh-tunnel-config', help="Base64 encoded SSH configuration file for establishing a tunnel", required=False, default=None)
+@click.option('--ssh-tunnel-key', help="Base64 encoded private SSH key for establishing a tunnel", required=False, default=None)
+def main(mode, instance_number, container_file=None, disk_name=None, preemptible_override=None, machine_type=None, service_account=None, ssh_tunnel_config=None, ssh_tunnel_key=None):
     check_mode_parameters(mode, instance_number, container_file)
     if mode == "create_vm":
-        create_vm(instance_number, container_file, disk_name, preemptible_override, machine_type, service_account)
+        create_vm(instance_number, container_file, disk_name, preemptible_override, machine_type, service_account, ssh_tunnel_config, ssh_tunnel_key)
     elif mode == "delete_vm":
         delete_vm(instance_number)
     elif mode == "check-rsyslog":
