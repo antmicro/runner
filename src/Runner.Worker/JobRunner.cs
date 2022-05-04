@@ -150,12 +150,18 @@ namespace GitHub.Runner.Worker
                             case "GHA_SSH_TUNNEL_CONFIG":
                                 Trace.Info("Tunnel config was provided.");
 
-                                tunnelConfig = val;
+                                if (DecodeBase64OrAddIssue(pair, jobContext))
+                                {
+                                    tunnelConfig = val;
+                                }
                                 break;
                             case "GHA_SSH_TUNNEL_KEY":
                                 Trace.Info("Tunnel key was provided.");
 
-                                tunnelKey = val;
+                                if (DecodeBase64OrAddIssue(pair, jobContext))
+                                {
+                                    tunnelKey = val;
+                                }
                                 break;
                             default:
                                 Trace.Info($"Ignoring variable {pair.Key}");
@@ -419,6 +425,25 @@ namespace GitHub.Runner.Worker
                 }
 
                 await ShutdownQueue(throwOnFailure: false);
+            }
+        }
+
+        private bool DecodeBase64OrAddIssue(KeyValuePair<String, String> envPair, IExecutionContext jobContext)
+        {
+            try
+            {
+                Encoding.UTF8.GetString(Convert.FromBase64String(envPair.Value)); 
+                return true;
+            }
+            catch (FormatException)
+            {
+                jobContext.AddIssue(
+                        new Issue() { 
+                            Type = IssueType.Warning, 
+                            Message = $"Some features will not be enabled as the value of {envPair.Key} is not a valid Base64 string." 
+                            }
+                        );
+                return false;
             }
         }
 
