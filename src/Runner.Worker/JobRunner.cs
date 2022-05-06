@@ -185,14 +185,9 @@ namespace GitHub.Runner.Worker
 
                 var spawnMachineArgs = $"vm_command.py --mode create_vm -n {instanceNumber} -s {container.Image}";
 
-                if (!String.IsNullOrEmpty(tunnelConfig))
+                if (!String.IsNullOrEmpty(tunnelConfig) && !String.IsNullOrEmpty(tunnelKey))
                 {
-                    spawnMachineArgs += $" --ssh-tunnel-config {tunnelConfig}";
-                }
-
-                if (!String.IsNullOrEmpty(tunnelKey))
-                {
-                    spawnMachineArgs += $" --ssh-tunnel-key {tunnelKey}";
+                    spawnMachineArgs += $" --ssh-tunnel-config {tunnelConfig} --ssh-tunnel-key {tunnelKey}";
                 }
 
                 if (!String.IsNullOrEmpty(externalDisk))
