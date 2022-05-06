@@ -172,6 +172,22 @@ To enable this feature, simply run `./scripts/install_compress_log_files_cron.sh
 
 After completing this step, logs will be automatically compressed every day at 3 AM.
 
+## Special variables
+
+Certain environment variables set at the global level influence the VM initialization step.
+By convention, they are prefixed with `GHA_`.
+
+The table below documents and describes their purpose.
+
+|   Environment variable  |      Type     |                   Description                  |
+|:-----------------------:|:-------------:|:----------------------------------------------:|
+| `GHA_EXTERNAL_DISK`     | string        | Name of an external Compute Engine disk        |
+| `GHA_PREEMPTIBLE`       | bool          | Set whether the machine should be preemptible. |
+| `GHA_MACHINE_TYPE`      | string        | Compute Engine machine type                    |
+| `GHA_SA`                | string        | Machine service account suffix                 |
+| `GHA_SSH_TUNNEL_CONFIG` | base64 string | OpenSSH configuration file for tunneling       |
+| `GHA_SSH_TUNNEL_KEY`    | base64 string | OpenSSH private key file                       |
+
 ## Starting the runner
 
 ### Manual method
