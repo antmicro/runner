@@ -329,9 +329,12 @@ namespace GitHub.Runner.Worker.Handlers
 
                 foreach (var e in Environment)
                 {
-                    var exportStr = $"export {e.Key}=\"{GCPRunner.TranslateToGCPRunnerPath(e.Value.Replace("\"", "\\\""))}\";";
-                    Trace.Info(exportStr);
-                    exportStanzas += exportStr;
+                    if (!e.Key.StartsWith("GHA_"))
+                    {
+                        var exportStr = $"export {e.Key}=\"{GCPRunner.TranslateToGCPRunnerPath(e.Value.Replace("\"", "\\\""))}\";";
+                        Trace.Info(exportStr);
+                        exportStanzas += exportStr;
+                    }
                 }
 
                 exportStanzas += $"export PATH={prepend}{pathSuffix};";
