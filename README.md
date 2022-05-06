@@ -188,6 +188,49 @@ The table below documents and describes their purpose.
 | `GHA_SSH_TUNNEL_CONFIG` | base64 string | OpenSSH configuration file for tunneling       |
 | `GHA_SSH_TUNNEL_KEY`    | base64 string | OpenSSH private key file                       |
 
+### SSH port forwarding
+
+It is possible to establish a secure tunnel to an SSH-enabled host in order to forward some ports.
+
+In order to do that, prepare an configuration file according to the [OpenSSH client configuration syntax](https://linux.die.net/man/5/ssh_config) and encode it in Base64.
+
+An example configuration file may looks as follows:
+
+```sshconfig
+Host some-host
+  HostName example.com
+  User test
+  StrictHostKeyChecking no
+  ExitOnForwardFailure yes
+  LocalForward localhost:8080 127.0.0.1:80
+```
+
+This will forward the HTTP port from `example.com` to port 8080 on the worker machine.
+The forwarded port will be available within the job container (this will allow you to, for example, run `wget localhost:8080`).
+
+Apart from preparing the configuration file, it is necessary to prepare a private key for authentication with the remote host
+
+Both files need to be encoded in Base64 (this can be done by running `cat <filename> | base64 -w0`), stored in [GitHub Actions Encrypted secrets](https://docs.github.com/en/actions/security-guides/encrypted-secrets) and exposed in the workflow file.
+
+An example workflow file leveraging this feature may look as follows:
+
+```yaml
+on: [push]
+
+name: test
+
+jobs:
+  centos:
+    container: centos:7
+    runs-on: [self-hosted, Linux, X64]
+    env:
+      GHA_SSH_TUNNEL_KEY: "${{ secrets.GHA_SSH_TUNNEL_KEY }}"
+      GHA_SSH_TUNNEL_CONFIG: "${{ secrets.GHA_SSH_TUNNEL_CONFIG }}"
+    steps:
+    - run: yum -y install wget
+    - run: wget http://localhost:8080 && cat index.html
+```
+
 ## Starting the runner
 
 ### Manual method
