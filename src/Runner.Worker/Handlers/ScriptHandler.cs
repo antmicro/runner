@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Diagnostics;
 using System.IO;
 using System.Text;
@@ -368,6 +368,8 @@ namespace GitHub.Runner.Worker.Handlers
                                 ".vm_specs.json"
                                 );
                         dynamic vmSpecs = JObject.Parse(File.ReadAllText(vmSpecsLocation));
+                        var rootDir = new DirectoryInfo(HostContext.GetDirectory(WellKnownDirectory.Root)).Parent.FullName;
+                        var virtDir = Path.Combine(rootDir, "virt");
 
                         Trace.Info($"Running diagnostics for {sshIp} in zone {vmSpecs.gcp.zone}");
 
@@ -375,79 +377,37 @@ namespace GitHub.Runner.Worker.Handlers
                         var fetchSyslogsArgs = new List<string>(Constants.CommonSshArgs);
                         fetchSyslogsArgs.Add("cat /var/log/messages");
 
-                        var fetchSyslogs = new Process();
-                        fetchSyslogs.StartInfo.FileName = WhichUtil.Which("ssh", trace: Trace);
-                        fetchSyslogs.StartInfo.Arguments = string.Join(" ", fetchSyslogsArgs.ToArray());
-                        fetchSyslogs.StartInfo.UseShellExecute = false;
-                        fetchSyslogs.StartInfo.RedirectStandardError = true;
-                        fetchSyslogs.StartInfo.RedirectStandardOutput = true;
+                        GCPCoordinator.RunProcess(
+                                fileName: "ssh",
+                                arguments: string.Join(" ", fetchSyslogsArgs.ToArray()),
+                                workDirectory: virtDir,
+                                outputDataReceivedFunc: (_, args) => Trace.Info(args.Data ?? ""),
+                                errorDataReceivedFunc: (_, args) => Trace.Error(args.Data ?? ""),
+                                exceptionFunc: (e) => { Trace.Info("Exception when fetching syslog!"); Trace.Info(e.Message); },
+                                trace: Trace,
+                                exceptionReturnCode: 255);
 
-                        fetchSyslogs.OutputDataReceived += (_, args) => Trace.Info(args.Data ?? "");
-                        fetchSyslogs.ErrorDataReceived += (_, args) => Trace.Error(args.Data ?? "");
-
-                        fetchSyslogs.Start();
-                        fetchSyslogs.BeginOutputReadLine();
-                        fetchSyslogs.BeginErrorReadLine();
-
-                        // Query GCP while the previous command is running
-                        var checkMachineProc = new Process();
                         var checkMachineRawJson = String.Empty;
-                        checkMachineProc.StartInfo.FileName = WhichUtil.Which("gcloud", trace: Trace);
-                        checkMachineProc.StartInfo.Arguments = String.Join(
-                                " ",
-                                "compute instances describe",
-                                sshIp,
-                                $"--zone={vmSpecs.gcp.zone}",
-                                "--format=json",
-                                "--quiet"
-                                );
-                        checkMachineProc.StartInfo.UseShellExecute = false;
-                        checkMachineProc.StartInfo.RedirectStandardError = true;
-                        checkMachineProc.StartInfo.RedirectStandardOutput = true;
+                        GCPCoordinator.RunProcess(
+                                fileName: "gcloud",
+                                arguments: String.Join(" ", "compute instances describe", sshIp, $"--zone={vmSpecs.gcp.zone}", "--format=json", "--quiet"),
+                                workDirectory: virtDir,
+                                outputDataReceivedFunc: (_, args) => checkMachineRawJson += args.Data ?? "",
+                                errorDataReceivedFunc: (_, args) => Trace.Error(args.Data ?? ""),
+                                exceptionFunc: (e) => { Trace.Info("Exception when checking machine!"); Trace.Info(e.Message); },
+                                trace: Trace,
+                                exceptionReturnCode: 255);
 
-                        checkMachineProc.OutputDataReceived += (_, args) => 
-                        {
-                            checkMachineRawJson += args.Data ?? "";
-                        };
-                        checkMachineProc.ErrorDataReceived += (_, args) => Trace.Error(args.Data ?? "");
-
-                        checkMachineProc.Start();
-                        checkMachineProc.BeginOutputReadLine();
-                        checkMachineProc.BeginErrorReadLine();
-
-                        // Fetch serial port logs from GCP
-                        var getSerialPortProc = new Process();
                         var getSerialPortRawJson = String.Empty;
-                        getSerialPortProc.StartInfo.FileName = WhichUtil.Which("gcloud", trace: Trace);
-                        getSerialPortProc.StartInfo.Arguments = String.Join(
-                                " ",
-                                "compute instances get-serial-port-output",
-                                sshIp,
-                                $"--zone={vmSpecs.gcp.zone}",
-                                "--format=json",
-                                "--quiet"
-                                );
-                        getSerialPortProc.StartInfo.UseShellExecute = false;
-                        getSerialPortProc.StartInfo.RedirectStandardError = true;
-                        getSerialPortProc.StartInfo.RedirectStandardOutput = true;
-
-                        getSerialPortProc.OutputDataReceived += (_, args) => 
-                        {
-                            getSerialPortRawJson += args.Data ?? "";
-                        };
-                        getSerialPortProc.ErrorDataReceived += (_, args) => Trace.Error(args.Data ?? "");
-
-                        getSerialPortProc.Start();
-                        getSerialPortProc.BeginOutputReadLine();
-                        getSerialPortProc.BeginErrorReadLine();
-
-                        // Wait for above processes to complete
-                        checkMachineProc.WaitForExit();
-                        getSerialPortProc.WaitForExit();
-                        fetchSyslogs.WaitForExit();
-
-                        Trace.Info($"Check machine status exit code: {checkMachineProc.ExitCode}");
-                        Trace.Info($"Cat logs exit code: {fetchSyslogs.ExitCode}");
+                        GCPCoordinator.RunProcess(
+                                fileName: "gcloud",
+                                arguments: String.Join(" ", "compute instances get-serial-port-output", sshIp, $"--zone={vmSpecs.gcp.zone}", "--format=json", "--quiet"),
+                                workDirectory: virtDir,
+                                outputDataReceivedFunc: (_, args) => getSerialPortRawJson += args.Data ?? "",
+                                errorDataReceivedFunc: (_, args) => Trace.Error(args.Data ?? ""),
+                                exceptionFunc: (e) => { Trace.Info("Exception when getting serial port output!"); Trace.Info(e.Message); },
+                                trace: Trace,
+                                exceptionReturnCode: 255);
 
                         try
                         {
@@ -473,24 +433,19 @@ namespace GitHub.Runner.Worker.Handlers
                             Trace.Error($"Could not parse gcloud output: {e}");
                         }
 
-                        var pingProc = new Process();
-                        pingProc.StartInfo.FileName = WhichUtil.Which("ping", trace: Trace);
-                        pingProc.StartInfo.Arguments = $"-w 3 {sshIp}";
-                        pingProc.StartInfo.UseShellExecute = false;
-                        pingProc.StartInfo.RedirectStandardError = true;
-                        pingProc.StartInfo.RedirectStandardOutput = true;
+                        var pingExitCode = GCPCoordinator.RunProcess(
+                                fileName: "ping",
+                                arguments: $"-w 3 {sshIp}",
+                                workDirectory: virtDir,
+                                outputDataReceivedFunc: (_, args) => Trace.Info(args.Data ?? ""),
+                                errorDataReceivedFunc: (_, args) => Trace.Error(args.Data ?? ""),
+                                exceptionFunc: (e) => { Trace.Info("Exception when pinging!"); Trace.Info(e.Message); },
+                                trace: Trace,
+                                exceptionReturnCode: 255);
 
-                        pingProc.OutputDataReceived += (_, args) => Trace.Info(args.Data ?? "");
-                        pingProc.ErrorDataReceived += (_, args) => Trace.Error(args.Data ?? "");
+                        Trace.Info($"Ping exit code: {pingExitCode}");
 
-                        pingProc.Start();
-                        pingProc.BeginOutputReadLine();
-                        pingProc.BeginErrorReadLine();
-                        pingProc.WaitForExit();
-
-                        Trace.Info($"Ping exit code: {pingProc.ExitCode}");
-
-                        switch (pingProc.ExitCode)
+                        switch (pingExitCode)
                         {
                             case 0:
                                 ExecutionContext.Error("Ping was successful.");
@@ -502,29 +457,21 @@ namespace GitHub.Runner.Worker.Handlers
                                 ExecutionContext.Error("An error occured while pinging.");
                                 break;
                             default:
-                                ExecutionContext.Error($"Unrecognized ping exit code {pingProc.ExitCode}");
+                                ExecutionContext.Error($"Unrecognized ping exit code {pingExitCode}");
                                 break;
                         }
 
-                        var checkEventProc = new Process();
                         var instanceNumber = System.Environment.GetEnvironmentVariable(Constants.InstanceNumberVariable);
                         var checkEventArgs = $"vm_command.py --mode detect_preempted_signal -n {instanceNumber}";
-                        var rootDir = new DirectoryInfo(HostContext.GetDirectory(WellKnownDirectory.Root)).Parent.FullName;
-                        var virtDir = Path.Combine(rootDir, "virt");
-                        checkEventProc.StartInfo.FileName = WhichUtil.Which("python3", trace: Trace);
-                        checkEventProc.StartInfo.Arguments = checkEventArgs;
-                        checkEventProc.StartInfo.UseShellExecute = false;
-                        checkEventProc.StartInfo.WorkingDirectory = virtDir;
-                        checkEventProc.StartInfo.RedirectStandardError = true;
-                        checkEventProc.StartInfo.RedirectStandardOutput = true;
-
-                        checkEventProc.OutputDataReceived += (_, args) => ExecutionContext.Error(args.Data ?? "");
-                        checkEventProc.ErrorDataReceived += (_, args) => ExecutionContext.Error(args.Data ?? "");
-
-                        checkEventProc.Start();
-                        checkEventProc.BeginOutputReadLine();
-                        checkEventProc.BeginErrorReadLine();
-                        checkEventProc.WaitForExit();
+                        GCPCoordinator.RunProcess(
+                                fileName: "python3",
+                                arguments: checkEventArgs,
+                                workDirectory: virtDir,
+                                outputDataReceivedFunc: (_, args) => ExecutionContext.Error(args.Data ?? ""),
+                                errorDataReceivedFunc: (_, args) => ExecutionContext.Error(args.Data ?? ""),
+                                exceptionFunc: (e) => { Trace.Info("Exception when checking reempted signal!"); Trace.Info(e.Message); },
+                                trace: Trace,
+                                exceptionReturnCode: 255);
                     }
 
                     ExecutionContext.Result = TaskResult.Failed;

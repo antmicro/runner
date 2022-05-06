@@ -1,4 +1,4 @@
-﻿using System.IO;
+using System.IO;
 using System.Text;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -108,47 +108,27 @@ namespace GitHub.Runner.Worker.Handlers
                 var tempDir = HostContext.GetDirectory(WellKnownDirectory.Temp);
                 var plotRemotePath = "/mnt/plot.svg";
 
-                var sargraphStop = new Process();
-                sargraphStop.StartInfo.FileName = WhichUtil.Which("bash", trace: Trace);
-                sargraphStop.StartInfo.Arguments = $"ssh.sh {sshIp} --sargraph-stop {plotRemotePath}";
-                sargraphStop.StartInfo.WorkingDirectory = virtDir;
-                sargraphStop.StartInfo.UseShellExecute = false;
-                sargraphStop.StartInfo.RedirectStandardError = true;
-                sargraphStop.StartInfo.RedirectStandardOutput = true;
+                var sargraphSshArguments = new List<string>(Constants.CommonSshArgs);
+                sargraphSshArguments.Add($"scalerunner@{sshIp} -t bash -c 'sudo sargraph chart stop && sudo chmod 777 {plotRemotePath}'");
+                var sargraphStopExitCode = GCPCoordinator.RunProcess(
+                        fileName: "ssh",
+                        arguments: string.Join(" ", sargraphSshArguments.ToArray()),
+                        workDirectory: virtDir,
+                        outputDataReceivedFunc: (_, args) => Trace.Info(args.Data ?? ""),
+                        errorDataReceivedFunc: (_, args) => Trace.Info(args.Data ?? ""),
+                        exceptionFunc: (e) => { Trace.Info("Exception when stopping sargraph!"); Trace.Info(e.Message); },
+                        trace: Trace,
+                        exceptionReturnCode: 255);
 
-                sargraphStop.OutputDataReceived += (_, args) => Trace.Info(args.Data);
-                sargraphStop.ErrorDataReceived += (_, args) => Trace.Info(args.Data);
-
-                sargraphStop.Start();
-                sargraphStop.BeginOutputReadLine();
-                sargraphStop.BeginErrorReadLine();
-
-                Trace.Info($"Starting {sargraphStop.StartInfo.Arguments} with PID {sargraphStop.Id}");
-
-                sargraphStop.WaitForExit();
-
-                Trace.Info($"{sargraphStop.StartInfo.Arguments} exit code: {sargraphStop.ExitCode}");
-
-                var symFix = new Process();
-                symFix.StartInfo.FileName = WhichUtil.Which("bash", trace: Trace);
-                symFix.StartInfo.Arguments = $"symlink_resolve.sh {sshIp}";
-                symFix.StartInfo.WorkingDirectory = virtDir;
-                symFix.StartInfo.UseShellExecute = false;
-                symFix.StartInfo.RedirectStandardError = true;
-                symFix.StartInfo.RedirectStandardOutput = true;
-
-                symFix.OutputDataReceived += (_, args) => Trace.Info(args.Data ?? "");
-                symFix.ErrorDataReceived += (_, args) => Trace.Info(args.Data ?? "");
-
-                symFix.Start();
-                symFix.BeginOutputReadLine();
-                symFix.BeginErrorReadLine();
-
-                Trace.Info($"Starting {symFix.StartInfo.Arguments} with PID {symFix.Id}");
-
-                symFix.WaitForExit();
-
-                Trace.Info($"{symFix.StartInfo.Arguments} exit code: {symFix.ExitCode}");
+                GCPCoordinator.RunProcess(
+                        fileName: "bash",
+                        arguments: $"symlink_resolve.sh {sshIp}",
+                        workDirectory: virtDir,
+                        outputDataReceivedFunc: (_, args) => Trace.Info(args.Data ?? ""),
+                        errorDataReceivedFunc: (_, args) => Trace.Info(args.Data ?? ""),
+                        exceptionFunc: (e) => { Trace.Info("Exception when resolving symlink!"); Trace.Info(e.Message); },
+                        trace: Trace,
+                        exceptionReturnCode: 255);
 
                 var runnerFileCommands = Path.Combine(tempDir, "_runner_file_commands");
 
@@ -159,28 +139,18 @@ namespace GitHub.Runner.Worker.Handlers
                 // $REPO/$REPO is that last component.
                 var workspaceLastComponent = githubContext["container_workspace"];
 
-                var plotCp = new Process();
                 var plotCpArgs = new List<string>(Constants.CommonSshArgs);
                 plotCpArgs.Add($"scalerunner@{sshIp} sudo cp {plotRemotePath} /mnt/2/{workspaceLastComponent}/plot_{jobName}.svg");
-
-                plotCp.StartInfo.FileName = WhichUtil.Which("ssh", trace: Trace);
-                plotCp.StartInfo.Arguments = string.Join(" ", plotCpArgs);
-                plotCp.StartInfo.WorkingDirectory = virtDir;
-                plotCp.StartInfo.UseShellExecute = false;
-                plotCp.StartInfo.RedirectStandardError = true;
-                plotCp.StartInfo.RedirectStandardOutput = true;
-
-                plotCp.OutputDataReceived += (_, args) => Trace.Info(args.Data ?? "");
-                plotCp.ErrorDataReceived += (_, args) => Trace.Info(args.Data ?? "");
-
-                if (sargraphStop.ExitCode == 0)
-                {
-                    plotCp.Start();
-                    plotCp.BeginOutputReadLine();
-                    plotCp.BeginErrorReadLine();
-
-                    plotCp.WaitForExit();
-                    Trace.Info($"{plotCp.StartInfo.Arguments} exit code: {plotCp.ExitCode}");
+                if (sargraphStopExitCode == 0) {
+                    GCPCoordinator.RunProcess(
+                        fileName: "ssh",
+                        arguments: string.Join(" ", plotCpArgs),
+                        workDirectory: virtDir,
+                        outputDataReceivedFunc: (_, args) => Trace.Info(args.Data ?? ""),
+                        errorDataReceivedFunc: (_, args) => Trace.Info(args.Data ?? ""),
+                        exceptionFunc: (e) => { Trace.Info("Exception when resolving symlink!"); Trace.Info(e.Message); },
+                        trace: Trace,
+                        exceptionReturnCode: 255);
                 }
             }
 
