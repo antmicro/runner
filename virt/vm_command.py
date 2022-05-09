@@ -1,5 +1,5 @@
 #!/usr/bin/python3
-import os, sys, subprocess, json, click, paramiko, time, functools, platform, shlex, shutil, requests, uuid, datetime
+import os, sys, subprocess, json, click, paramiko, time, functools, platform, shlex, shutil, requests, uuid, datetime, random
 from collections import namedtuple
 
 print = functools.partial(print, flush=True)
@@ -39,6 +39,21 @@ def wait_for_gcp(authed_session, link):
 
         if "status" in result and result['status'] == 'DONE':
             if 'error' in result:
+                if 'errors' in result['error']:
+                    for error in result['error']['errors']:
+                        if 'code' in error:
+                            if error['code'] == "ZONE_RESOURCE_POOL_EXHAUSTED_WITH_DETAILS":
+                                rand_sleep = random.randint(300,360)
+                                print(f"The zone does not have enough resources available to fulfill the request, sleeping: {rand_sleep}s and trying again")
+                                time.sleep(rand_sleep)
+                                sys.exit(1)
+                elif 'reason' in result['error']:
+                    if result['error']['reason'] == "RATE_LIMIT_EXCEEDED":
+                        rand_sleep = random.randint(60,120)
+                        print(f"Quota exceeded for API calls, sleeping: {rand_sleep}s and trying again")
+                        time.sleep(rand_sleep)
+                        sys.exit(1)
+
                 print(f"Error occured while processing request: {result['error']}")
                 sys.exit(1)
             return result
