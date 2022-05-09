@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 
 namespace GitHub.Runner.Common
@@ -50,7 +50,10 @@ namespace GitHub.Runner.Common
         public static List<string> CommonSshArgs = new List<string> {"-q",
             "-o \"UserKnownHostsFile /dev/null\"",
             "-o \"StrictHostKeyChecking no\"",
-            "-o \"ServerAliveInterval 10\""
+            "-o \"ServerAliveInterval 10\"",
+            "-o \"ControlPath ~/.ssh/S.%r@%h:%p\"",
+            "-o \"ControlMaster auto\"",
+            "-o \"ControlPersist 15s\""
         };
 
         // This enum is embedded within the Constants class to make it easier to reference and avoid

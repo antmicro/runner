@@ -227,7 +227,7 @@ namespace GitHub.Runner.Worker
                         vmCtx.Output("Boolean value expected for preemptible override.");
                     }
                 }
-                
+
                 int vmExitCode = 1;
                 for (int i = 0; i < 5; i++) {
                     StringBuilder output_string = new StringBuilder();
@@ -437,6 +437,21 @@ namespace GitHub.Runner.Worker
 
             // Variables inferred from modified JSON message.
             var virtDir = message.Variables["system.qemuDir"].Value;
+            // ssh master connection needs to be closed before trying to unmount
+            // sshfs, otherwise, umount will fail
+            var sshArguments = new List<string>(Constants.CommonSshArgs);
+            sshArguments.Add($"-O exit scalerunner@{sshIp}");
+
+            GCPCoordinator.RunProcess(
+                    fileName: "ssh",
+                    arguments: string.Join(" ", sshArguments.ToArray()),
+                    workDirectory: virtDir,
+                    outputDataReceivedFunc: (_, args) => Trace.Info(args.Data ?? ""),
+                    errorDataReceivedFunc: (_, args) => Trace.Error(args.Data ?? ""),
+                    exceptionFunc: (e) => { Trace.Info("Exception when closing master ssh connection!"); Trace.Info(e.Message); },
+                    trace: Trace,
+                    exceptionReturnCode: 255);
+
             GCPCoordinator.RunProcess(
                     fileName: "bash",
                     arguments: $"sshfs.sh umount {instanceNumber} {sshIp}",
