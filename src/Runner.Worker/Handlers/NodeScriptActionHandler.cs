@@ -100,7 +100,7 @@ namespace GitHub.Runner.Worker.Handlers
             var githubContext = ExecutionContext.ExpressionValues["github"] as GitHubContext;
             var sshIp = System.Environment.GetEnvironmentVariable(Constants.RunnerIPVariable);
 
-            if (actionName == "actions/upload-artifact/v2")
+            if (actionName.StartsWith("actions/upload-artifact"))
             {
                 var instanceNumber = System.Environment.GetEnvironmentVariable(Constants.InstanceNumberVariable);
                 var virtDir = Path.Combine(new DirectoryInfo(HostContext.GetDirectory(WellKnownDirectory.Root)).Parent.FullName, "virt");
