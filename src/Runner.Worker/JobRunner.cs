@@ -32,6 +32,7 @@ namespace GitHub.Runner.Worker
     {
         private IJobServerQueue _jobServerQueue;
         private ITempDirectoryManager _tempDirectoryManager;
+        private const string RestrictedServiceAccountWarning = "Attachment of SA is restricted to non-fork PRs";
 
         public async Task<TaskResult> RunAsync(Pipelines.AgentJobRequestMessage message, CancellationToken jobRequestCancellationToken)
         {
@@ -170,7 +171,7 @@ namespace GitHub.Runner.Worker
                         }
                     }
                 }
-                
+
                 Trace.Info($"External disk: {externalDisk}; Preemptible override: {preemptibleOverride}; Machine type: {machineType}");
 
                 if (!JobPassesSecurityRestrictions(jobContext))
@@ -203,15 +204,28 @@ namespace GitHub.Runner.Worker
 
                 if (!String.IsNullOrEmpty(serviceAccount))
                 {
-                    spawnMachineArgs += $" -a {serviceAccount}";
+                    try {
+                        // Allow to attach SA only to PRs not from fork
+                        if (IsPullRequestFromFork(githubContext)) {
+                            jobContext.Warning(RestrictedServiceAccountWarning);
+                            vmCtx.Output(RestrictedServiceAccountWarning);
+                        } else {
+                            spawnMachineArgs += $" -a {serviceAccount}";
 
-                    // set additional environment variables changing default Google metadata server to IP
-                    // GCE_METADATA_HOST is the newer name for the environment variable,
-                    // but some applications still uses GCE_METADATA_ROOT
-                    if (!jobContext.Global.EnvironmentVariables.ContainsKey("GCE_METADATA_HOST"))
-                        jobContext.Global.EnvironmentVariables.Add("GCE_METADATA_HOST", "169.254.169.254");
-                    if (!jobContext.Global.EnvironmentVariables.ContainsKey("GCE_METADATA_ROOT"))
-                        jobContext.Global.EnvironmentVariables.Add("GCE_METADATA_ROOT", "169.254.169.254");
+                            // set additional environment variables changing default Google metadata server to IP
+                            // GCE_METADATA_HOST is the newer name for the environment variable,
+                            // but some applications still uses GCE_METADATA_ROOT
+                            if (!jobContext.Global.EnvironmentVariables.ContainsKey("GCE_METADATA_HOST"))
+                                jobContext.Global.EnvironmentVariables.Add("GCE_METADATA_HOST", "169.254.169.254");
+                            if (!jobContext.Global.EnvironmentVariables.ContainsKey("GCE_METADATA_ROOT"))
+                                jobContext.Global.EnvironmentVariables.Add("GCE_METADATA_ROOT", "169.254.169.254");
+                        }
+                    } catch(Exception e) {
+                        Trace.Error("Exception when checking if PR is from fork!");
+                        Trace.Error(e.Message);
+                        jobContext.Error("Exception when starting job!");
+                        return await CompleteJobAsync(jobServer, jobContext, message, TaskResult.Failed);
+                    }
                 }
 
                 if (!String.IsNullOrEmpty(preemptibleOverride))
@@ -575,6 +589,20 @@ namespace GitHub.Runner.Worker
                 Trace.Error(ex);
                 return false;
             }
+        }
+
+        private bool IsPullRequestFromFork(GitHubContext gitHubContext)
+        {
+            if(!gitHubContext.IsPullRequest())
+                return false;
+
+            var githubEvent = gitHubContext["event"] as DictionaryContextData;
+            var prData = githubEvent["pull_request"] as DictionaryContextData;
+            var prHead = prData["head"] as DictionaryContextData;
+            var prRepo = prHead["repo"] as DictionaryContextData;
+            var prFork = prRepo.TryGetValue("fork", out var value) ? value as BooleanContextData : null;
+            Trace.Info($"IsPullRequestFromFork: {prFork}");
+            return prFork;
         }
 
         private bool OkayToRunPullRequest(GitHubContext gitHubContext)
