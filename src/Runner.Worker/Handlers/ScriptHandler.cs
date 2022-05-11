@@ -302,6 +302,8 @@ namespace GitHub.Runner.Worker.Handlers
 #endif
             ExecutionContext.Debug($"{fileName} {arguments}");
 
+            GCPCoordinator.SynchronizeCoordinatorFiles(Trace);
+
             Trace.Info(githubContext["job_id"]);
 
             var sshIp = System.Environment.GetEnvironmentVariable(Constants.RunnerIPVariable);

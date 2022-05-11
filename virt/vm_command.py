@@ -431,6 +431,7 @@ def create_vm(instance_number, container_file, disk_name=None, preemptible_overr
     commands = (
             'uname -a',
             'sudo mkdir -p /mnt/1 /mnt/2/work /mnt/aux /mnt/3',
+            f'sudo chown -R {USER}:{USER} /mnt/2',
             'sudo mkdir -p /etc/default',
             'sudo mkdir -p /opt/sif',
             r'echo "SYSLOGD_ARGS=\"-R {}:5140 -L\"" | sudo cp /dev/stdin /etc/default/syslogd'.format(infer_dns_cmd),

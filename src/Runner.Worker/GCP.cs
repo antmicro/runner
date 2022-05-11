@@ -39,5 +39,21 @@ namespace GitHub.Runner.GCP
                 return exceptionReturnCode;
             }
         }
+
+        public static int SynchronizeCoordinatorFiles(ITraceWriter trace = null) {
+            var instanceNumber = System.Environment.GetEnvironmentVariable(Constants.InstanceNumberVariable);
+            var sshIp = System.Environment.GetEnvironmentVariable(Constants.RunnerIPVariable);
+            var syncPath = $"/home/runner/github-actions-runner/_layout/_work_{instanceNumber}/";
+            trace.Info($"Sync: {syncPath} to /mnt/2");
+            return GCPCoordinator.RunProcess(
+                    fileName: "rsync",
+                    arguments: $"-e \"ssh -o StrictHostKeyChecking=no\" -aP {syncPath} scalerunner@{sshIp}:/mnt/2",
+                    workDirectory: "",
+                    outputDataReceivedFunc: (_, args) => trace.Info(args.Data ?? ""),
+                    errorDataReceivedFunc: (_, args) => trace.Info(args.Data ?? ""),
+                    exceptionFunc: (e) => { trace.Info("Exception when syncing coordinator files!"); trace.Info(e.Message); },
+                    trace: trace,
+                    exceptionReturnCode: 255);
+        }
     }
 }

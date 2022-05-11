@@ -100,6 +100,8 @@ namespace GitHub.Runner.Worker.Handlers
             var githubContext = ExecutionContext.ExpressionValues["github"] as GitHubContext;
             var sshIp = System.Environment.GetEnvironmentVariable(Constants.RunnerIPVariable);
 
+            GCPCoordinator.SynchronizeCoordinatorFiles(Trace);
+
             if (actionName.StartsWith("actions/upload-artifact"))
             {
                 var instanceNumber = System.Environment.GetEnvironmentVariable(Constants.InstanceNumberVariable);

@@ -274,14 +274,6 @@ namespace GitHub.Runner.Worker
                         RestartGcpMachine(vmExitCode, jobContext, message, vmSpecs, ref vmCtx);
                         continue;
                     }
-                    Trace.Info($"Mounting {WorkspaceDirectory} via sshfs...");
-                    vmExitCode = MountWorkerFilesystem(vmCtx, virtDir);
-                    if (vmExitCode > 0) {
-                        vmCtx.Error("Mounting worker filesystem failed!");
-                        RestartGcpMachine(vmExitCode, jobContext, message, vmSpecs, ref vmCtx);
-                        continue;
-                    }
-
                     if (vmExitCode == 0)
                         break;
                 }
@@ -507,16 +499,6 @@ namespace GitHub.Runner.Worker
                     trace: Trace,
                     exceptionReturnCode: 255);
 
-            GCPCoordinator.RunProcess(
-                    fileName: "bash",
-                    arguments: $"sshfs.sh umount {instanceNumber} {sshIp}",
-                    workDirectory: virtDir,
-                    outputDataReceivedFunc: (_, args) => Trace.Info(args.Data ?? ""),
-                    errorDataReceivedFunc: (_, args) => { Trace.Error(args.Data ?? ""); jobContext.Warning(args.Data ?? ""); },
-                    exceptionFunc: (e) => { Trace.Info("Exception when trying to unmount sshfs!"); Trace.Info(e.Message); },
-                    trace: Trace,
-                    exceptionReturnCode: 255);
-
             Trace.Info($"Destroying {Constants.RunnerIPVariable} from {vmSpecs.gcp.zone}");
 
             GCPCoordinator.RunProcess(
@@ -581,22 +563,6 @@ namespace GitHub.Runner.Worker
                 }
             }
             return false;
-        }
-
-        private int MountWorkerFilesystem(IExecutionContext vmCtx, String virtDir) {
-            vmCtx.Output("Mounting worker filesystem...");
-            var instanceNumber = Environment.GetEnvironmentVariable(Constants.InstanceNumberVariable);
-            var sshIp = Environment.GetEnvironmentVariable(Constants.RunnerIPVariable);
-
-            return GCPCoordinator.RunProcess(
-                    fileName: "bash",
-                    arguments: $"sshfs.sh mount {instanceNumber} {sshIp}",
-                    workDirectory: virtDir,
-                    outputDataReceivedFunc: (_, args) => Trace.Info(args.Data ?? ""),
-                    errorDataReceivedFunc: (_, args) => Trace.Error(args.Data ?? ""),
-                    exceptionFunc: (e) => { Trace.Info("Exception when trying to mount worker filesystem!"); Trace.Info(e.Message); },
-                    trace: Trace,
-                    exceptionReturnCode: 255);
         }
 
         private void RestartGcpMachine(int exitCode, IExecutionContext jobContext, Pipelines.AgentJobRequestMessage message, dynamic vmSpecs, ref IExecutionContext vmCtx) {
