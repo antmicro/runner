@@ -428,7 +428,7 @@ namespace GitHub.Runner.Worker
                 Encoding.UTF8.GetString(Convert.FromBase64String(envPair.Value)); 
                 return true;
             }
-            catch (FormatException)
+            catch (FormatException e)
             {
                 jobContext.AddIssue(
                         new Issue() { 
@@ -436,6 +436,9 @@ namespace GitHub.Runner.Worker
                             Message = $"Some features will not be enabled as the value of {envPair.Key} is not a valid Base64 string." 
                             }
                         );
+
+                Trace.Error($"{envPair.Key} is invalid: {e.Message}");
+
                 return false;
             }
         }
