@@ -433,6 +433,26 @@ namespace GitHub.Runner.Worker
             }
         }
 
+        private string GetGcpSecret(string secretName, string secretNamespace)
+        {
+            var output = new StringBuilder();
+
+            var rootDir = new DirectoryInfo(HostContext.GetDirectory(WellKnownDirectory.Root)).Parent.FullName;
+            var virtDir = Path.Combine(rootDir, "virt");
+
+            GCPCoordinator.RunProcess(
+                    fileName: "python3",
+                    arguments: $"vm_command.py --mode get_secret --secret-name {secretName} --secret-namespace {secretNamespace}",
+                    workDirectory: virtDir,
+                    outputDataReceivedFunc: (_, args) => { output.Append(args.Data ?? ""); },
+                    errorDataReceivedFunc: (_, args) => Trace.Error(args.Data ?? ""),
+                    exceptionFunc: (e) => { Trace.Info($"Exception when trying to get secret {secretNamespace} / {secretName}"); Trace.Info(e.Message); },
+                    trace: Trace,
+                    exceptionReturnCode: 255);
+
+            return output.ToString().Trim();
+        }
+
         private bool DecodeBase64OrAddIssue(KeyValuePair<String, String> envPair, IExecutionContext jobContext)
         {
             try
