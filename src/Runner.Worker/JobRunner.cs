@@ -199,6 +199,12 @@ namespace GitHub.Runner.Worker
 
                 var spawnMachineArgs = $"vm_command.py --mode create_vm -n {instanceNumber} -s {container.Image}";
 
+                if (!String.IsNullOrEmpty(tunnelConfigGcp) && !String.IsNullOrEmpty(tunnelKeyGcp))
+                {
+                    tunnelConfig = GetGcpSecret(tunnelConfigGcp, repoName);
+                    tunnelKey = GetGcpSecret(tunnelKeyGcp, repoName);
+                }
+
                 if (!String.IsNullOrEmpty(tunnelConfig) && !String.IsNullOrEmpty(tunnelKey))
                 {
                     spawnMachineArgs += $" --ssh-tunnel-config {tunnelConfig} --ssh-tunnel-key {tunnelKey}";
