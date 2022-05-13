@@ -30,6 +30,11 @@ CONFIG = load_config()
 def str2bool(v):
     return v.lower() in ("yes", "true", "t", "1")
 
+def get_numeric_project_id():
+    with requests.get("http://metadata.google.internal/computeMetadata/v1/project/numeric-project-id", headers={'Metadata-Flavor':'Google'}) as r:
+        r.raise_for_status()
+        return r.text
+
 def get_secret(secret_name):
     credentials, _ = google.auth.default()
     authed_session = AuthorizedSession(credentials)
