@@ -30,6 +30,10 @@ CONFIG = load_config()
 def str2bool(v):
     return v.lower() in ("yes", "true", "t", "1")
 
+def get_secret(secret_name):
+    credentials, _ = google.auth.default()
+    authed_session = AuthorizedSession(credentials)
+
 def wait_for_gcp(authed_session, link):
     start = time.time()
     # set timeout to 60s
@@ -536,7 +540,7 @@ def check_mode_parameters(mode, instance_number, container_file):
             sys.exit(1)
 
 @click.command()
-@click.option('--mode', type=click.Choice(['create_vm', 'delete_vm', 'check-rsyslog', 'detect_preempted_signal', 'check_dmesg', 'delete_stale_instances']), required = True)
+@click.option('--mode', type=click.Choice(['create_vm', 'delete_vm', 'check-rsyslog', 'detect_preempted_signal', 'check_dmesg', 'delete_stale_instances', 'get_secret']), required = True)
 @click.option('-n', '--instance-number', help='Instance number', required=False, default=None)
 @click.option('-s', '--container-file', help='Container file', required=False, default=None)
 @click.option('-d', '--disk-name', help='External disk name', required=False, default=None)
@@ -545,7 +549,8 @@ def check_mode_parameters(mode, instance_number, container_file):
 @click.option('-a', '--service-account', help='Additional service account to attach to runner', required=False, default=None)
 @click.option('--ssh-tunnel-config', help="Base64 encoded SSH configuration file for establishing a tunnel", required=False, default=None)
 @click.option('--ssh-tunnel-key', help="Base64 encoded private SSH key for establishing a tunnel", required=False, default=None)
-def main(mode, instance_number, container_file=None, disk_name=None, preemptible_override=None, machine_type=None, service_account=None, ssh_tunnel_config=None, ssh_tunnel_key=None):
+@click.option('--secret-name', help="GCP Secret Manager secret name", required=False, default=None)
+def main(mode, instance_number, container_file=None, disk_name=None, preemptible_override=None, machine_type=None, service_account=None, ssh_tunnel_config=None, ssh_tunnel_key=None, secret_name=None):
     check_mode_parameters(mode, instance_number, container_file)
     if mode == "create_vm":
         create_vm(instance_number, container_file, disk_name, preemptible_override, machine_type, service_account, ssh_tunnel_config, ssh_tunnel_key)
@@ -559,6 +564,8 @@ def main(mode, instance_number, container_file=None, disk_name=None, preemptible
         check_dmesg(instance_number)
     elif mode == "delete_stale_instances":
         delete_stale_instances()
+    elif mode == "get_secret":
+        get_secret(secret_name)
     else:
         print(f"Unknown mode: {mode}! Exiting!")
         sys.exit(1)
