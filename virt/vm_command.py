@@ -13,9 +13,7 @@ import google.auth
 from google.auth.transport.requests import AuthorizedSession
 
 USER = 'scalerunner'
-PUBKEY = os.path.join(os.path.expanduser('~'), '.ssh/id_rsa.pub'), f'/home/{USER}/.ssh/authorized_keys'
 SARGRAPH = os.path.realpath('../sargraph/sargraph.py'), f'/home/{USER}/sargraph.py'
-GCLOUD = shutil.which('gcloud')
 PREEMPT = 'true'
 GH_ENV_LIST = ["GITHUB_JOB_FULL", "GITHUB_SHA", "GITHUB_RUN_ID"]
 
@@ -127,7 +125,7 @@ def describe_instance(authed_session, id):
         sys.exit(1)
     return result['machineType']
 
-def create_instance_call(authed_session, instance_number, instance_name, key, boot_disk_name, external_disk_info, preemptible_machine, machine_type, service_account, uuid):
+def create_instance_call(authed_session, instance_number, instance_name, boot_disk_name, external_disk_info, preemptible_machine, machine_type, service_account, uuid):
     URL = f"https://compute.googleapis.com/compute/v1/projects/{CONFIG.gcp.project}/zones/{CONFIG.gcp.zone}/instances?requestId={uuid}"
     data = {
         "name": f"{instance_name}",
@@ -142,8 +140,8 @@ def create_instance_call(authed_session, instance_number, instance_name, key, bo
                     "value": "true",
                 },
                 {
-                    "key": "ssh-key",
-                    "value": f"coordinator:{key}",
+                    "key": "ssh-keys",
+                    "value": f"{USER}:{open('/home/runner/.ssh/id_rsa.pub').read().strip()}",
                 },
             ],
         },
@@ -178,14 +176,14 @@ def create_instance_call(authed_session, instance_number, instance_name, key, bo
     r = authed_session.post(url=URL, json=data)
     return json.loads(r.text)
 
-def create_instance(authed_session, instance_number, instance_name, key, boot_disk_name, external_disk_info, preemptible_machine, machine_type, service_account):
+def create_instance(authed_session, instance_number, instance_name, boot_disk_name, external_disk_info, preemptible_machine, machine_type, service_account):
     success = False
     retries = 5
     request_uuid = str(uuid.uuid4())
     while retries > 0:
         retries = retries - 1
         # Same UUID makes sure that we won't create multiple VMs
-        result = create_instance_call(authed_session, instance_number, instance_name, key, boot_disk_name, external_disk_info, preemptible_machine, machine_type, service_account, request_uuid)
+        result = create_instance_call(authed_session, instance_number, instance_name, boot_disk_name, external_disk_info, preemptible_machine, machine_type, service_account, request_uuid)
         if "selfLink" not in result or "targetLink" not in result:
             print("Unexpected response when creating VM!")
             time.sleep(1)
@@ -236,7 +234,6 @@ def create_ssh_connection(target):
             ssh.connect(
                     target,
                     username=USER,
-                    password=USER,
                     timeout=1,
                     auth_timeout=1,
                     banner_timeout=1,
@@ -312,12 +309,6 @@ def create_vm(instance_number, container_file, disk_name=None, preemptible_overr
     print(f'Disk type:\t {CONFIG.gcp.disk_type}')
 
 
-    key = (open('/home/runner/.ssh/id_rsa.pub')
-          .read()
-          .strip()
-	  .translate(str.maketrans({'+': r'\+', ' ': r'\ '}))
-    )
-
     github_job_name = (os.environ.get('GITHUB_JOB_FULL') or 'unknown').lower()
 
     print(f"LABELS: {str(LABELS)}")
@@ -383,7 +374,7 @@ def create_vm(instance_number, container_file, disk_name=None, preemptible_overr
                     "https://www.googleapis.com/auth/devstorage.read_write"
                 ]
             }]
-    create_instance(authed_session, instance_number, instance_name, key, boot_disk_name, external_disk_info, preemptible_machine, machine_type, service_account_info)
+    create_instance(authed_session, instance_number, instance_name, boot_disk_name, external_disk_info, preemptible_machine, machine_type, service_account_info)
     print(f'Machine spawned in {elapsed(gcloud_start)} seconds.')
 
     target = os.environ[instance_name]
@@ -402,7 +393,6 @@ def create_vm(instance_number, container_file, disk_name=None, preemptible_overr
 
     try:
         ssh_sftp = ssh.open_sftp()
-        ssh_sftp.put(*PUBKEY)
         ssh_sftp.put(*SARGRAPH)
     except Exception as e:
         print('Copying initialization files failed!')
