@@ -38,6 +38,34 @@ def get_numeric_project_id():
 def get_secret(secret_name):
     credentials, _ = google.auth.default()
     authed_session = AuthorizedSession(credentials)
+    numeric_project_id = get_numeric_project_id()
+
+    base_url = f"https://secretmanager.googleapis.com/v1/projects/{numeric_project_id}/secrets/{secret_name}"
+
+    with authed_session.get(base_url) as r:
+        r.raise_for_status()
+        labels = r.json().get('labels') or dict()
+
+        if not str2bool(labels.get('gha_runner_exposed') or ''):
+            print("Requested secret has not been made available to GHA runners.")
+            sys.exit(1)
+
+    # TODO: wrap in try-catch/check error.
+    with authed_session.get(f"{base_url}/versions", params={'filter':'state:ENABLED'}) as r:
+        r.raise_for_status()
+        versions = r.json()['versions']
+
+        if len(versions) > 1:
+            print('Requested secret has more than one enabled versions.')
+            sys.exit(1)
+
+        active_version = int(versions[0]['name'].split('/')[-1])
+
+    with authed_session.get(f"{base_url}/versions/{active_version}:access") as r:
+        r.raise_for_status()
+        secret = r.json()['payload']['data']
+
+    print(secret)
 
 def wait_for_gcp(authed_session, link):
     start = time.time()
