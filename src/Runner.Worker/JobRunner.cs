@@ -113,7 +113,9 @@ namespace GitHub.Runner.Worker
                 var machineType = String.Empty;
                 var serviceAccount = String.Empty;
                 var tunnelConfig = String.Empty;
+                var tunnelConfigGcp = String.Empty;
                 var tunnelKey = String.Empty; 
+                var tunnelKeyGcp = String.Empty;
 
                 // The following sorcery is done so that templating in environment variables works properly.
                 foreach (var token in message.EnvironmentVariables)
@@ -157,6 +159,11 @@ namespace GitHub.Runner.Worker
                                     tunnelConfig = val;
                                 }
                                 break;
+                            case "GHA_SSH_TUNNEL_CONFIG_SECRET_NAME":
+                                Trace.Info("Tunnel config will be taken from GCP Secret Manager");
+
+                                tunnelConfigGcp = val;
+                                break;
                             case "GHA_SSH_TUNNEL_KEY":
                                 Trace.Info("Tunnel key was provided.");
 
@@ -164,6 +171,11 @@ namespace GitHub.Runner.Worker
                                 {
                                     tunnelKey = val;
                                 }
+                                break;
+                            case "GHA_SSH_TUNNEL_KEY_SECRET_NAME":
+                                Trace.Info("Tunnel key will be taken from GCP Secret Manager");
+
+                                tunnelKeyGcp = val;
                                 break;
                             default:
                                 Trace.Info($"Ignoring variable {pair.Key}");
