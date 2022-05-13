@@ -35,7 +35,7 @@ def get_numeric_project_id():
         r.raise_for_status()
         return r.text
 
-def get_secret(secret_name):
+def get_secret(secret_name, namespace):
     credentials, _ = google.auth.default()
     authed_session = AuthorizedSession(credentials)
     numeric_project_id = get_numeric_project_id()
@@ -48,6 +48,10 @@ def get_secret(secret_name):
 
         if not str2bool(labels.get('gha_runner_exposed') or ''):
             print("Requested secret has not been made available to GHA runners.")
+            sys.exit(1)
+
+        if labels.get("gha_runner_namespace") != namespace:
+            print("Requested secret does not belong to the current namespace.")
             sys.exit(1)
 
     # TODO: wrap in try-catch/check error.
@@ -583,7 +587,8 @@ def check_mode_parameters(mode, instance_number, container_file):
 @click.option('--ssh-tunnel-config', help="Base64 encoded SSH configuration file for establishing a tunnel", required=False, default=None)
 @click.option('--ssh-tunnel-key', help="Base64 encoded private SSH key for establishing a tunnel", required=False, default=None)
 @click.option('--secret-name', help="GCP Secret Manager secret name", required=False, default=None)
-def main(mode, instance_number, container_file=None, disk_name=None, preemptible_override=None, machine_type=None, service_account=None, ssh_tunnel_config=None, ssh_tunnel_key=None, secret_name=None):
+@click.option('--secret-namespace', help="GCP Secret Manager secret name", required=False, default=None)
+def main(mode, instance_number, container_file=None, disk_name=None, preemptible_override=None, machine_type=None, service_account=None, ssh_tunnel_config=None, ssh_tunnel_key=None, secret_name=None, secret_namespace=None):
     check_mode_parameters(mode, instance_number, container_file)
     if mode == "create_vm":
         create_vm(instance_number, container_file, disk_name, preemptible_override, machine_type, service_account, ssh_tunnel_config, ssh_tunnel_key)
@@ -598,7 +603,7 @@ def main(mode, instance_number, container_file=None, disk_name=None, preemptible
     elif mode == "delete_stale_instances":
         delete_stale_instances()
     elif mode == "get_secret":
-        get_secret(secret_name)
+        get_secret(secret_name, secret_namespace)
     else:
         print(f"Unknown mode: {mode}! Exiting!")
         sys.exit(1)
