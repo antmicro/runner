@@ -40,10 +40,12 @@ namespace GitHub.Runner.GCP
             }
         }
 
-        public static int SynchronizeCoordinatorFiles(ITraceWriter trace = null) {
-            var instanceNumber = System.Environment.GetEnvironmentVariable(Constants.InstanceNumberVariable);
+        public static int SynchronizeCoordinatorFiles(IHostContext hostContext) {
+            var trace = hostContext.GetTrace(nameof(HostContext));
             var sshIp = System.Environment.GetEnvironmentVariable(Constants.RunnerIPVariable);
-            var syncPath = $"/home/runner/github-actions-runner/_layout/_work_{instanceNumber}/";
+            // We need to append '/' at the end of the path to only sync content of the
+            // work directory instead of the work directory itself
+            var syncPath = hostContext.GetDirectory(WellKnownDirectory.Work) + "/";
             trace.Info($"Sync: {syncPath} to /mnt/2");
             return GCPCoordinator.RunProcess(
                     fileName: "rsync",
