@@ -49,7 +49,7 @@ namespace GitHub.Runner.GCP
             trace.Info($"Sync: {syncPath} to /mnt/2");
             return GCPCoordinator.RunProcess(
                     fileName: "rsync",
-                    arguments: $"-e \"ssh -o StrictHostKeyChecking=no\" -aP {syncPath} scalerunner@{sshIp}:/mnt/2",
+                    arguments: $"-e \"ssh -o StrictHostKeyChecking=no\" -aP {syncPath} --rsync-path=\"sudo rsync\" --no-owner --no-group scalerunner@{sshIp}:/mnt/2",
                     workDirectory: "",
                     outputDataReceivedFunc: (_, args) => trace.Info(args.Data ?? ""),
                     errorDataReceivedFunc: (_, args) => trace.Info(args.Data ?? ""),
