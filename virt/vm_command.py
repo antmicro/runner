@@ -344,14 +344,23 @@ def create_vm(instance_number, container_file, disk_name=None, preemptible_overr
 
     external_disk_info = None
     service_account_info = None
-    # Attach an external disk (if applicable)
     external_disk_cmd = 'true'
+
+    # Attach an external disk (if applicable)
     if disk_name:
         external_disk = get_gcp_disk(authed_session, CONFIG.gcp.project, CONFIG.gcp.zone, disk_name)
+
+        # Bail if API response does not contain fields indicating successful operation.
         if "name" not in external_disk or "sizeGb" not in external_disk:
-            print("Unexpected output while processing response! Exiting!")
+            if external_disk.get("error", {}).get('code') == 404:
+                print(f"External disk {disk_name} was not found in zone {CONFIG.gcp.zone}!")
+            else:
+                print("Unexpected output received while probing external disk! Exiting!")
+
             sys.exit(1)
+
         print("Attaching external disk {} ({}GB)".format(external_disk['name'], external_disk['sizeGb']))
+
         external_disk_cmd = 'sudo mount /dev/disk/by-id/scsi-0Google_PersistentDisk_aux-part1 /mnt/aux'
         external_disk_info = {
                 "autoDelete": "false",
@@ -359,6 +368,7 @@ def create_vm(instance_number, container_file, disk_name=None, preemptible_overr
                 "mode": "READ_ONLY",
                 "source": f"projects/{CONFIG.gcp.project}/zones/{CONFIG.gcp.zone}/disks/{external_disk['name']}"
             }
+
     if service_account:
         if "gh-sa-" not in service_account:
             print("Used service account must have 'gh-sa-' in the name!")
