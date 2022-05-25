@@ -294,6 +294,9 @@ def delete_instance(authed_session, instance_name):
         print(f"Couldn't delete instance: {instance_name}! Exiting!")
         sys.exit(1)
 
+def relative_self_link(self_link):
+    return self_link.replace("https://www.googleapis.com/compute/v1/", "")
+
 def create_vm(instance_number, container_file, disk_name=None, preemptible_override=None, machine_type=None, service_account=None, ssh_tunnel_config=None, ssh_tunnel_key=None):
     print("Attempting to spawn a machine..")
     if machine_type is None:
@@ -366,7 +369,7 @@ def create_vm(instance_number, container_file, disk_name=None, preemptible_overr
                 "autoDelete": "false",
                 "deviceName": "aux",
                 "mode": "READ_ONLY",
-                "source": f"projects/{CONFIG.gcp.project}/zones/{CONFIG.gcp.zone}/disks/{external_disk['name']}"
+                "source": relative_self_link(external_disk['selfLink']) 
             }
 
     if service_account:
