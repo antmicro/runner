@@ -179,20 +179,22 @@ By convention, they are prefixed with `GHA_`.
 
 The table below documents and describes their purpose.
 
-|   Environment variable  |      Type     |                   Description                  |
-|:-----------------------:|:-------------:|:----------------------------------------------:|
-| `GHA_EXTERNAL_DISK`     | string        | Name of an external Compute Engine disk        |
-| `GHA_PREEMPTIBLE`       | bool          | Set whether the machine should be preemptible. |
-| `GHA_MACHINE_TYPE`      | string        | Compute Engine machine type                    |
-| `GHA_SA`                | string        | Machine service account suffix                 |
-| `GHA_SSH_TUNNEL_CONFIG` | base64 string | OpenSSH configuration file for tunneling       |
-| `GHA_SSH_TUNNEL_KEY`    | base64 string | OpenSSH private key file                       |
+|         Environment variable        |      Type     |                                                             Description                                                            |
+|:-----------------------------------:|:-------------:|:----------------------------------------------------------------------------------------------------------------------------------:|
+| `GHA_EXTERNAL_DISK`                 | string        | Name of an external Compute Engine disk                                                                                            |
+| `GHA_PREEMPTIBLE`                   | bool          | Set whether the machine should be preemptible.                                                                                     |
+| `GHA_MACHINE_TYPE`                  | string        | Compute Engine machine type                                                                                                        |
+| `GHA_SA`                            | string        | Machine service account suffix                                                                                                     |
+| `GHA_SSH_TUNNEL_CONFIG`             | base64 string | OpenSSH configuration file for tunneling                                                                                           |
+| `GHA_SSH_TUNNEL_KEY`                | base64 string | OpenSSH private key file                                                                                                           |
+| `GHA_SSH_TUNNEL_CONFIG_SECRET_NAME` | string        | Secret name from [GCP Secret Manager](https://cloud.google.com/secret-manager) containing OpenSSH configuration file for tunneling |
+| `GHA_SSH_TUNNEL_KEY_SECRET_NAME`    | string        | Secret name from [GCP Secret Manager](https://cloud.google.com/secret-manager) containing OpenSSH private key file                 |
 
 ### SSH port forwarding
 
 It is possible to establish a secure tunnel to an SSH-enabled host in order to forward some ports.
 
-In order to do that, prepare an configuration file according to the [OpenSSH client configuration syntax](https://linux.die.net/man/5/ssh_config) and encode it in Base64.
+First, prepare a configuration file according to the [OpenSSH client configuration syntax](https://linux.die.net/man/5/ssh_config).
 
 An example configuration file may looks as follows:
 
@@ -208,9 +210,13 @@ Host some-host
 This will forward the HTTP port from `example.com` to port 8080 on the worker machine.
 The forwarded port will be available within the job container (this will allow you to, for example, run `wget localhost:8080`).
 
-Apart from preparing the configuration file, it is necessary to prepare a private key for authentication with the remote host
+Apart from preparing the configuration file, it is necessary to prepare a private key for authentication with the remote host,
 
-Both files need to be encoded in Base64 (this can be done by running `cat <filename> | base64 -w0`), stored in [GitHub Actions Encrypted secrets](https://docs.github.com/en/actions/security-guides/encrypted-secrets) and exposed in the workflow file.
+There are two ways of exposing these files:
+* Encode both files in Base64 (this can be done by running `cat <filename> | base64 -w0`), store them in [GitHub Actions Encrypted secrets](https://docs.github.com/en/actions/security-guides/encrypted-secrets) and expose them in the workflow file.
+* Store them as secrets in [GCP Secret Manager](https://cloud.google.com/secret-manager) with two labels (`gha_runner_exposed: 1` and `gha_runner_namespace: $REPOSITORY_NAME`) and reference their names in the workflow file.
+
+In the event that both methods are used in the workflow file, [Secret Manager](https://cloud.google.com/secret-manager) takes precedence.
 
 An example workflow file leveraging this feature may look as follows:
 
@@ -226,6 +232,8 @@ jobs:
     env:
       GHA_SSH_TUNNEL_KEY: "${{ secrets.GHA_SSH_TUNNEL_KEY }}"
       GHA_SSH_TUNNEL_CONFIG: "${{ secrets.GHA_SSH_TUNNEL_CONFIG }}"
+      GHA_SSH_TUNNEL_CONFIG_SECRET_NAME: "my_tunnel_config"
+      GHA_SSH_TUNNEL_KEY_SECRET_NAME: "my_tunnel_key"
     steps:
     - run: yum -y install wget
     - run: wget http://localhost:8080 && cat index.html
