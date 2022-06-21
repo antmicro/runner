@@ -1,5 +1,5 @@
 #!/usr/bin/python3
-import os, sys, subprocess, json, click, paramiko, time, functools, platform, shlex, shutil, requests, uuid, datetime, random
+import os, sys, subprocess, json, click, paramiko, time, functools, platform, shlex, shutil, requests, uuid, datetime, random, socket
 from collections import namedtuple
 
 print = functools.partial(print, flush=True)
@@ -13,6 +13,7 @@ import google.auth
 from google.auth.transport.requests import AuthorizedSession
 
 USER = 'scalerunner'
+PUBKEY = os.path.join(os.path.expanduser('~'), '.ssh/id_rsa.pub'), f'/home/{USER}/.ssh/authorized_keys'
 SARGRAPH = os.path.realpath('../sargraph/sargraph.py'), f'/home/{USER}/sargraph.py'
 PREEMPT = 'true'
 GH_ENV_LIST = ["GITHUB_JOB_FULL", "GITHUB_SHA", "GITHUB_RUN_ID"]
@@ -239,7 +240,42 @@ def create_ssh_connection(target):
                     banner_timeout=1,
             )
             break
-        except Exception as e:
+        except paramiko.ssh_exception.AuthenticationException:
+            # Pre-62142bfbecb765d9838782904c735eb83e9743b8 images don't add public keys from VM metadata.
+            # We used to rely on using password authentication during this step.
+            # To make the public key authentication work later on, coordinator's key was SCPed at the end.
+            #
+            # In order to ensure backward compatibility, we detect if password auth is available (it isn't on newer images)
+            # and if so, we SCP the key to the node and repeat the loop.
+            t = paramiko.Transport((target, paramiko.config.SSH_PORT))
+
+            try:
+                t.connect()
+                t.auth_none('')
+            except paramiko.ssh_exception.BadAuthenticationType as e:
+                if "password" in e.allowed_types:
+                    print("Falling back to the old initial authentication method...")
+                    try:
+                        ssh.connect(
+                                target,
+                                username=USER,
+                                password=USER
+                                )
+                        ssh_sftp = ssh.open_sftp()
+                        ssh_sftp.put(*PUBKEY)
+                        ssh_sftp.close()
+                        ssh.close()
+                    except Exception as e:
+                        print("Public key authentication failed and password auth is not available!")
+                        sys.exit(1)
+                else:
+                    print("Fatal error, public key authentication failed!")
+            except paramiko.ssh_exception.SSHException as e:
+                print("Error occured while detecting authentication methods!")
+                sys.exit(1)
+            finally:
+                t.close()
+        except (socket.timeout, paramiko.ssh_exception.NoValidConnectionsError) as e:
             if ssh_timeout_c % 10 == 0:
                 print('Waiting for SSH... [{}/{}] '.format((int)(((ssh_timeout - ssh_timeout_c) / 10) + 1), (int)(ssh_timeout / 10)))
             ssh_timeout_c -= 1
