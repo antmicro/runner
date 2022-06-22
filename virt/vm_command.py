@@ -281,8 +281,6 @@ def create_ssh_connection(target):
                     except Exception as e:
                         print("Public key authentication failed and password auth is not available!")
                         sys.exit(1)
-                else:
-                    print("Fatal error, public key authentication failed!")
             except paramiko.ssh_exception.SSHException as e:
                 print("Error occured while detecting authentication methods!")
                 sys.exit(1)
