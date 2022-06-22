@@ -231,6 +231,20 @@ def create_ssh_connection(target):
     ssh_timeout = ssh_timeout_c = 50
 
     while ssh_timeout_c > 0:
+        # Print every tenth occurence.
+        if ssh_timeout_c % 10 == 0:
+            print('Waiting for SSH... [{}/{}] '.format(
+                int(((ssh_timeout - ssh_timeout_c) / 10) + 1), 
+                int(ssh_timeout / 10))
+                )
+
+        # Timeout exceeded.
+        if ssh_timeout_c == 0:
+            print('Timeout while waiting for SSH!')
+            print(e)
+            sys.exit(1)
+
+        # Attempt to connect.
         try:
             ssh.connect(
                     target,
@@ -239,7 +253,6 @@ def create_ssh_connection(target):
                     auth_timeout=1,
                     banner_timeout=1,
             )
-            break
         except paramiko.ssh_exception.AuthenticationException:
             # Pre-62142bfbecb765d9838782904c735eb83e9743b8 images don't add public keys from VM metadata.
             # We used to rely on using password authentication during this step.
@@ -276,16 +289,15 @@ def create_ssh_connection(target):
             finally:
                 t.close()
         except (socket.timeout, paramiko.ssh_exception.NoValidConnectionsError) as e:
-            if ssh_timeout_c % 10 == 0:
-                print('Waiting for SSH... [{}/{}] '.format((int)(((ssh_timeout - ssh_timeout_c) / 10) + 1), (int)(ssh_timeout / 10)))
-            ssh_timeout_c -= 1
+            pass
+        finally:
+            # Progress timeout count if connection has not been established.
+            if ssh.get_transport() is None or (ssh.get_transport() is not None and not ssh.get_transport().is_active()):
+                ssh_timeout_c -= 1
+                time.sleep(1)
+            else:
+                break
 
-            if ssh_timeout_c == 0:
-                print('Timeout while waiting for SSH!')
-                print(e)
-                sys.exit(1)
-
-            time.sleep(1)
     return ssh
 
 def execute_ssh_commands(ssh, commands):
