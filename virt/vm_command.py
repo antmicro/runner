@@ -354,6 +354,15 @@ def create_vm(instance_number, container_file, disk_name=None, preemptible_overr
     print(f'Instance type:\t {machine_type}')
     print(f'Disk type:\t {CONFIG.gcp.disk_type}')
 
+    try:
+        subprocess.run(
+                shlex.split('ssh-keygen -p -m pem -f {} -P "" -N ""'.format(PUBKEY[0][:-4])),
+                check=True,
+                capture_output=True
+                )
+    except subprocess.CalledProcessError:
+        print("Unable to ensure that private key is in PEM format!")
+        sys.exit(1)
 
     github_job_name = (os.environ.get('GITHUB_JOB_FULL') or 'unknown').lower()
 
