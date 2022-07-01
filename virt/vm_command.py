@@ -575,19 +575,35 @@ def detect_preempted_signal(instance_number):
     credentials, _ = google.auth.default()
     authed_session = AuthorizedSession(credentials)
 
-    URL = f'https://compute.googleapis.com/compute/v1/projects/{CONFIG.gcp.project}/global/operations?filter="zone={CONFIG.gcp.zone} AND targetLink.basename()={instance_name} AND operationType=compute.instances.preempted"&orderBy=~startTime'
-    r = authed_session.get(URL)
-    operations_dict = json.loads(r)
+    URL = f'https://compute.googleapis.com/compute/v1/projects/{CONFIG.gcp.project}/aggregated/operations'
 
-    for operation in operations_dict:
-        event_time = datetime.datetime.strptime(operation["startTime"], "%Y-%m-%dT%H:%M:%S.%f%z")
-        now = datetime.datetime.utcnow().replace(tzinfo=datetime.timezone.utc)
-        diff = now - event_time
-        print(f"Found preempted event for instance: {instance_name} that occured: {diff} time ago")
-        if diff.days == 0 and diff.seconds < 120:
-            print("Found preempted event with diff lower than 2 minutes!")
-            print(f"Instance {instance_name} killed by preempted event!")
-            sys.exit(1)
+    url_filters = [
+            f'(operationType eq compute.instances.preempted)',
+            f'(zone eq .*\\b{CONFIG.gcp.zone}\\b.*)',
+            ]
+
+    r = authed_session.get(URL, params={'filter': "".join(url_filters), 'maxResults': 500})
+
+    if not str(r.status_code).startswith("2"):
+        print("Unable to get the list of operations!")
+        print(r.text)
+        sys.exit(1)
+
+    items = json.loads(r.text).get('items')
+
+    if items is not None:
+        items_in_zone = items[f'zones/{CONFIG.gcp.zone}']
+
+        for operation in (items_in_zone.get('operations') or []):
+            if operation['targetLink'].split('/')[-1] == instance_name:
+                event_time = datetime.datetime.strptime(operation["startTime"], "%Y-%m-%dT%H:%M:%S.%f%z")
+                now = datetime.datetime.utcnow().replace(tzinfo=datetime.timezone.utc)
+                diff = now - event_time
+                print(f"Found preempted event for instance: {instance_name} that occured: {diff} time ago")
+                if diff.days == 0 and diff.seconds < 120:
+                    print("Found preempted event with diff lower than 2 minutes!")
+                    print(f"Instance {instance_name} killed by preempted event!")
+                    sys.exit(1)
     print(f"Couldn't find preempted event for instance: {instance_name}!")
 
 def check_dmesg(instance_number):
