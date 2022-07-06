@@ -226,7 +226,7 @@ def check_machine_type(machine_type):
         print(f"Requested machine type {machine_type} was not found in the allow list! Please use a different machine type. Exiting!")
         sys.exit(1)
 
-def create_ssh_connection(target):
+def create_ssh_connection(target, verbose=True):
     ssh = paramiko.SSHClient()
     ssh.set_missing_host_key_policy(paramiko.client.AutoAddPolicy())
 
@@ -234,9 +234,9 @@ def create_ssh_connection(target):
 
     while ssh_timeout_c > 0:
         # Print every tenth occurence.
-        if ssh_timeout_c % 10 == 0:
+        if verbose and ssh_timeout_c % 10 == 0:
             print('Waiting for SSH... [{}/{}] '.format(
-                int(((ssh_timeout - ssh_timeout_c) / 10) + 1), 
+                int(((ssh_timeout - ssh_timeout_c) / 10) + 1),
                 int(ssh_timeout / 10))
                 )
 
@@ -269,7 +269,8 @@ def create_ssh_connection(target):
                 t.auth_none('')
             except paramiko.ssh_exception.BadAuthenticationType as e:
                 if "password" in e.allowed_types:
-                    print("Falling back to the old initial authentication method...")
+                    if verbose:
+                        print("Falling back to the old initial authentication method...")
                     try:
                         ssh.connect(
                                 target,
@@ -592,7 +593,7 @@ def detect_preempted_signal(instance_number):
 def check_dmesg(instance_number):
     instance_name = get_instance_name(instance_number)
     target = os.environ[instance_name]
-    ssh = create_ssh_connection(target)
+    ssh = create_ssh_connection(target, verbose=False)
 
     commands = (
             'sudo dmesg -T | grep -i "killed process"',
