@@ -102,60 +102,6 @@ namespace GitHub.Runner.Worker.Handlers
 
             GCPCoordinator.SynchronizeCoordinatorFiles(HostContext);
 
-            if (actionName.StartsWith("actions/upload-artifact"))
-            {
-                var instanceNumber = System.Environment.GetEnvironmentVariable(Constants.InstanceNumberVariable);
-                var virtDir = Path.Combine(new DirectoryInfo(HostContext.GetDirectory(WellKnownDirectory.Root)).Parent.FullName, "virt");
-
-                var tempDir = HostContext.GetDirectory(WellKnownDirectory.Temp);
-                var plotRemotePath = "/mnt/plot.svg";
-
-                var sargraphSshArguments = new List<string>(Constants.CommonSshArgs);
-                sargraphSshArguments.Add($"scalerunner@{sshIp} -t bash -c 'sudo sargraph chart stop && sudo chmod 777 {plotRemotePath}'");
-                var sargraphStopExitCode = GCPCoordinator.RunProcess(
-                        fileName: "ssh",
-                        arguments: string.Join(" ", sargraphSshArguments.ToArray()),
-                        workDirectory: virtDir,
-                        outputDataReceivedFunc: (_, args) => Trace.Info(args.Data ?? ""),
-                        errorDataReceivedFunc: (_, args) => Trace.Info(args.Data ?? ""),
-                        exceptionFunc: (e) => { Trace.Info("Exception when stopping sargraph!"); Trace.Info(e.Message); },
-                        trace: Trace,
-                        exceptionReturnCode: 255);
-
-                GCPCoordinator.RunProcess(
-                        fileName: "bash",
-                        arguments: $"symlink_resolve.sh {sshIp}",
-                        workDirectory: virtDir,
-                        outputDataReceivedFunc: (_, args) => Trace.Info(args.Data ?? ""),
-                        errorDataReceivedFunc: (_, args) => Trace.Info(args.Data ?? ""),
-                        exceptionFunc: (e) => { Trace.Info("Exception when resolving symlink!"); Trace.Info(e.Message); },
-                        trace: Trace,
-                        exceptionReturnCode: 255);
-
-                var runnerFileCommands = Path.Combine(tempDir, "_runner_file_commands");
-
-                // Obtain the last component from working directory.
-                // Consider the following directory:
-                // /home/$USER/github-actions-runner/_layout/_work_0/$REPO/$REPO
-                // 
-                // $REPO/$REPO is that last component.
-                var workspaceLastComponent = githubContext["container_workspace"];
-
-                var plotCpArgs = new List<string>(Constants.CommonSshArgs);
-                plotCpArgs.Add($"scalerunner@{sshIp} sudo cp {plotRemotePath} /mnt/2/{workspaceLastComponent}/plot_{jobName}.svg");
-                if (sargraphStopExitCode == 0) {
-                    GCPCoordinator.RunProcess(
-                        fileName: "ssh",
-                        arguments: string.Join(" ", plotCpArgs),
-                        workDirectory: virtDir,
-                        outputDataReceivedFunc: (_, args) => Trace.Info(args.Data ?? ""),
-                        errorDataReceivedFunc: (_, args) => Trace.Info(args.Data ?? ""),
-                        exceptionFunc: (e) => { Trace.Info("Exception when resolving symlink!"); Trace.Info(e.Message); },
-                        trace: Trace,
-                        exceptionReturnCode: 255);
-                }
-            }
-
             string file = "node";
 
             // Format the arguments passed to node.
@@ -205,7 +151,29 @@ namespace GitHub.Runner.Worker.Handlers
 
                 exportStanzas += $" PATH={prepend}{pathSuffix}";
 
-                var initCmd = $"### START ###\n" + exportStanzas + " " + file + " " + arguments_node + $"\n### END ###";
+                var initCmd = $"### START ###\n";
+                if (actionName.StartsWith("actions/upload-artifact")) {
+                    var virtDir = Path.Combine(new DirectoryInfo(HostContext.GetDirectory(WellKnownDirectory.Root)).Parent.FullName, "virt");
+                    var plotRemotePath = "/mnt/sargraph-mount/plot.svg";
+                    var sargraphSshArguments = new List<string>(Constants.CommonSshArgs);
+                    sargraphSshArguments.Add($"scalerunner@{sshIp} -t bash -c 'sudo sargraph chart stop && sudo chmod 777 {plotRemotePath}'");
+                    var sargraphStopExitCode = GCPCoordinator.RunProcess(
+                            fileName: "ssh",
+                            arguments: string.Join(" ", sargraphSshArguments.ToArray()),
+                            workDirectory: virtDir,
+                            outputDataReceivedFunc: (_, args) => Trace.Info(args.Data ?? ""),
+                            errorDataReceivedFunc: (_, args) => Trace.Info(args.Data ?? ""),
+                            exceptionFunc: (e) => { Trace.Info("Exception when stopping sargraph!"); Trace.Info(e.Message); },
+                            trace: Trace,
+                            exceptionReturnCode: 255);
+                    if (sargraphStopExitCode == 0) {
+                        var workspaceLastComponent = githubContext["container_workspace"];
+                        var plotWorspacePath = $"{workspaceDir}/plot_{jobName}.svg";
+                        // Mount command requires file to exist, before we can bind into it.
+                        initCmd += $"touch {plotWorspacePath} && mount --bind {plotRemotePath} {plotWorspacePath}\n";
+                    }
+                }
+                initCmd += exportStanzas + " " + file + " " + arguments_node + $"\n### END ###";
 
                 Trace.Info(initCmd);
 

@@ -18,6 +18,8 @@ SARGRAPH = os.path.realpath('../sargraph/sargraph.py'), f'/home/{USER}/sargraph.
 PREEMPT = 'true'
 GH_ENV_LIST = ["GITHUB_JOB_FULL", "GITHUB_SHA", "GITHUB_RUN_ID"]
 
+SARGRAPH_RAMDISK_SIZE_MB = 50
+
 LABELS = [{e.lower(): (os.environ.get(e) or 'null')[:63].lower() for e in GH_ENV_LIST}]
 
 def load_config():
@@ -488,7 +490,7 @@ def create_vm(instance_number, container_file, disk_name=None, preemptible_overr
 
     commands = (
             'uname -a',
-            'sudo mkdir -p /mnt/1 /mnt/2/work /mnt/aux /mnt/3',
+            'sudo mkdir -p /mnt/1 /mnt/2/work /mnt/aux /mnt/3 /mnt/sargraph-mount /mnt/ram-disk',
             'sudo mkdir -p /etc/default',
             'sudo mkdir -p /opt/sif',
             r'echo "SYSLOGD_ARGS=\"-R {}:5140 -L\"" | sudo cp /dev/stdin /etc/default/syslogd'.format(infer_dns_cmd),
@@ -504,18 +506,24 @@ def create_vm(instance_number, container_file, disk_name=None, preemptible_overr
             'sudo df -h',
             'echo "------------------"',
             'echo "::endgroup::"',
+            'echo "::group::Starting sargraph.."',
+            f'sudo mount -t tmpfs -o size={SARGRAPH_RAMDISK_SIZE_MB}m tmpfs /mnt/ram-disk 2>&1 > /dev/null',
+            f'sudo dd if=/dev/zero of=/mnt/ram-disk/sargraph-disk bs=1M count={SARGRAPH_RAMDISK_SIZE_MB} 2>&1 > /dev/null',
+            'sudo mke2fs -F /mnt/ram-disk/sargraph-disk 2>&1 > /dev/null',
+            'sudo mount /mnt/ram-disk/sargraph-disk /mnt/sargraph-mount',
+            f'chmod +x {SARGRAPH[1]}',
+            f'sudo mv {SARGRAPH[1]} /usr/bin/sargraph',
+            f'cd /mnt/sargraph-mount && SARGRAPH_OUTPUT_TYPE=svg sudo -E sargraph chart start -f $(realpath {boot_disk_ext_part})',
+            'echo "::endgroup::"',
             f'sudo sh -c "test ! -f {node_sif_location} && curl -o {node_zip_dst} -Ls {node_zip_src} && unzip -p {node_zip_dst} node-16-alpine3.14.sif > {node_sif_location}"',
             f'sudo sh -c "test ! -f {util_sif_location} && curl -o {util_zip_dst} -Ls {util_zip_src} && unzip -p {util_zip_dst} image.sif > {util_sif_location}"',
             f'sudo singularity pull --nohttps {container_sif_location} docker://{infer_dns_cmd}:5000/{container_file}',
-            f'sudo singularity instance start -C -e --dns {infer_dns_cmd} --overlay /mnt/3 --bind /mnt/2:/root,/mnt/aux {node_sif_location} node',
+            f'sudo singularity instance start -C -e --dns {infer_dns_cmd} --overlay /mnt/3 --bind /mnt/2:/root,/mnt/aux,/mnt/sargraph-mount {node_sif_location} node',
             f'sudo singularity instance start -C -e --dns {infer_dns_cmd} --writable-tmpfs {util_sif_location} util',
             ssh_tunnel_cmd,
             f'echo "::group::Starting {container_file}..."',
             f'sudo singularity --debug instance start -C -e --dns {infer_dns_cmd} --overlay /mnt/1 --bind /mnt/2:/root,/mnt/aux {container_sif_location} i',
             'echo "::endgroup::"',
-            f'chmod +x {SARGRAPH[1]}',
-            f'sudo mv {SARGRAPH[1]} /usr/bin/sargraph',
-            f'cd /mnt && SARGRAPH_OUTPUT_TYPE=svg sudo -E sargraph chart start -f $(realpath {boot_disk_ext_part})',
             'echo "::group::Checking container disks..."',
             'sudo singularity exec -e instance://i df -h /',
             'echo "::endgroup::"',
