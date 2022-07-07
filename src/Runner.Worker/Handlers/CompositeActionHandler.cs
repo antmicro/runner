@@ -10,6 +10,7 @@ using GitHub.DistributedTask.Pipelines.ContextData;
 using GitHub.DistributedTask.WebApi;
 using GitHub.Runner.Common;
 using GitHub.Runner.Sdk;
+using GitHub.Runner.GCP;
 using Pipelines = GitHub.DistributedTask.Pipelines;
 
 
@@ -69,7 +70,7 @@ namespace GitHub.Runner.Worker.Handlers
                 step.ExecutionContext.ExpressionValues["github"] = gitHubContext;
 
                 // Set GITHUB_ACTION_PATH
-                step.ExecutionContext.SetGitHubContext("action_path", ActionDirectory);
+                step.ExecutionContext.SetGitHubContext("action_path", GCPRunner.TranslateToGCPRunnerPath(ActionDirectory));
 
                 compositeSteps.Add(step);
             }
