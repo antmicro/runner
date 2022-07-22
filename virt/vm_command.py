@@ -31,12 +31,13 @@ CONFIG = load_config()
 def str2bool(v):
     return v.lower() in ("yes", "true", "t", "1")
 
-def get_numeric_project_id():
-    with requests.get("http://metadata.google.internal/computeMetadata/v1/project/numeric-project-id", headers={'Metadata-Flavor':'Google'}) as r:
+def get_project_id(numeric=False):
+    prop = "numeric-project-id" if numeric else "project-id"
+    with requests.get(f"http://metadata.google.internal/computeMetadata/v1/project/{prop}", headers={'Metadata-Flavor':'Google'}) as r:
         r.raise_for_status()
         return r.text
 
-PROJECT_ID = get_numeric_project_id()
+PROJECT, PROJECT_ID = get_project_id(), get_project_id(True)
 
 def get_secret(secret_name, namespace):
     credentials, _ = google.auth.default()
@@ -689,7 +690,7 @@ def main(mode, instance_number, container_file=None, disk_name=None, preemptible
     elif mode == "get_secret":
         get_secret(secret_name, secret_namespace)
     elif mode == "get_project_id":
-        print(get_numeric_project_id())
+        print(PROJECT, PROJECT_ID)
     else:
         print(f"Unknown mode: {mode}! Exiting!")
         sys.exit(1)
