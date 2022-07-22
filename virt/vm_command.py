@@ -36,12 +36,13 @@ def get_numeric_project_id():
         r.raise_for_status()
         return r.text
 
+PROJECT_ID = get_numeric_project_id()
+
 def get_secret(secret_name, namespace):
     credentials, _ = google.auth.default()
     authed_session = AuthorizedSession(credentials)
-    numeric_project_id = get_numeric_project_id()
 
-    base_url = f"https://secretmanager.googleapis.com/v1/projects/{numeric_project_id}/secrets/{secret_name}"
+    base_url = f"https://secretmanager.googleapis.com/v1/projects/{PROJECT_ID}/secrets/{secret_name}"
 
     with authed_session.get(base_url) as r:
         r.raise_for_status()
@@ -120,7 +121,7 @@ def export_gcp_ip(authed_session, link, runner_name):
     return
 
 def describe_instance(authed_session, id):
-    URL = f"https://compute.googleapis.com/compute/v1/projects/{CONFIG.gcp.project}/zones/{CONFIG.gcp.zone}/instances/{id}"
+    URL = f"https://compute.googleapis.com/compute/v1/projects/{PROJECT_ID}/zones/{CONFIG.gcp.zone}/instances/{id}"
     r = authed_session.get(URL)
     result = json.loads(r.text)
     if "machineType" not in result:
@@ -129,7 +130,7 @@ def describe_instance(authed_session, id):
     return result['machineType']
 
 def create_instance_call(authed_session, instance_number, instance_name, boot_disk_name, external_disk_info, preemptible_machine, machine_type, service_account, uuid):
-    URL = f"https://compute.googleapis.com/compute/v1/projects/{CONFIG.gcp.project}/zones/{CONFIG.gcp.zone}/instances?requestId={uuid}"
+    URL = f"https://compute.googleapis.com/compute/v1/projects/{PROJECT_ID}/zones/{CONFIG.gcp.zone}/instances?requestId={uuid}"
     data = {
         "name": f"{instance_name}",
         "machineType": f"zones/{CONFIG.gcp.zone}/machineTypes/{machine_type}",
@@ -165,7 +166,7 @@ def create_instance_call(authed_session, instance_number, instance_name, boot_di
             "deviceName": f"{boot_disk_name}",
             "initializeParams": {
                 "diskSizeGb": f"{CONFIG.machine.disk}",
-                "sourceImage": f"projects/{CONFIG.gcp.project}/global/images/{CONFIG.gcp.image}",
+                "sourceImage": f"projects/{PROJECT_ID}/global/images/{CONFIG.gcp.image}",
             },
         },
             external_disk_info
@@ -318,7 +319,7 @@ def get_instance_name(instance_number):
     return f'{platform.node()}-auto-spawned{instance_number}'
 
 def delete_instance_call(authed_session, instance_name, uuid):
-    URL = f"https://compute.googleapis.com/compute/v1/projects/{CONFIG.gcp.project}/zones/{CONFIG.gcp.zone}/instances/{instance_name}?requestID={uuid}"
+    URL = f"https://compute.googleapis.com/compute/v1/projects/{PROJECT_ID}/zones/{CONFIG.gcp.zone}/instances/{instance_name}?requestID={uuid}"
     r = authed_session.delete(URL)
     return json.loads(r.text)
 
@@ -575,7 +576,7 @@ def detect_preempted_signal(instance_number):
     credentials, _ = google.auth.default()
     authed_session = AuthorizedSession(credentials)
 
-    URL = f'https://compute.googleapis.com/compute/v1/projects/{CONFIG.gcp.project}/aggregated/operations'
+    URL = f'https://compute.googleapis.com/compute/v1/projects/{PROJECT_ID}/aggregated/operations'
 
     url_filters = [
             f'(operationType eq compute.instances.preempted)',
@@ -621,7 +622,7 @@ def list_auto_spawned_instances(authed_session):
     # Due to bug in GCP API, we can't filter based on creationTimestamp
     # https://issuetracker.google.com/issues/132365111
     # https://issuetracker.google.com/issues/132676194
-    URL = f"https://compute.googleapis.com/compute/v1/projects/{CONFIG.gcp.project}/zones/{CONFIG.gcp.zone}/instances?filter=(name={platform.node()}-auto-spawned*)"
+    URL = f"https://compute.googleapis.com/compute/v1/projects/{PROJECT_ID}/zones/{CONFIG.gcp.zone}/instances?filter=(name={platform.node()}-auto-spawned*)"
     r = authed_session.get(URL)
     return json.loads(r.text)
 
