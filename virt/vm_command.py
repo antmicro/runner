@@ -402,7 +402,7 @@ def create_vm(instance_number, container_file, disk_name=None, preemptible_overr
 
     # Attach an external disk (if applicable)
     if disk_name:
-        external_disk = get_gcp_disk(authed_session, CONFIG.gcp.project, CONFIG.gcp.zone, disk_name)
+        external_disk = get_gcp_disk(authed_session, PROJECT, CONFIG.gcp.zone, disk_name)
 
         # Bail if API response does not contain fields indicating successful operation.
         if "name" not in external_disk or "sizeGb" not in external_disk:
@@ -428,7 +428,7 @@ def create_vm(instance_number, container_file, disk_name=None, preemptible_overr
             print("Used service account must have 'gh-sa-' in the name!")
             sys.exit(1)
         service_account_info = [{
-                "email": f"{service_account}@{CONFIG.gcp.project}.iam.gserviceaccount.com",
+                "email": f"{service_account}@{PROJECT}.iam.gserviceaccount.com",
                 "scopes": [
                     "https://www.googleapis.com/auth/cloud-platform", # this scope is required in order to get authentication details from the Google Compute Engine metadata service
                     "https://www.googleapis.com/auth/devstorage.read_write"
@@ -472,7 +472,7 @@ def create_vm(instance_number, container_file, disk_name=None, preemptible_overr
     infer_dns_cmd = "$(echo $SSH_CONNECTION | awk '{ print $1 }')"
 
     # Truncate local rsyslog log file
-    log_name = f'work/{get_instance_name(instance_number)}.c.{CONFIG.gcp.project}.internal.log'
+    log_name = f'work/{get_instance_name(instance_number)}.c.{PROJECT}.internal.log'
     command = f"{shutil.which('truncate')} -s0 {log_name}"
     try:
         subprocess.run(shlex.split(command),stderr=subprocess.STDOUT)
@@ -551,7 +551,7 @@ def check_preempted(current_log):
     return None
 
 def check_rsyslog(instance_number):
-    instance_name = f'{get_instance_name(instance_number)}.c.{CONFIG.gcp.project}.internal'
+    instance_name = f'{get_instance_name(instance_number)}.c.{PROJECT}.internal'
 
     current_log = []
     found_labels = False
