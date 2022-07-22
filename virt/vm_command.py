@@ -39,9 +39,36 @@ def get_project_id(numeric=False):
 
 PROJECT, PROJECT_ID = get_project_id(), get_project_id(True)
 
-def get_secret(secret_name, namespace):
+def get_available_zones():
+    # Get current network name.
+    with requests.get(f"http://metadata.google.internal/computeMetadata/v1/instance/network-interfaces/0/network", headers={'Metadata-Flavor':'Google'}) as r:
+        r.raise_for_status()
+        network_name = r.text.split('/')[-1]
+
     credentials, _ = google.auth.default()
     authed_session = AuthorizedSession(credentials)
+
+    # Get current network metadata to retrieve the list of subnetworks and extract their regions.
+    with authed_session.get(f"https://compute.googleapis.com/compute/v1/projects/{PROJECT}/aggregated/subnetworks", params={'filter': f'(network eq .*\\b{network_name}\\b.*)'}) as r:
+        r.raise_for_status()
+        regions_with_subnets = [region_key.split('/')[-1] for region_key, region_val in r.json()['items'].items() if "subnetworks" in region_val]
+
+    # Get all available regions.
+    with authed_session.get(f"https://compute.googleapis.com/compute/v1/projects/{PROJECT}/regions") as r:
+        r.raise_for_status()
+        regions = r.json()['items']
+
+    zones = []
+
+    # Extract zones belonging to all regions with subnetworks associated with the current network.
+    for region in regions:
+        for zone in region['zones']:
+            if any(region_with_subnet in zone for region_with_subnet in regions_with_subnets):
+                zones.append(zone.split('/')[-1])
+
+    return zones
+
+def get_secret(secret_name, namespace):
 
     base_url = f"https://secretmanager.googleapis.com/v1/projects/{PROJECT_ID}/secrets/{secret_name}"
 
@@ -662,7 +689,7 @@ def check_mode_parameters(mode, instance_number, container_file):
             sys.exit(1)
 
 @click.command()
-@click.option('--mode', type=click.Choice(['create_vm', 'delete_vm', 'check-rsyslog', 'detect_preempted_signal', 'check_dmesg', 'delete_stale_instances', 'get_secret', 'get_project_id']), required = True)
+@click.option('--mode', type=click.Choice(['create_vm', 'delete_vm', 'check-rsyslog', 'detect_preempted_signal', 'check_dmesg', 'delete_stale_instances', 'get_secret', 'get_project_id', 'get_zones']), required = True)
 @click.option('-n', '--instance-number', help='Instance number', required=False, default=None)
 @click.option('-s', '--container-file', help='Container file', required=False, default=None)
 @click.option('-d', '--disk-name', help='External disk name', required=False, default=None)
@@ -691,6 +718,8 @@ def main(mode, instance_number, container_file=None, disk_name=None, preemptible
         get_secret(secret_name, secret_namespace)
     elif mode == "get_project_id":
         print(PROJECT, PROJECT_ID)
+    elif mode == "get_zones":
+        print(get_available_zones())
     else:
         print(f"Unknown mode: {mode}! Exiting!")
         sys.exit(1)
