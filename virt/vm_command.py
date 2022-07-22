@@ -660,7 +660,7 @@ def check_mode_parameters(mode, instance_number, container_file):
             sys.exit(1)
 
 @click.command()
-@click.option('--mode', type=click.Choice(['create_vm', 'delete_vm', 'check-rsyslog', 'detect_preempted_signal', 'check_dmesg', 'delete_stale_instances', 'get_secret']), required = True)
+@click.option('--mode', type=click.Choice(['create_vm', 'delete_vm', 'check-rsyslog', 'detect_preempted_signal', 'check_dmesg', 'delete_stale_instances', 'get_secret', 'get_project_id']), required = True)
 @click.option('-n', '--instance-number', help='Instance number', required=False, default=None)
 @click.option('-s', '--container-file', help='Container file', required=False, default=None)
 @click.option('-d', '--disk-name', help='External disk name', required=False, default=None)
@@ -687,6 +687,8 @@ def main(mode, instance_number, container_file=None, disk_name=None, preemptible
         delete_stale_instances()
     elif mode == "get_secret":
         get_secret(secret_name, secret_namespace)
+    elif mode == "get_project_id":
+        print(get_numeric_project_id())
     else:
         print(f"Unknown mode: {mode}! Exiting!")
         sys.exit(1)
