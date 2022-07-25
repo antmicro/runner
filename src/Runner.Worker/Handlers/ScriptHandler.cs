@@ -365,75 +365,8 @@ namespace GitHub.Runner.Worker.Handlers
                     {
                         ExecutionContext.Error("This error indicates issues with communication with the worker instance.");
 
-                        var vmSpecsLocation = Path.Combine(
-                                new DirectoryInfo(HostContext.GetDirectory(WellKnownDirectory.Root)).Parent.FullName,
-                                ".vm_specs.json"
-                                );
-                        dynamic vmSpecs = JObject.Parse(File.ReadAllText(vmSpecsLocation));
                         var rootDir = new DirectoryInfo(HostContext.GetDirectory(WellKnownDirectory.Root)).Parent.FullName;
                         var virtDir = Path.Combine(rootDir, "virt");
-
-                        Trace.Info($"Running diagnostics for {sshIp} in zone {vmSpecs.gcp.zone}");
-
-                        // Collect Busybox's syslogd data
-                        var fetchSyslogsArgs = new List<string>(Constants.CommonSshArgs);
-                        fetchSyslogsArgs.Add("cat /var/log/messages");
-
-                        GCPCoordinator.RunProcess(
-                                fileName: "ssh",
-                                arguments: string.Join(" ", fetchSyslogsArgs.ToArray()),
-                                workDirectory: virtDir,
-                                outputDataReceivedFunc: (_, args) => Trace.Info(args.Data ?? ""),
-                                errorDataReceivedFunc: (_, args) => Trace.Error(args.Data ?? ""),
-                                exceptionFunc: (e) => { Trace.Info("Exception when fetching syslog!"); Trace.Info(e.Message); },
-                                trace: Trace,
-                                exceptionReturnCode: 255);
-
-                        var checkMachineRawJson = String.Empty;
-                        GCPCoordinator.RunProcess(
-                                fileName: "gcloud",
-                                arguments: String.Join(" ", "compute instances describe", sshIp, $"--zone={vmSpecs.gcp.zone}", "--format=json", "--quiet"),
-                                workDirectory: virtDir,
-                                outputDataReceivedFunc: (_, args) => checkMachineRawJson += args.Data ?? "",
-                                errorDataReceivedFunc: (_, args) => Trace.Error(args.Data ?? ""),
-                                exceptionFunc: (e) => { Trace.Info("Exception when checking machine!"); Trace.Info(e.Message); },
-                                trace: Trace,
-                                exceptionReturnCode: 255);
-
-                        var getSerialPortRawJson = String.Empty;
-                        GCPCoordinator.RunProcess(
-                                fileName: "gcloud",
-                                arguments: String.Join(" ", "compute instances get-serial-port-output", sshIp, $"--zone={vmSpecs.gcp.zone}", "--format=json", "--quiet"),
-                                workDirectory: virtDir,
-                                outputDataReceivedFunc: (_, args) => getSerialPortRawJson += args.Data ?? "",
-                                errorDataReceivedFunc: (_, args) => Trace.Error(args.Data ?? ""),
-                                exceptionFunc: (e) => { Trace.Info("Exception when getting serial port output!"); Trace.Info(e.Message); },
-                                trace: Trace,
-                                exceptionReturnCode: 255);
-
-                        try
-                        {
-                            dynamic checkMachine = JObject.Parse(checkMachineRawJson);
-
-                            ExecutionContext.Error($"The worker instance has status {checkMachine.status}");
-
-                            Trace.Info($"GCP status: {checkMachine.ToString()}");
-                        }
-                        catch (JsonReaderException e)
-                        {
-                            Trace.Error($"Could not parse gcloud output: {e}");
-                        }
-
-                        try
-                        {
-                            dynamic getSerialPort = JObject.Parse(getSerialPortRawJson);
-
-                            Trace.Info($"Serial port log: {getSerialPort.contents}");
-                        }
-                        catch (JsonReaderException e)
-                        {
-                            Trace.Error($"Could not parse gcloud output: {e}");
-                        }
 
                         var pingExitCode = GCPCoordinator.RunProcess(
                                 fileName: "ping",
