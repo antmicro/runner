@@ -499,7 +499,7 @@ namespace GitHub.Runner.Worker
                     trace: Trace,
                     exceptionReturnCode: 255);
 
-            Trace.Info($"Destroying {Constants.RunnerIPVariable} from {vmSpecs.gcp.zone}");
+            Trace.Info($"Destroying {Constants.RunnerIPVariable}");
 
             GCPCoordinator.RunProcess(
                     fileName: "python3",
