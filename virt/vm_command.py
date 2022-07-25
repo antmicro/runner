@@ -161,14 +161,18 @@ def export_gcp_ip(authed_session, link, runner_name):
     print(f"export {runner_name}={ip}")
     return
 
-def describe_instance(authed_session, id):
-    URL = f"https://compute.googleapis.com/compute/v1/projects/{PROJECT_ID}/zones/{CONFIG.gcp.zone}/instances/{id}"
-    r = authed_session.get(URL)
-    result = json.loads(r.text)
-    if "machineType" not in result:
-        print("Unexpected output while processing response! Exiting!")
-        sys.exit(1)
-    return result['machineType']
+def describe_instance(instance_name):
+    credentials, _ = google.auth.default()
+    authed_session = AuthorizedSession(credentials)
+
+    with authed_session.get(f"https://compute.googleapis.com/compute/v1/projects/{PROJECT}/aggregated/instances", params={'filter': f'(name eq .*\\b{instance_name}\\b.*)'}) as r:
+        r.raise_for_status()
+        zones_with_instances = r.json()['items']
+
+        for zone_name, zone_object in zones_with_instances.items():
+            for instance in (zone_object.get("instances") or []):
+                if instance['name'] == instance_name:
+                    return instance
 
 def create_instance_call(authed_session, instance_number, instance_name, boot_disk_name, external_disk_info, preemptible_machine, machine_type, service_account, uuid):
     URL = f"https://compute.googleapis.com/compute/v1/projects/{PROJECT_ID}/zones/{CONFIG.gcp.zone}/instances?requestId={uuid}"
@@ -393,8 +397,7 @@ def create_vm(instance_number, container_file, disk_name=None, preemptible_overr
     instance_name = get_instance_name(instance_number)
     credentials, _ = google.auth.default()
     authed_session = AuthorizedSession(credentials)
-    print(f"Using coordinator machine: {describe_instance(authed_session, platform.node()).rsplit('/', 1)[-1]}")
-    print(f'Spawning a GCP machine in {CONFIG.gcp.zone}...')
+
     print(f'Instance name:\t {instance_name}')
     print(f'Instance type:\t {machine_type}')
     print(f'Disk type:\t {CONFIG.gcp.disk_type}')
@@ -702,7 +705,7 @@ def check_mode_parameters(mode, instance_number, container_file):
             sys.exit(1)
 
 @click.command()
-@click.option('--mode', type=click.Choice(['create_vm', 'delete_vm', 'check-rsyslog', 'detect_preempted_signal', 'check_dmesg', 'delete_stale_instances', 'get_secret', 'get_project_id', 'get_zones']), required = True)
+@click.option('--mode', type=click.Choice(['create_vm', 'delete_vm', 'check-rsyslog', 'detect_preempted_signal', 'check_dmesg', 'delete_stale_instances', 'get_secret', 'get_project_id', 'get_zones', 'get_vm']), required = True)
 @click.option('-n', '--instance-number', help='Instance number', required=False, default=None)
 @click.option('-s', '--container-file', help='Container file', required=False, default=None)
 @click.option('-d', '--disk-name', help='External disk name', required=False, default=None)
@@ -733,6 +736,8 @@ def main(mode, instance_number, container_file=None, disk_name=None, preemptible
         print(PROJECT, PROJECT_ID)
     elif mode == "get_zones":
         print(get_available_zones())
+    elif mode == "get_vm":
+        print(describe_instance(instance_number))
     else:
         print(f"Unknown mode: {mode}! Exiting!")
         sys.exit(1)
