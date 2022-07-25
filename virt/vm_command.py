@@ -45,6 +45,11 @@ def get_available_zones():
         r.raise_for_status()
         network_name = r.text.split('/')[-1]
 
+    # Get home zone.
+    with requests.get(f"http://metadata.google.internal/computeMetadata/v1/instance/zone", headers={'Metadata-Flavor':'Google'}) as r:
+        r.raise_for_status()
+        home_zone = r.text.split('/')[-1]
+
     credentials, _ = google.auth.default()
     authed_session = AuthorizedSession(credentials)
 
@@ -58,13 +63,21 @@ def get_available_zones():
         r.raise_for_status()
         regions = r.json()['items']
 
-    zones = []
+    zones = [home_zone]
 
     # Extract zones belonging to all regions with subnetworks associated with the current network.
+    # Zones in the same region as home zone will be appended after home zone (which always comes first).
     for region in regions:
         for zone in region['zones']:
             if any(region_with_subnet in zone for region_with_subnet in regions_with_subnets):
-                zones.append(zone.split('/')[-1])
+                split_zone = zone.split('/')[-1]
+
+                if split_zone == home_zone:
+                    continue
+                elif split_zone.startswith(home_zone[:-2]):
+                    zones.insert(1, split_zone)
+                else:
+                    zones.append(split_zone)
 
     return zones
 
