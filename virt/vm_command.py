@@ -39,11 +39,14 @@ def get_project_id(numeric=False):
 
 PROJECT, PROJECT_ID = get_project_id(), get_project_id(True)
 
-def get_available_zones():
-    # Get current network name.
+def get_current_network():
     with requests.get(f"http://metadata.google.internal/computeMetadata/v1/instance/network-interfaces/0/network", headers={'Metadata-Flavor':'Google'}) as r:
         r.raise_for_status()
-        network_name = r.text.split('/')[-1]
+        return r.text.split('/')[-1]
+
+def get_available_zones():
+    # Get current network name.
+    network_name = get_current_network()
 
     # Get home zone.
     with requests.get(f"http://metadata.google.internal/computeMetadata/v1/instance/zone", headers={'Metadata-Flavor':'Google'}) as r:
