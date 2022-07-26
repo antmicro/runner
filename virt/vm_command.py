@@ -364,7 +364,9 @@ def get_instance_name(instance_number):
     return f'{platform.node()}-auto-spawned{instance_number}'
 
 def delete_instance_call(authed_session, instance_name, uuid):
-    URL = f"https://compute.googleapis.com/compute/v1/projects/{PROJECT_ID}/zones/{CONFIG.gcp.zone}/instances/{instance_name}?requestID={uuid}"
+    instance_zone = describe_instance(instance_name)['zone'].split('/')[-1]
+
+    URL = f"https://compute.googleapis.com/compute/v1/projects/{PROJECT_ID}/zones/{instance_zone}/instances/{instance_name}?requestID={uuid}"
     r = authed_session.delete(URL)
     return json.loads(r.text)
 
