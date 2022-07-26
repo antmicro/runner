@@ -38,6 +38,7 @@ def get_project_id(numeric=False):
         return r.text
 
 PROJECT, PROJECT_ID = get_project_id(), get_project_id(True)
+AUTHED_SESSION = AuthorizedSession(google.auth.default()[0])
 
 def get_current_network():
     with requests.get(f"http://metadata.google.internal/computeMetadata/v1/instance/network-interfaces/0/network", headers={'Metadata-Flavor':'Google'}) as r:
@@ -53,16 +54,13 @@ def get_available_zones():
         r.raise_for_status()
         home_zone = r.text.split('/')[-1]
 
-    credentials, _ = google.auth.default()
-    authed_session = AuthorizedSession(credentials)
-
     # Get current network metadata to retrieve the list of subnetworks and extract their regions.
-    with authed_session.get(f"https://compute.googleapis.com/compute/v1/projects/{PROJECT}/aggregated/subnetworks", params={'filter': f'(network eq .*\\b{network_name}\\b.*)'}) as r:
+    with AUTHED_SESSION.get(f"https://compute.googleapis.com/compute/v1/projects/{PROJECT}/aggregated/subnetworks", params={'filter': f'(network eq .*\\b{network_name}\\b.*)'}) as r:
         r.raise_for_status()
         regions_with_subnets = [region_key.split('/')[-1] for region_key, region_val in r.json()['items'].items() if "subnetworks" in region_val]
 
     # Get all available regions.
-    with authed_session.get(f"https://compute.googleapis.com/compute/v1/projects/{PROJECT}/regions") as r:
+    with AUTHED_SESSION.get(f"https://compute.googleapis.com/compute/v1/projects/{PROJECT}/regions") as r:
         r.raise_for_status()
         regions = r.json()['items']
 
@@ -85,12 +83,9 @@ def get_available_zones():
     return zones
 
 def get_secret(secret_name, namespace):
-    credentials, _ = google.auth.default()
-    authed_session = AuthorizedSession(credentials)
-
     base_url = f"https://secretmanager.googleapis.com/v1/projects/{PROJECT_ID}/secrets/{secret_name}"
 
-    with authed_session.get(base_url) as r:
+    with AUTHED_SESSION.get(base_url) as r:
         r.raise_for_status()
         labels = r.json().get('labels') or dict()
 
@@ -103,7 +98,7 @@ def get_secret(secret_name, namespace):
             sys.exit(1)
 
     # TODO: wrap in try-catch/check error.
-    with authed_session.get(f"{base_url}/versions", params={'filter':'state:ENABLED'}) as r:
+    with AUTHED_SESSION.get(f"{base_url}/versions", params={'filter':'state:ENABLED'}) as r:
         r.raise_for_status()
         versions = r.json()['versions']
 
@@ -113,17 +108,17 @@ def get_secret(secret_name, namespace):
 
         active_version = int(versions[0]['name'].split('/')[-1])
 
-    with authed_session.get(f"{base_url}/versions/{active_version}:access") as r:
+    with AUTHED_SESSION.get(f"{base_url}/versions/{active_version}:access") as r:
         r.raise_for_status()
         secret = r.json()['payload']['data']
 
     print(secret)
 
-def wait_for_gcp(authed_session, link):
+def wait_for_gcp(link):
     start = time.time()
     # set timeout to 60s
     while elapsed(start) < 60:
-        r = authed_session.get(link)
+        r = AUTHED_SESSION.get(link)
         result = json.loads(r.text)
 
         if "status" in result and result['status'] == 'DONE':
@@ -151,8 +146,8 @@ def wait_for_gcp(authed_session, link):
     print("Timeout while waiting for response! Exiting!")
     sys.exit(1)
 
-def export_gcp_ip(authed_session, link, runner_name):
-    r = authed_session.get(link)
+def export_gcp_ip(link, runner_name):
+    r = AUTHED_SESSION.get(link)
     result = json.loads(r.text)
     if "networkInterfaces" not in result or len(result['networkInterfaces']) < 0 or "networkIP" not in result['networkInterfaces'][0]:
         print("Unexpected output while processing response! Exiting!")
@@ -167,15 +162,12 @@ def export_gcp_ip(authed_session, link, runner_name):
     return
 
 def list_instances(instance_name=None):
-    credentials, _ = google.auth.default()
-    authed_session = AuthorizedSession(credentials)
-
     params = {}
 
     if instance_name is not None:
         params['filter'] = f'(name eq .*\\b{instance_name}\\b.*)'
 
-    with authed_session.get(f"https://compute.googleapis.com/compute/v1/projects/{PROJECT}/aggregated/instances", params=params) as r:
+    with AUTHED_SESSION.get(f"https://compute.googleapis.com/compute/v1/projects/{PROJECT}/aggregated/instances", params=params) as r:
         r.raise_for_status()
         zones_with_instances = r.json()['items']
 
@@ -188,7 +180,7 @@ def describe_instance(instance_name):
         if instance['name'] == instance_name:
             return instance
 
-def create_instance_call(authed_session, instance_number, instance_name, boot_disk_name, external_disk_info, preemptible_machine, machine_type, service_account, uuid):
+def create_instance_call(instance_number, instance_name, boot_disk_name, external_disk_info, preemptible_machine, machine_type, service_account, uuid):
     URL = f"https://compute.googleapis.com/compute/v1/projects/{PROJECT_ID}/zones/{CONFIG.gcp.zone}/instances?requestId={uuid}"
     data = {
         "name": f"{instance_name}",
@@ -236,23 +228,23 @@ def create_instance_call(authed_session, instance_number, instance_name, boot_di
         "labels": LABELS,
         "serviceAccounts": service_account,
     }
-    r = authed_session.post(url=URL, json=data)
+    r = AUTHED_SESSION.post(url=URL, json=data)
     return json.loads(r.text)
 
-def create_instance(authed_session, instance_number, instance_name, boot_disk_name, external_disk_info, preemptible_machine, machine_type, service_account):
+def create_instance(instance_number, instance_name, boot_disk_name, external_disk_info, preemptible_machine, machine_type, service_account):
     success = False
     retries = 5
     request_uuid = str(uuid.uuid4())
     while retries > 0:
         retries = retries - 1
         # Same UUID makes sure that we won't create multiple VMs
-        result = create_instance_call(authed_session, instance_number, instance_name, boot_disk_name, external_disk_info, preemptible_machine, machine_type, service_account, request_uuid)
+        result = create_instance_call(instance_number, instance_name, boot_disk_name, external_disk_info, preemptible_machine, machine_type, service_account, request_uuid)
         if "selfLink" not in result or "targetLink" not in result:
             print("Unexpected response when creating VM!")
             time.sleep(1)
             continue
-        wait_for_gcp(authed_session, result['selfLink'])
-        export_gcp_ip(authed_session, result['targetLink'], instance_name)
+        wait_for_gcp(result['selfLink'])
+        export_gcp_ip(result['targetLink'], instance_name)
         success = True
         break
     if success is False:
@@ -262,14 +254,14 @@ def create_instance(authed_session, instance_number, instance_name, boot_disk_na
 def elapsed(start):
     return round(time.time() - start, 2)
 
-def get_gcp_disk(authed_session, project, zone, disk_name):
+def get_gcp_disk(project, zone, disk_name):
     if not disk_name or not zone:
         return None
 
     URL = "https://compute.googleapis.com/compute/v1/projects/{project}/zones/{zone}/disks/{resourceId}"
 
 
-    r = authed_session.get(URL.format(project=project, zone=zone, resourceId=disk_name))
+    r = AUTHED_SESSION.get(URL.format(project=project, zone=zone, resourceId=disk_name))
     return json.loads(r.text)
 
 def check_machine_type(machine_type):
@@ -377,25 +369,25 @@ def execute_ssh_commands(ssh, commands):
 def get_instance_name(instance_number):
     return f'{platform.node()}-auto-spawned{instance_number}'
 
-def delete_instance_call(authed_session, instance_name, uuid):
+def delete_instance_call(instance_name, uuid):
     instance_zone = describe_instance(instance_name)['zone'].split('/')[-1]
 
     URL = f"https://compute.googleapis.com/compute/v1/projects/{PROJECT_ID}/zones/{instance_zone}/instances/{instance_name}?requestID={uuid}"
-    r = authed_session.delete(URL)
+    r = AUTHED_SESSION.delete(URL)
     return json.loads(r.text)
 
-def delete_instance(authed_session, instance_name):
+def delete_instance(instance_name):
     success = False
     retries = 5
     request_uuid = str(uuid.uuid4())
     while retries > 0:
         retries = retries - 1
         # Same UUID makes sure that we won't delete multiple VMs
-        result = delete_instance_call(authed_session, instance_name, request_uuid)
+        result = delete_instance_call(instance_name, request_uuid)
         if "selfLink" not in result:
             print("Unexpected output while processing response!")
             continue
-        wait_for_gcp(authed_session, result['selfLink'])
+        wait_for_gcp(result['selfLink'])
         success = True
         break
     if success is False:
@@ -412,9 +404,6 @@ def create_vm(instance_number, container_file, disk_name=None, preemptible_overr
     check_machine_type(machine_type)
 
     instance_name = get_instance_name(instance_number)
-
-    credentials, _ = google.auth.default()
-    authed_session = AuthorizedSession(credentials)
 
     print(f'Instance name:\t {instance_name}')
     print(f'Instance type:\t {machine_type}')
@@ -466,7 +455,7 @@ def create_vm(instance_number, container_file, disk_name=None, preemptible_overr
 
     # Attach an external disk (if applicable)
     if disk_name:
-        external_disk = get_gcp_disk(authed_session, PROJECT, available_zones[0], disk_name)
+        external_disk = get_gcp_disk(PROJECT, available_zones[0], disk_name)
 
         # Bail if API response does not contain fields indicating successful operation.
         if "name" not in external_disk or "sizeGb" not in external_disk:
@@ -498,7 +487,7 @@ def create_vm(instance_number, container_file, disk_name=None, preemptible_overr
                     "https://www.googleapis.com/auth/devstorage.read_write"
                 ]
             }]
-    create_instance(authed_session, instance_number, instance_name, boot_disk_name, external_disk_info, preemptible_machine, machine_type, service_account_info)
+    create_instance(instance_number, instance_name, boot_disk_name, external_disk_info, preemptible_machine, machine_type, service_account_info)
     print(f'Machine spawned in {elapsed(gcloud_start)} seconds.')
 
     target = os.environ[instance_name]
@@ -602,9 +591,7 @@ def create_vm(instance_number, container_file, disk_name=None, preemptible_overr
 def delete_vm(instance_number):
     instance_name = get_instance_name(instance_number)
     print(f"Attempting to delete a machine ({instance_name})..")
-    credentials, _ = google.auth.default()
-    authed_session = AuthorizedSession(credentials)
-    delete_instance(authed_session, instance_name)
+    delete_instance(instance_name)
     print(f"Machine deleted ({instance_name})")
 
 
@@ -638,12 +625,10 @@ def check_rsyslog(instance_number):
 
 def detect_preempted_signal(instance_number):
     instance_name = get_instance_name(instance_number)
-    credentials, _ = google.auth.default()
-    authed_session = AuthorizedSession(credentials)
 
     URL = f'https://compute.googleapis.com/compute/v1/projects/{PROJECT_ID}/aggregated/operations'
 
-    r = authed_session.get(URL, params={'filter': f'(operationType eq compute.instances.preempted)', 'maxResults': 500})
+    r = AUTHED_SESSION.get(URL, params={'filter': f'(operationType eq compute.instances.preempted)', 'maxResults': 500})
 
     if not str(r.status_code).startswith("2"):
         print("Unable to get the list of operations!")
@@ -681,9 +666,6 @@ def list_auto_spawned_instances():
     return list(list_instances(get_instance_name('.*')))
 
 def delete_stale_instances():
-    credentials, _ = google.auth.default()
-    authed_session = AuthorizedSession(credentials)
-
     now = datetime.datetime.utcnow().replace(tzinfo=datetime.timezone.utc)
     for instance in list_auto_spawned_instances():
         if "creationTimestamp" not in instance or "name" not in instance:
@@ -698,7 +680,7 @@ def delete_stale_instances():
         # assume maximum timeout 12h
         if diff.days > 0 or hours > 12:
             print(f"Attempting to delete a stale machine({instance['name']}) spawned {instance['creationTimestamp']}..")
-            delete_instance(authed_session, instance['name'])
+            delete_instance(instance['name'])
 
 def check_mode_parameters(mode, instance_number, container_file):
     if mode == "create_vm":
