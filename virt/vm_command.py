@@ -402,10 +402,12 @@ def relative_self_link(self_link):
 
 def create_vm(instance_number, container_file, disk_name=None, preemptible_override=None, machine_type=None, service_account=None, ssh_tunnel_config=None, ssh_tunnel_key=None):
     print("Attempting to spawn a machine..")
-    if machine_type is None:
-        machine_type = CONFIG.gcp.type
+
+    machine_type = machine_type or CONFIG.gcp.type
     check_machine_type(machine_type)
+
     instance_name = get_instance_name(instance_number)
+
     credentials, _ = google.auth.default()
     authed_session = AuthorizedSession(credentials)
 
