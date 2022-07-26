@@ -45,19 +45,28 @@ def get_current_network():
         r.raise_for_status()
         return r.text.split('/')[-1]
 
-def get_available_zones():
-    # Get current network name.
-    network_name = get_current_network()
+def get_available_subnetworks(network_name=None):
+    network_name = network_name or get_current_network()
 
+    with AUTHED_SESSION.get(f"https://compute.googleapis.com/compute/v1/projects/{PROJECT}/aggregated/subnetworks", params={'filter': f'(network eq .*\\b{network_name}\\b.*)'}) as r:
+        r.raise_for_status()
+        return r.json()['items']
+
+def get_zonal_subnetwork(zone):
+    current_network = get_current_network()
+    
+    for subnetwork in (get_available_subnetworks(current_network)["regions/{}".format(zone[:-2])].get('subnetworks') or []):
+        if subnetwork['name'].startswith(current_network):
+            return subnetwork
+
+def get_available_zones():
     # Get home zone.
     with requests.get(f"http://metadata.google.internal/computeMetadata/v1/instance/zone", headers={'Metadata-Flavor':'Google'}) as r:
         r.raise_for_status()
         home_zone = r.text.split('/')[-1]
 
     # Get current network metadata to retrieve the list of subnetworks and extract their regions.
-    with AUTHED_SESSION.get(f"https://compute.googleapis.com/compute/v1/projects/{PROJECT}/aggregated/subnetworks", params={'filter': f'(network eq .*\\b{network_name}\\b.*)'}) as r:
-        r.raise_for_status()
-        regions_with_subnets = [region_key.split('/')[-1] for region_key, region_val in r.json()['items'].items() if "subnetworks" in region_val]
+    regions_with_subnets = [region_key.split('/')[-1] for region_key, region_val in get_available_subnetworks().items() if "subnetworks" in region_val]
 
     # Get all available regions.
     with AUTHED_SESSION.get(f"https://compute.googleapis.com/compute/v1/projects/{PROJECT}/regions") as r:
@@ -693,7 +702,7 @@ def check_mode_parameters(mode, instance_number, container_file):
             sys.exit(1)
 
 @click.command()
-@click.option('--mode', type=click.Choice(['create_vm', 'delete_vm', 'check-rsyslog', 'detect_preempted_signal', 'check_dmesg', 'delete_stale_instances', 'get_secret', 'get_project_id', 'get_zones', 'get_vm', 'get_vms']), required = True)
+@click.option('--mode', type=click.Choice(['create_vm', 'delete_vm', 'check-rsyslog', 'detect_preempted_signal', 'check_dmesg', 'delete_stale_instances', 'get_secret', 'get_project_id', 'get_zones', 'get_vm', 'get_vms', 'get_subnet']), required = True)
 @click.option('-n', '--instance-number', help='Instance number', required=False, default=None)
 @click.option('-s', '--container-file', help='Container file', required=False, default=None)
 @click.option('-d', '--disk-name', help='External disk name', required=False, default=None)
@@ -704,7 +713,8 @@ def check_mode_parameters(mode, instance_number, container_file):
 @click.option('--ssh-tunnel-key', help="Base64 encoded private SSH key for establishing a tunnel", required=False, default=None)
 @click.option('--secret-name', help="GCP Secret Manager secret name", required=False, default=None)
 @click.option('--secret-namespace', help="GCP Secret Manager secret name", required=False, default=None)
-def main(mode, instance_number, container_file=None, disk_name=None, preemptible_override=None, machine_type=None, service_account=None, ssh_tunnel_config=None, ssh_tunnel_key=None, secret_name=None, secret_namespace=None):
+@click.option('--zone', help="Google Cloud zone", required=False, default=None)
+def main(mode, instance_number, container_file=None, disk_name=None, preemptible_override=None, machine_type=None, service_account=None, ssh_tunnel_config=None, ssh_tunnel_key=None, secret_name=None, secret_namespace=None, zone=None):
     check_mode_parameters(mode, instance_number, container_file)
     if mode == "create_vm":
         create_vm(instance_number, container_file, disk_name, preemptible_override, machine_type, service_account, ssh_tunnel_config, ssh_tunnel_key)
@@ -728,6 +738,8 @@ def main(mode, instance_number, container_file=None, disk_name=None, preemptible
         print(describe_instance(instance_number))
     elif mode == "get_vms":
         print(list_auto_spawned_instances())
+    elif mode == "get_subnet":
+        print(get_zonal_subnetwork(zone))
     else:
         print(f"Unknown mode: {mode}! Exiting!")
         sys.exit(1)
