@@ -82,6 +82,8 @@ def get_available_zones():
     return zones
 
 def get_secret(secret_name, namespace):
+    credentials, _ = google.auth.default()
+    authed_session = AuthorizedSession(credentials)
 
     base_url = f"https://secretmanager.googleapis.com/v1/projects/{PROJECT_ID}/secrets/{secret_name}"
 
