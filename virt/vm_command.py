@@ -667,24 +667,15 @@ def check_dmesg(instance_number):
 
     execute_ssh_commands(ssh, commands)
 
-def list_auto_spawned_instances(authed_session):
-    # Due to bug in GCP API, we can't filter based on creationTimestamp
-    # https://issuetracker.google.com/issues/132365111
-    # https://issuetracker.google.com/issues/132676194
-    URL = f"https://compute.googleapis.com/compute/v1/projects/{PROJECT_ID}/zones/{CONFIG.gcp.zone}/instances?filter=(name={platform.node()}-auto-spawned*)"
-    r = authed_session.get(URL)
-    return json.loads(r.text)
+def list_auto_spawned_instances():
+    return list(list_instances(get_instance_name('.*')))
 
 def delete_stale_instances():
     credentials, _ = google.auth.default()
     authed_session = AuthorizedSession(credentials)
 
-    result = list_auto_spawned_instances(authed_session)
-    if "items" not in result:
-        print("Unexpected response while listing instances! Exiting!")
-        sys.exit(1)
     now = datetime.datetime.utcnow().replace(tzinfo=datetime.timezone.utc)
-    for instance in result['items']:
+    for instance in list_auto_spawned_instances():
         if "creationTimestamp" not in instance or "name" not in instance:
             print("Unexpected response while listing instances! Exiting!")
             sys.exit(1)
@@ -710,7 +701,7 @@ def check_mode_parameters(mode, instance_number, container_file):
             sys.exit(1)
 
 @click.command()
-@click.option('--mode', type=click.Choice(['create_vm', 'delete_vm', 'check-rsyslog', 'detect_preempted_signal', 'check_dmesg', 'delete_stale_instances', 'get_secret', 'get_project_id', 'get_zones', 'get_vm']), required = True)
+@click.option('--mode', type=click.Choice(['create_vm', 'delete_vm', 'check-rsyslog', 'detect_preempted_signal', 'check_dmesg', 'delete_stale_instances', 'get_secret', 'get_project_id', 'get_zones', 'get_vm', 'get_vms']), required = True)
 @click.option('-n', '--instance-number', help='Instance number', required=False, default=None)
 @click.option('-s', '--container-file', help='Container file', required=False, default=None)
 @click.option('-d', '--disk-name', help='External disk name', required=False, default=None)
@@ -743,6 +734,8 @@ def main(mode, instance_number, container_file=None, disk_name=None, preemptible
         print(get_available_zones())
     elif mode == "get_vm":
         print(describe_instance(instance_number))
+    elif mode == "get_vms":
+        print(list_auto_spawned_instances())
     else:
         print(f"Unknown mode: {mode}! Exiting!")
         sys.exit(1)
