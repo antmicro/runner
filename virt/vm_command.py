@@ -441,6 +441,9 @@ def create_vm(instance_number, container_file, disk_name=None, preemptible_overr
 
     print(f'Preemptible: {str2bool(preemptible_machine)}')
 
+    # First element is guaranteed to be the home zone (i.e. coordinator machine zone).
+    available_zones = get_available_zones()
+
     # Create and start the virtual machine.
     gcloud_start = time.time()
     boot_disk_name = f"scalerunner-boot-disk"
@@ -458,12 +461,12 @@ def create_vm(instance_number, container_file, disk_name=None, preemptible_overr
 
     # Attach an external disk (if applicable)
     if disk_name:
-        external_disk = get_gcp_disk(authed_session, PROJECT, CONFIG.gcp.zone, disk_name)
+        external_disk = get_gcp_disk(authed_session, PROJECT, available_zones[0], disk_name)
 
         # Bail if API response does not contain fields indicating successful operation.
         if "name" not in external_disk or "sizeGb" not in external_disk:
             if external_disk.get("error", {}).get('code') == 404:
-                print(f"External disk {disk_name} was not found in zone {CONFIG.gcp.zone}!")
+                print(f"External disk {disk_name} was not found in zone {available_zones[0]}!")
             else:
                 print("Unexpected output received while probing external disk! Exiting!")
 
