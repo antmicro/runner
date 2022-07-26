@@ -161,18 +161,27 @@ def export_gcp_ip(authed_session, link, runner_name):
     print(f"export {runner_name}={ip}")
     return
 
-def describe_instance(instance_name):
+def list_instances(instance_name=None):
     credentials, _ = google.auth.default()
     authed_session = AuthorizedSession(credentials)
 
-    with authed_session.get(f"https://compute.googleapis.com/compute/v1/projects/{PROJECT}/aggregated/instances", params={'filter': f'(name eq .*\\b{instance_name}\\b.*)'}) as r:
+    params = {}
+
+    if instance_name is not None:
+        params['filter'] = f'(name eq .*\\b{instance_name}\\b.*)'
+
+    with authed_session.get(f"https://compute.googleapis.com/compute/v1/projects/{PROJECT}/aggregated/instances", params=params) as r:
         r.raise_for_status()
         zones_with_instances = r.json()['items']
 
         for zone_name, zone_object in zones_with_instances.items():
             for instance in (zone_object.get("instances") or []):
-                if instance['name'] == instance_name:
-                    return instance
+                yield instance
+
+def describe_instance(instance_name):
+    for instance in list_instances(instance_name):
+        if instance['name'] == instance_name:
+            return instance
 
 def create_instance_call(authed_session, instance_number, instance_name, boot_disk_name, external_disk_info, preemptible_machine, machine_type, service_account, uuid):
     URL = f"https://compute.googleapis.com/compute/v1/projects/{PROJECT_ID}/zones/{CONFIG.gcp.zone}/instances?requestId={uuid}"
