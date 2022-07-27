@@ -124,36 +124,26 @@ def get_secret(secret_name, namespace):
     print(secret)
 
 def wait_for_gcp(link):
-    start = time.time()
-    # set timeout to 60s
-    while elapsed(start) < 60:
+    for _ in range(0, 100):
         r = AUTHED_SESSION.get(link)
         result = json.loads(r.text)
 
-        if "status" in result and result['status'] == 'DONE':
+        # The status of the operation can be one of the following: PENDING, RUNNING, or DONE.
+        if result['status'] == 'DONE':
             if 'error' in result:
                 if 'errors' in result['error']:
-                    for error in result['error']['errors']:
-                        if 'code' in error:
-                            if error['code'] == "ZONE_RESOURCE_POOL_EXHAUSTED_WITH_DETAILS":
-                                rand_sleep = random.randint(300,360)
-                                print(f"The zone does not have enough resources available to fulfill the request, sleeping: {rand_sleep}s and trying again")
-                                time.sleep(rand_sleep)
-                                sys.exit(1)
+                    return result['error']['errors']
                 elif 'reason' in result['error']:
                     if result['error']['reason'] == "RATE_LIMIT_EXCEEDED":
-                        rand_sleep = random.randint(60,120)
-                        print(f"Quota exceeded for API calls, sleeping: {rand_sleep}s and trying again")
-                        time.sleep(rand_sleep)
-                        sys.exit(1)
+                        print(f"Quota exceeded for API calls, will try again in one minute...") 
+                        time.sleep(60)
+                        continue
+            else:
+                return result
+        else:
+            time.sleep(1)
+            continue
 
-                print(f"Error occured while processing request: {result['error']}")
-                sys.exit(1)
-            return result
-
-        time.sleep(1)
-    print("Timeout while waiting for response! Exiting!")
-    sys.exit(1)
 
 def export_gcp_ip(link, runner_name):
     r = AUTHED_SESSION.get(link)
