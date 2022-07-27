@@ -1,6 +1,6 @@
 #!/usr/bin/python3
 import os, sys, subprocess, json, click, paramiko, time, functools, platform, shlex, shutil, requests, uuid, datetime, random, socket
-from collections import namedtuple
+from collections import namedtuple, OrderedDict
 
 print = functools.partial(print, flush=True)
 
@@ -60,36 +60,43 @@ def get_zonal_subnetwork(zone):
             return subnetwork
 
 def get_available_zones():
+    current_network = get_current_network()
+
     # Get home zone.
     with requests.get(f"http://metadata.google.internal/computeMetadata/v1/instance/zone", headers={'Metadata-Flavor':'Google'}) as r:
         r.raise_for_status()
         home_zone = r.text.split('/')[-1]
 
     # Get current network metadata to retrieve the list of subnetworks and extract their regions.
-    regions_with_subnets = [region_key.split('/')[-1] for region_key, region_val in get_available_subnetworks().items() if "subnetworks" in region_val]
+    regions_with_subnets = {region_key.split('/')[-1]:region_val for region_key, region_val in get_available_subnetworks(current_network).items() if "subnetworks" in region_val}
 
-    # Get all available regions.
+    # Get all available regions in order to get their zones.
     with AUTHED_SESSION.get(f"https://compute.googleapis.com/compute/v1/projects/{PROJECT}/regions") as r:
         r.raise_for_status()
         regions = r.json()['items']
 
-    zones = [home_zone]
+    zones = []
+    aux_zones = []
 
     # Extract zones belonging to all regions with subnetworks associated with the current network.
-    # Zones in the same region as home zone will be appended after home zone (which always comes first).
     for region in regions:
         for zone in region['zones']:
-            if any(region_with_subnet in zone for region_with_subnet in regions_with_subnets):
+            if any(region_with_subnet in zone for region_with_subnet in regions_with_subnets.keys()):
                 split_zone = zone.split('/')[-1]
 
-                if split_zone == home_zone:
-                    continue
-                elif split_zone.startswith(home_zone[:-2]):
-                    zones.insert(1, split_zone)
-                else:
-                    zones.append(split_zone)
+                to_append = (
+                        split_zone,
+                        next(filter(lambda s: s['name'].startswith(current_network), regions_with_subnets[split_zone[:-2]]['subnetworks']))
+                        )
 
-    return zones
+                if split_zone == home_zone:
+                    zones.insert(0, to_append)
+                elif split_zone.startswith(home_zone[:-2]):
+                    zones.append(to_append)
+                else:
+                    aux_zones.append(to_append)
+
+    return OrderedDict(zones+aux_zones)
 
 def get_secret(secret_name, namespace):
     base_url = f"https://secretmanager.googleapis.com/v1/projects/{PROJECT_ID}/secrets/{secret_name}"
