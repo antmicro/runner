@@ -22,6 +22,16 @@ SARGRAPH_RAMDISK_SIZE_MB = 50
 
 LABELS = [{e.lower(): (os.environ.get(e) or 'null')[:63].lower() for e in GH_ENV_LIST}]
 
+GCP_RESOURCE_EXHAUSTION_ERR = 'ZONE_RESOURCE_POOL_EXHAUSTED'
+GCP_RESOURCE_EXHAUSTION_EXAMPLE_ERR = [
+        {
+            'code': '{}_WITH_DETAILS'.format(GCP_RESOURCE_EXHAUSTION_ERR), 
+            'message': "The zone 'projects/foo/zones/bar' does not have enough resources available to fulfill the request.  '(resource type:compute)'."
+            }
+        ]
+
+SIMULATE_EXHAUSTION_CTR = 0
+
 def load_config():
     with open('../.vm_specs.json', 'r') as f:
         return json.load(f, object_hook=lambda d: namedtuple('vm_specs', d.keys())(*d.values()))
@@ -130,6 +140,7 @@ def wait_for_gcp(link):
 
         # The status of the operation can be one of the following: PENDING, RUNNING, or DONE.
         if result['status'] == 'DONE':
+
             if 'error' in result:
                 if 'errors' in result['error']:
                     return result['error']['errors']
@@ -145,13 +156,11 @@ def wait_for_gcp(link):
             continue
 
 
-def export_gcp_ip(link, runner_name):
+def export_gcp_ip(link):
     r = AUTHED_SESSION.get(link)
     result = json.loads(r.text)
-    if "networkInterfaces" not in result or len(result['networkInterfaces']) < 0 or "networkIP" not in result['networkInterfaces'][0]:
-        print("Unexpected output while processing response! Exiting!")
-        sys.exit(1)
     ip = result['networkInterfaces'][0]['networkIP']
+    runner_name = result['name']
     os.environ[runner_name] = ip
     # Environment variables doesn't get exported
     # to the parent process, this export is only for
@@ -179,13 +188,13 @@ def describe_instance(instance_name):
         if instance['name'] == instance_name:
             return instance
 
-def create_instance_call(instance_number, instance_name, boot_disk_name, external_disk_info, preemptible_machine, machine_type, service_account, uuid):
-    URL = f"https://compute.googleapis.com/compute/v1/projects/{PROJECT_ID}/zones/{CONFIG.gcp.zone}/instances?requestId={uuid}"
+def create_instance_call(instance_number, instance_name, boot_disk_name, external_disk_info, preemptible_machine, machine_type, service_account, zone, subnetwork, uuid):
+    URL = f"https://compute.googleapis.com/compute/v1/projects/{PROJECT_ID}/zones/{zone}/instances?requestId={uuid}"
     data = {
         "name": f"{instance_name}",
-        "machineType": f"zones/{CONFIG.gcp.zone}/machineTypes/{machine_type}",
+        "machineType": f"zones/{zone}/machineTypes/{machine_type}",
         "networkInterfaces": [{
-            "subnetwork": f"regions/{CONFIG.gcp.zone.rsplit('-', 1)[0]}/subnetworks/{CONFIG.gcp.subnet}",
+            "subnetwork": subnetwork,
         }],
         "metadata": {
             "items": [
@@ -227,28 +236,48 @@ def create_instance_call(instance_number, instance_name, boot_disk_name, externa
         "labels": LABELS,
         "serviceAccounts": service_account,
     }
-    r = AUTHED_SESSION.post(url=URL, json=data)
-    return json.loads(r.text)
+    return AUTHED_SESSION.post(url=URL, json=data)
 
-def create_instance(instance_number, instance_name, boot_disk_name, external_disk_info, preemptible_machine, machine_type, service_account):
-    success = False
-    retries = 5
+def create_instance(instance_number, instance_name, boot_disk_name, external_disk_info, preemptible_machine, machine_type, service_account, zone, subnetwork):
+    # Same UUID makes sure that we won't create multiple VMs
     request_uuid = str(uuid.uuid4())
-    while retries > 0:
-        retries = retries - 1
-        # Same UUID makes sure that we won't create multiple VMs
-        result = create_instance_call(instance_number, instance_name, boot_disk_name, external_disk_info, preemptible_machine, machine_type, service_account, request_uuid)
-        if "selfLink" not in result or "targetLink" not in result:
-            print("Unexpected response when creating VM!")
-            time.sleep(1)
-            continue
-        wait_for_gcp(result['selfLink'])
-        export_gcp_ip(result['targetLink'], instance_name)
-        success = True
-        break
-    if success is False:
-        print(f"Couldn't create instance: {instance_name}! Exiting!")
-        sys.exit(1)
+
+    global SIMULATE_EXHAUSTION_CTR
+
+    simulate_exhaustion = os.environ.get('SIMULATE_EXHAUSTION')
+
+    if simulate_exhaustion is not None:
+        if SIMULATE_EXHAUSTION_CTR != int(simulate_exhaustion):
+            SIMULATE_EXHAUSTION_CTR+=1
+            return GCP_RESOURCE_EXHAUSTION_EXAMPLE_ERR
+
+    # Make a request to create the instance.
+    r = create_instance_call(
+            instance_number, 
+            instance_name, 
+            boot_disk_name, 
+            external_disk_info, 
+            preemptible_machine, 
+            machine_type, 
+            service_account,
+            zone,
+            subnetwork,
+            request_uuid
+            )
+    r.raise_for_status()
+
+    result = r.json()
+
+    result_or_error = wait_for_gcp(result['selfLink'])
+
+    # Caller will need to check that again.
+    if isinstance(result_or_error, list):
+        return result_or_error
+    elif isinstance(result_or_error, dict):
+        export_gcp_ip(result_or_error['targetLink'])
+        print(result_or_error)
+
+    return result_or_error
 
 def elapsed(start):
     return round(time.time() - start, 2)
@@ -435,7 +464,8 @@ def create_vm(instance_number, container_file, disk_name=None, preemptible_overr
     print(f'Preemptible: {str2bool(preemptible_machine)}')
 
     # First element is guaranteed to be the home zone (i.e. coordinator machine zone).
-    available_zones = get_available_zones()
+    zones_and_subnets = get_available_zones()
+    available_zones = list(zones_and_subnets.keys())
 
     # Create and start the virtual machine.
     gcloud_start = time.time()
@@ -486,9 +516,38 @@ def create_vm(instance_number, container_file, disk_name=None, preemptible_overr
                     "https://www.googleapis.com/auth/devstorage.read_write"
                 ]
             }]
-    create_instance(instance_number, instance_name, boot_disk_name, external_disk_info, preemptible_machine, machine_type, service_account_info)
-    print(f'Machine spawned in {elapsed(gcloud_start)} seconds.')
 
+    for zone, subnet in zones_and_subnets.items():
+        print(f'Attempting to spawn a machine in {zone}')
+        try:
+            create_result = create_instance(
+                    instance_number, 
+                    instance_name, 
+                    boot_disk_name, 
+                    external_disk_info, 
+                    preemptible_machine, 
+                    machine_type, 
+                    service_account_info,
+                    zone,
+                    subnet['selfLink'],
+                    )
+        except requests.exceptions.HTTPError as e:
+            print(e.response.text)
+            sys.exit(1)
+
+        if isinstance(create_result, dict):
+            print(f'Machine spawned in {elapsed(gcloud_start)} seconds.')
+            break
+        elif isinstance(create_result, list):
+            for create_error in create_result:
+                if create_error['code'].startswith(GCP_RESOURCE_EXHAUSTION_ERR):
+                    print(f'{GCP_RESOURCE_EXHAUSTION_ERR} in {zone}, will try another one...')
+                    continue
+                else:
+                    print(f'Error occured while spawning the instance: {create_error}')
+                    sys.exit(1)
+
+    # TODO: use return value
     target = os.environ[instance_name]
     ssh = create_ssh_connection(target)
     print('Machine ready')
