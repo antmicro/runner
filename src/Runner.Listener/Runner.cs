@@ -287,6 +287,8 @@ namespace GitHub.Runner.Listener
                     bool runOnceJobReceived = false;
                     _jobDispatcher = HostContext.CreateService<IJobDispatcher>();
 
+                    _jobDispatcher.JobStatus += _listener.OnJobStatus;
+
                     while (!HostContext.RunnerShutdownToken.IsCancellationRequested && !_exiting)
                     {
                         TaskAgentMessage message = null;
@@ -478,10 +480,16 @@ namespace GitHub.Runner.Listener
 
                     if (_jobDispatcher != null)
                     {
-                        _jobDispatcher.BusyEvent.WaitOne();
+                        _jobDispatcher.JobStatus -= _listener.OnJobStatus;
                         await _jobDispatcher.ShutdownAsync();
-                        _jobDispatcher.BusyEvent.Dispose();
                     }
+
+                    //if (_jobDispatcher != null)
+                    //{
+                    //    _jobDispatcher.BusyEvent.WaitOne();
+                    //    await _jobDispatcher.ShutdownAsync();
+                    //    _jobDispatcher.BusyEvent.Dispose();
+                    //}
 
                     _messageQueueLoopTokenSource.Dispose();
                 }
