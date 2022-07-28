@@ -192,6 +192,7 @@ namespace GitHub.Runner.Worker.Handlers
                                                 inheritConsoleHandler: !ExecutionContext.Global.Variables.Retain_Default_Encoding,
                                                 cancellationToken: ExecutionContext.CancellationToken);
 
+                GCPCoordinator.SynchronizeWorkerFiles(HostContext);
                 if (exitCode != 0) {
                     ExecutionContext.Error($"Process completed with exit code {exitCode}.");
                     ExecutionContext.Result = TaskResult.Failed;

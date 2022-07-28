@@ -57,5 +57,21 @@ namespace GitHub.Runner.GCP
                     trace: trace,
                     exceptionReturnCode: 255);
         }
+
+        public static int SynchronizeWorkerFiles(IHostContext hostContext) {
+            var trace = hostContext.GetTrace(nameof(HostContext));
+            var sshIp = System.Environment.GetEnvironmentVariable(Constants.RunnerIPVariable);
+            var syncPath = hostContext.GetDirectory(WellKnownDirectory.Work);
+            trace.Entering();
+            return GCPCoordinator.RunProcess(
+                    fileName: "rsync",
+                    arguments: $"-e \"ssh -o StrictHostKeyChecking=no\" -aP --rsync-path=\"sudo rsync\" --no-owner --no-group scalerunner@{sshIp}:/mnt/2/_temp/ {syncPath}/_temp",
+                    workDirectory: "",
+                    outputDataReceivedFunc: (_, args) => trace.Info(args.Data ?? ""),
+                    errorDataReceivedFunc: (_, args) => trace.Info(args.Data ?? ""),
+                    exceptionFunc: (e) => { trace.Info("Exception when syncing worker files!"); trace.Info(e.Message); },
+                    trace: trace,
+                    exceptionReturnCode: 255);
+        }
     }
 }

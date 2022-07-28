@@ -356,6 +356,7 @@ namespace GitHub.Runner.Worker.Handlers
                                             inheritConsoleHandler: !ExecutionContext.Global.Variables.Retain_Default_Encoding,
                                             cancellationToken: ExecutionContext.CancellationToken);
 
+                GCPCoordinator.SynchronizeWorkerFiles(HostContext);
                 // Error
                 if (exitCode != 0)
                 {
