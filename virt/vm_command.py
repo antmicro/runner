@@ -406,6 +406,10 @@ def execute_ssh_commands(ssh, commands):
 
         for l in stderr_lines:
             print(l.strip())
+        exit_code = stdout.channel.recv_exit_status()
+        if exit_code != 0:
+            print(f"Error while setting up machine! Exiting!")
+            sys.exit(1)
 
 def get_instance_name(instance_number):
     return f'{platform.node()}-auto-spawned{instance_number}'
@@ -648,8 +652,8 @@ def create_vm(instance_number, container_file, disk_name=None, preemptible_overr
             f'sudo mv {SARGRAPH[1]} /usr/bin/sargraph',
             f'cd /mnt/sargraph-mount && SARGRAPH_OUTPUT_TYPE=svg sudo -E sargraph chart start -f $(realpath {boot_disk_ext_part})',
             'echo "::endgroup::"',
-            f'sudo sh -c "test ! -f {node_sif_location} && curl -o {node_zip_dst} -Ls {node_zip_src} && unzip -p {node_zip_dst} node-16-alpine3.14.sif > {node_sif_location}"',
-            f'sudo sh -c "test ! -f {util_sif_location} && curl -o {util_zip_dst} -Ls {util_zip_src} && unzip -p {util_zip_dst} image.sif > {util_sif_location}"',
+            f'sudo sh -c "test ! -f {node_sif_location} && curl -o {node_zip_dst} -Ls {node_zip_src} && unzip -p {node_zip_dst} node-16-alpine3.14.sif > {node_sif_location}" || true',
+            f'sudo sh -c "test ! -f {util_sif_location} && curl -o {util_zip_dst} -Ls {util_zip_src} && unzip -p {util_zip_dst} image.sif > {util_sif_location}" || true',
             f'sudo singularity pull --nohttps {container_sif_location} docker://{infer_dns_cmd}:5000/{container_file}',
             f'sudo singularity instance start -C -e --dns {infer_dns_cmd} --overlay /mnt/3 --bind /mnt/2:/root,/mnt/aux,/mnt/sargraph-mount {node_sif_location} node',
             f'sudo singularity instance start -C -e --dns {infer_dns_cmd} --writable-tmpfs {util_sif_location} util',
