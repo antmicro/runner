@@ -157,17 +157,15 @@ def wait_for_gcp(link):
 
 
 def export_gcp_ip(link):
-    r = AUTHED_SESSION.get(link)
-    result = json.loads(r.text)
+    with AUTHED_SESSION.get(link) as r:
+        r.raise_for_status()
+        result = r.json()
+
     ip = result['networkInterfaces'][0]['networkIP']
     runner_name = result['name']
-    os.environ[runner_name] = ip
-    # Environment variables doesn't get exported
-    # to the parent process, this export is only for
-    # current script, later runner parses below output
-    # and sets correct ip in the parent process
-    print(f"export {runner_name}={ip}")
-    return
+
+    print("export {}={}".format(result['name'], ip))
+    return ip
 
 def list_instances(instance_name=None):
     params = {}
@@ -273,9 +271,6 @@ def create_instance(instance_number, instance_name, boot_disk_name, external_dis
     # Caller will need to check that again.
     if isinstance(result_or_error, list):
         return result_or_error
-    elif isinstance(result_or_error, dict):
-        export_gcp_ip(result_or_error['targetLink'])
-        print(result_or_error)
 
     return result_or_error
 
@@ -547,8 +542,7 @@ def create_vm(instance_number, container_file, disk_name=None, preemptible_overr
                     print(f'Error occured while spawning the instance: {create_error}')
                     sys.exit(1)
 
-    # TODO: use return value
-    target = os.environ[instance_name]
+    target = export_gcp_ip(create_result['targetLink']) 
     ssh = create_ssh_connection(target)
     print('Machine ready')
 
