@@ -277,15 +277,28 @@ def create_instance(instance_number, instance_name, boot_disk_name, external_dis
 def elapsed(start):
     return round(time.time() - start, 2)
 
-def get_gcp_disk(project, zone, disk_name):
-    if not disk_name or not zone:
-        return None
+def get_gcp_disks(disk_name):
+    url = f"https://compute.googleapis.com/compute/v1/projects/{PROJECT}/aggregated/disks"
+    disks = {}
 
-    URL = "https://compute.googleapis.com/compute/v1/projects/{project}/zones/{zone}/disks/{resourceId}"
+    # First obtain the main disk.
+    r1 = AUTHED_SESSION.get(url, params={'filter': f'(name eq {disk_name})'})
+    r1.raise_for_status()
 
+    # Next obtain disk designated as replicas (by assigning the 'gha-replica-for' label).
+    r2 = AUTHED_SESSION.get(url, params={'filter': f'(labels.gha-replica-for:{disk_name})'})
+    r2.raise_for_status()
 
-    r = AUTHED_SESSION.get(URL.format(project=project, zone=zone, resourceId=disk_name))
-    return json.loads(r.text)
+    for r in [r1, r2]:
+        for zone_name, zone_object in r.json()['items'].items():
+            for disk in (zone_object.get("disks") or []):
+                disks[zone_name.split('/')[-1]] = {
+                        "autoDelete": "false",
+                        "deviceName": "aux",
+                        "mode": "READ_ONLY",
+                        "source": relative_self_link(disk['selfLink']) 
+                        }
+    return disks
 
 def check_machine_type(machine_type):
     if machine_type is None:
@@ -473,32 +486,22 @@ def create_vm(instance_number, container_file, disk_name=None, preemptible_overr
     if ssh_tunnel_config and ssh_tunnel_key:
         ssh_tunnel_cmd = f'sudo singularity run --app sshtunnel instance://util 1 "{ssh_tunnel_config}" "{ssh_tunnel_key}"'
 
-    external_disk_info = None
     service_account_info = None
     external_disk_cmd = 'true'
 
     # Attach an external disk (if applicable)
     if disk_name:
-        external_disk = get_gcp_disk(PROJECT, available_zones[0], disk_name)
+        # Obtain the main disk and zonal replicas.
+        available_external_disks = get_gcp_disks(disk_name)
 
-        # Bail if API response does not contain fields indicating successful operation.
-        if "name" not in external_disk or "sizeGb" not in external_disk:
-            if external_disk.get("error", {}).get('code') == 404:
-                print(f"External disk {disk_name} was not found in zone {available_zones[0]}!")
-            else:
-                print("Unexpected output received while probing external disk! Exiting!")
-
+        # Bail if no disk and/or zonal replicas were found.
+        if len(available_external_disks) == 0:
+            print(f"Disk named {disk_name} was not found!")
             sys.exit(1)
-
-        print("Attaching external disk {} ({}GB)".format(external_disk['name'], external_disk['sizeGb']))
+        
+        print(f"Disk named {disk_name} was found in {len(available_external_disks)} zone(s)")
 
         external_disk_cmd = 'sudo mount /dev/disk/by-id/scsi-0Google_PersistentDisk_aux-part1 /mnt/aux'
-        external_disk_info = {
-                "autoDelete": "false",
-                "deviceName": "aux",
-                "mode": "READ_ONLY",
-                "source": relative_self_link(external_disk['selfLink']) 
-            }
 
     if service_account:
         if "gh-sa-" not in service_account:
@@ -512,8 +515,20 @@ def create_vm(instance_number, container_file, disk_name=None, preemptible_overr
                 ]
             }]
 
+    successful_creation = False
+
     for zone, subnet in zones_and_subnets.items():
         print(f'Attempting to spawn a machine in {zone}')
+
+        if disk_name:
+            try:
+                external_disk_info = available_external_disks[zone]
+            except KeyError:
+                print(f'External disk or its replica is not available in {zone}, skipping it...')
+                continue
+
+        print(external_disk_info)
+
         try:
             create_result = create_instance(
                     instance_number, 
@@ -532,6 +547,7 @@ def create_vm(instance_number, container_file, disk_name=None, preemptible_overr
 
         if isinstance(create_result, dict):
             print(f'Machine spawned in {elapsed(gcloud_start)} seconds.')
+            successful_creation = True
             break
         elif isinstance(create_result, list):
             for create_error in create_result:
@@ -541,6 +557,10 @@ def create_vm(instance_number, container_file, disk_name=None, preemptible_overr
                 else:
                     print(f'Error occured while spawning the instance: {create_error}')
                     sys.exit(1)
+
+    if not successful_creation:
+        print('No region is able to serve the request at the moment.')
+        sys.exit(1)
 
     target = export_gcp_ip(create_result['targetLink']) 
     ssh = create_ssh_connection(target)
@@ -745,7 +765,7 @@ def check_mode_parameters(mode, instance_number, container_file):
             sys.exit(1)
 
 @click.command()
-@click.option('--mode', type=click.Choice(['create_vm', 'delete_vm', 'check-rsyslog', 'detect_preempted_signal', 'check_dmesg', 'delete_stale_instances', 'get_secret', 'get_project_id', 'get_zones', 'get_vm', 'get_vms']), required = True)
+@click.option('--mode', type=click.Choice(['create_vm', 'delete_vm', 'check-rsyslog', 'detect_preempted_signal', 'check_dmesg', 'delete_stale_instances', 'get_secret', 'get_project_id', 'get_zones', 'get_vm', 'get_vms', 'get_disks']), required = True)
 @click.option('-n', '--instance-number', help='Instance number', required=False, default=None)
 @click.option('-s', '--container-file', help='Container file', required=False, default=None)
 @click.option('-d', '--disk-name', help='External disk name', required=False, default=None)
@@ -781,6 +801,8 @@ def main(mode, instance_number, container_file=None, disk_name=None, preemptible
         print(describe_instance(instance_number))
     elif mode == "get_vms":
         print(list_auto_spawned_instances())
+    elif mode == "get_disks":
+        print(get_gcp_disks(disk_name))
     else:
         print(f"Unknown mode: {mode}! Exiting!")
         sys.exit(1)
