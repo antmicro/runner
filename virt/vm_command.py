@@ -504,7 +504,7 @@ def create_vm(instance_number, container_file, disk_name=None, preemptible_overr
             print(f"Disk named {disk_name} was not found!")
             sys.exit(1)
         
-        print(f"Disk named {disk_name} was found in {len(available_external_disks)} zone(s)")
+        print(f"Requested external disk was found in {len(available_external_disks)} zone(s)")
 
         external_disk_cmd = 'sudo mount /dev/disk/by-id/scsi-0Google_PersistentDisk_aux-part1 /mnt/aux'
 
@@ -531,8 +531,6 @@ def create_vm(instance_number, container_file, disk_name=None, preemptible_overr
             except KeyError:
                 print(f'External disk or its replica is not available in {zone}, skipping it...')
                 continue
-
-        print(external_disk_info)
 
         try:
             create_result = create_instance(
@@ -564,7 +562,7 @@ def create_vm(instance_number, container_file, disk_name=None, preemptible_overr
                     sys.exit(1)
 
     if not successful_creation:
-        print('No region is able to serve the request at the moment.')
+        print('No defined zone is able to serve the request at the moment.')
         sys.exit(1)
 
     target = export_gcp_ip(create_result['targetLink']) 
