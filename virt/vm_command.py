@@ -1,6 +1,9 @@
 #!/usr/bin/python3
-import os, sys, subprocess, json, click, paramiko, time, functools, platform, shlex, shutil, requests, uuid, datetime, random, socket
+import os, sys, subprocess, json, click, paramiko, time, functools, platform, shlex, shutil, requests, uuid, datetime, random, socket, warnings
 from collections import namedtuple, OrderedDict
+from cryptography.utils import CryptographyDeprecationWarning
+
+warnings.filterwarnings("ignore", category=CryptographyDeprecationWarning)
 
 print = functools.partial(print, flush=True)
 
