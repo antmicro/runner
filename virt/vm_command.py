@@ -292,12 +292,14 @@ def get_gcp_disks(disk_name):
     for r in [r1, r2]:
         for zone_name, zone_object in r.json()['items'].items():
             for disk in (zone_object.get("disks") or []):
-                disks[zone_name.split('/')[-1]] = {
-                        "autoDelete": "false",
-                        "deviceName": "aux",
-                        "mode": "READ_ONLY",
-                        "source": relative_self_link(disk['selfLink']) 
-                        }
+                # Attempt to find GCP-level regional replicas (e.g. when disk type is regional balanced persistent disk).
+                for nested_zone_name in (disk.get('replicaZones') or [zone_name]):
+                    disks[nested_zone_name.split('/')[-1]] = {
+                            "autoDelete": "false",
+                            "deviceName": "aux",
+                            "mode": "READ_ONLY",
+                            "source": relative_self_link(disk['selfLink']) 
+                            }
     return disks
 
 def check_machine_type(machine_type):
