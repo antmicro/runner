@@ -149,7 +149,7 @@ The default behavior for coordinator is to spawn worker machines in its own zone
 However, certain workloads may trigger the `ZONE_RESOURCE_POOL_EXHAUSTED` error which is caused by a physical lack of available resources within a certain zone
 (see the [support page](https://cloud.google.com/compute/docs/troubleshooting/troubleshooting-vm-creation) for more details).
 
-If such error should occur, the software will make attempts to spawn the machine in neighbouring zones within the region.
+If such error should occur, the software will make attempts to spawn the machine in neighboring zones within the region.
 This behavior can be further expanded by defining a list of additional regions (see the [gcp_auxiliary_zones](https://github.com/antmicro/github-actions-runner-terraform#input_gcp_auxiliary_zones) parameter).
 
 > WARNING: read on if you're planning to use the external disk feature.
