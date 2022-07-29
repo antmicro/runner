@@ -142,6 +142,48 @@ vim .vm_specs.json
 ./config.sh --url https://github.com/$REPOSITORY_ORG/$REPOSITORY_NAME --token $TOKEN --num $SLOTS
 ```
 
+### Multi-zone support
+
+The default behavior for coordinator is to spawn worker machines in its own zone
+(which is configured using the [gcp_zone](https://github.com/antmicro/github-actions-runner-terraform#input_gcp_zone) parameter).
+However, certain workloads may trigger the `ZONE_RESOURCE_POOL_EXHAUSTED` error which is caused by a physical lack of available resources within a certain zone
+(see the [support page](https://cloud.google.com/compute/docs/troubleshooting/troubleshooting-vm-creation) for more details).
+
+If such error should occur, the software will make attempts to spawn the machine in neighbouring zones within the region.
+This behavior can be further expanded by defining a list of additional regions (see the [gcp_auxiliary_zones](https://github.com/antmicro/github-actions-runner-terraform#input_gcp_auxiliary_zones) parameter).
+
+> WARNING: read on if you're planning to use the external disk feature.
+
+For external disks to work in this arrangement, it is necessary to manually replicate them in all zones within the home region (and auxiliary regions if applicable).
+Otherwise, jobs requiring an external disk will be constrained to zones where the disk and its replicas can be found.
+
+Consider the example of replicating a balanced persistent disk called `auxdisk` located in `europe-west4-a` to `europe-west4-b`.
+
+```bash
+# Create a snapshot of the disk located in the home zone.
+gcloud compute snapshots create auxdisk-snapshot-1 \
+	--source-disk auxdisk \
+	--source-disk-zone europe-west4-a
+
+# Create a disk from the snapshot in another zone.
+# Notice that we cannot assign the same name to it.
+# We'll associate it by specifying the original name in the "gha-replica-for" label instead.
+gcloud compute disks create another-auxdisk \
+	--zone europe-west4-b \
+	--labels gha-replica-for=auxdisk \
+	--source-snapshot auxdisk-snapshot-1
+```
+
+It is possible to check the availability of a disk by running `python3 vm_command.py --mode get_disks -d auxdisk` on the coordinator machine 
+(replacing the value for the `-d` argument with the name of the disk to check).
+Example output of such an invocation might look as follows:
+
+```console
+runner@foo-runner:~/github-actions-runner/virt$ python3 vm_command.py --mode get_disks -d auxdisk
+{'europe-west4-a': {'autoDelete': 'false', 'deviceName': 'aux', 'mode': 'READ_ONLY', 'source': 'projects/foo/zones/europe-west4-a/disks/auxdisk'}, 'europe-west4-b': {'autoDelete': 'false', 'deviceName': 'aux', 'mode': 'READ_ONLY', 'source': 'projects/foo/zones/europe-west4-b/disks/another-auxdisk'}}
+
+```
+
 ### Delegate logging to an external Compute Engine disk (optional)
 
 By default, timestamped runner logs are stored in `*_diag` directories under `$THIS_REPO_PATH/_layout`.
