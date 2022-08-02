@@ -525,6 +525,8 @@ def create_vm(instance_number, container_file, disk_name=None, preemptible_overr
     for zone, subnet in zones_and_subnets.items():
         print(f'Attempting to spawn a machine in {zone}')
 
+        external_disk_info = None
+
         if disk_name:
             try:
                 external_disk_info = available_external_disks[zone]
