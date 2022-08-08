@@ -163,7 +163,8 @@ Consider the example of replicating a balanced persistent disk called `auxdisk` 
 # Create a snapshot of the disk located in the home zone.
 gcloud compute snapshots create auxdisk-snapshot-1 \
 	--source-disk auxdisk \
-	--source-disk-zone europe-west4-a
+	--source-disk-zone europe-west4-a \
+	--project my-cool-project
 
 # Create a disk from the snapshot in another zone.
 # Notice that we cannot assign the same name to it.
@@ -171,7 +172,8 @@ gcloud compute snapshots create auxdisk-snapshot-1 \
 gcloud compute disks create another-auxdisk \
 	--zone europe-west4-b \
 	--labels gha-replica-for=auxdisk \
-	--source-snapshot auxdisk-snapshot-1
+	--source-snapshot auxdisk-snapshot-1 \
+	--project my-cool-project
 ```
 
 It is possible to check the availability of a disk by running `python3 vm_command.py --mode get_disks -d auxdisk` on the coordinator machine 
