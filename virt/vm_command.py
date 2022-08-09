@@ -738,7 +738,7 @@ def check_dmesg(instance_number):
     ssh = create_ssh_connection(target, verbose=False)
 
     commands = (
-            'sudo dmesg -T | grep -i "killed process"',
+            'sudo dmesg -T | grep -i "killed process" || true',
     )
 
     execute_ssh_commands(ssh, commands)
