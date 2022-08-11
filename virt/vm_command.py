@@ -139,11 +139,21 @@ def get_secret(secret_name, namespace):
 def wait_for_gcp(link):
     for _ in range(0, 100):
         r = AUTHED_SESSION.get(link)
-        result = json.loads(r.text)
+
+        print("Operation resource: {}, status code: {}, content: {}".format(link, r.status_code, r.text), file=sys.stderr)
+
+        try:
+            result = r.json()
+        except requests.exceptions.JSONDecodeError:
+            return [{'e': "Unable to parse JSON while waiting for GCP operation"}]
+
+        operation_status = result.get('status')
+
+        if operation_status is None:
+            return [{'e': "Status field is not present in the response"}]
 
         # The status of the operation can be one of the following: PENDING, RUNNING, or DONE.
         if result['status'] == 'DONE':
-
             if 'error' in result:
                 if 'errors' in result['error']:
                     return result['error']['errors']
@@ -554,7 +564,7 @@ def create_vm(instance_number, container_file, disk_name=None, preemptible_overr
             break
         elif isinstance(create_result, list):
             for create_error in create_result:
-                if create_error['code'].startswith(GCP_RESOURCE_EXHAUSTION_ERR):
+                if (create_error.get('code') or '').startswith(GCP_RESOURCE_EXHAUSTION_ERR):
                     print(f'{GCP_RESOURCE_EXHAUSTION_ERR} in {zone}, will try another one...')
                     continue
                 else:
