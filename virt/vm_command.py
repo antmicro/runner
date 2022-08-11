@@ -269,13 +269,7 @@ def create_instance(instance_number, instance_name, boot_disk_name, external_dis
 
     result = r.json()
 
-    result_or_error = wait_for_gcp(result['selfLink'])
-
-    # Caller will need to check that again.
-    if isinstance(result_or_error, list):
-        return result_or_error
-
-    return result_or_error
+    return wait_for_gcp(result['selfLink'])
 
 def elapsed(start):
     return round(time.time() - start, 2)
