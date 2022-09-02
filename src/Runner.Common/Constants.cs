@@ -51,6 +51,8 @@ namespace GitHub.Runner.Common
             "-o UserKnownHostsFile=/dev/null",
             "-o StrictHostKeyChecking=no",
             "-o ServerAliveInterval=10",
+            "-o ConnectTimeout=30",
+            "-o ConnectionAttempts=2",
             "-o ControlPath=~/.ssh/S.%r@%h:%p",
             "-o ControlMaster=auto",
             "-o ControlPersist=15s"
