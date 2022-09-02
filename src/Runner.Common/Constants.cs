@@ -48,13 +48,14 @@ namespace GitHub.Runner.Common
         public static string LogDiskMountpoint = "/var/log/runner";
 
         public static List<string> CommonSshArgs = new List<string> {"-q",
-            "-o \"UserKnownHostsFile /dev/null\"",
-            "-o \"StrictHostKeyChecking no\"",
-            "-o \"ServerAliveInterval 10\"",
-            "-o \"ControlPath ~/.ssh/S.%r@%h:%p\"",
-            "-o \"ControlMaster auto\"",
-            "-o \"ControlPersist 15s\""
+            "-o UserKnownHostsFile=/dev/null",
+            "-o StrictHostKeyChecking=no",
+            "-o ServerAliveInterval=10",
+            "-o ControlPath=~/.ssh/S.%r@%h:%p",
+            "-o ControlMaster=auto",
+            "-o ControlPersist=15s"
         };
+        public static string CommonSshArgsFrozen = string.Join(' ', CommonSshArgs);
 
         // This enum is embedded within the Constants class to make it easier to reference and avoid
         // ambiguous type reference with System.Runtime.InteropServices.OSPlatform and System.Runtime.InteropServices.Architecture
