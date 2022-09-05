@@ -12,6 +12,7 @@ using System.Threading.Tasks;
 using GitHub.DistributedTask.ObjectTemplating.Tokens;
 using GitHub.Runner.Common;
 using GitHub.Runner.Sdk;
+using GitHub.Runner.GCP;
 using GitHub.Runner.Worker.Container;
 using GitHub.Services.Common;
 using WebApi = GitHub.DistributedTask.WebApi;
@@ -294,6 +295,7 @@ namespace GitHub.Runner.Worker
                     if (!string.IsNullOrEmpty(repoAction.Path))
                     {
                         actionDirectory = Path.Combine(actionDirectory, repoAction.Path);
+                        GCPCoordinator.SynchronizeActionFiles(HostContext, GCPRunner.TranslateToGCPRunnerPath(actionDirectory), actionDirectory);
                     }
                 }
                 else

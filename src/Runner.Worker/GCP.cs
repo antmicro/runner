@@ -78,5 +78,31 @@ namespace GitHub.Runner.GCP
                     trace: trace,
                     exceptionReturnCode: 255);
         }
+
+        public static int SynchronizeActionFiles(IHostContext hostContext, string workerFilePath, string coordinatorFilePath) {
+            var trace = hostContext.GetTrace(nameof(HostContext));
+            var sshIp = System.Environment.GetEnvironmentVariable(Constants.RunnerIPVariable);
+            var syncPath = hostContext.GetDirectory(WellKnownDirectory.Work);
+            var rsyncArguments = new List<string>(Constants.CommonRsyncArgs);
+            // We want to copy only action files from worker to coordinator
+            // from rsync man:
+            // As the list of files/directories to transfer is built, rsync checks each name to be transferred
+            // against the list of include/exclude patterns in turn, and the first matching pattern is acted on:
+            // if it is an exclude pattern, then that file is skipped;
+            // if it is an include pattern then that filename is not skipped;
+            // if no matching pattern is found, then the filename is not skipped.
+            rsyncArguments.Add("--include=\"action.yml\" --include=\"action.yaml\" --include=\"Dockerfile\" --exclude=\"*\"");
+            rsyncArguments.Add($"scalerunner@{sshIp}:{workerFilePath.Replace("/root/", "/mnt/2/")}/ {coordinatorFilePath}");
+            trace.Entering();
+            return GCPCoordinator.RunProcess(
+                    fileName: "rsync",
+                    arguments: string.Join(" ", rsyncArguments.ToArray()), 
+                    workDirectory: "",
+                    outputDataReceivedFunc: (_, args) => trace.Info(args.Data ?? ""),
+                    errorDataReceivedFunc: (_, args) => trace.Info(args.Data ?? ""),
+                    exceptionFunc: (e) => { trace.Info("Exception when syncing worker files!"); trace.Info(e.Message); },
+                    trace: trace,
+                    exceptionReturnCode: 255);
+        }
     }
 }
