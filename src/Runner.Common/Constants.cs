@@ -64,7 +64,8 @@ namespace GitHub.Runner.Common
             $"-e \"ssh {Constants.CommonSshArgsFrozen}\"",
             "--rsync-path=\"sudo rsync\"",
             "--no-owner",
-            "--no-group"
+            "--no-group",
+            "--timeout=30"
         };
 
         // This enum is embedded within the Constants class to make it easier to reference and avoid
