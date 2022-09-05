@@ -1,5 +1,6 @@
 using System;
 using System.Diagnostics;
+using System.Collections.Generic;
 using GitHub.Runner.Sdk;
 using GitHub.Runner.Common;
 
@@ -46,10 +47,12 @@ namespace GitHub.Runner.GCP
             // We need to append '/' at the end of the path to only sync content of the
             // work directory instead of the work directory itself
             var syncPath = hostContext.GetDirectory(WellKnownDirectory.Work) + "/";
+            var rsyncArguments = new List<string>(Constants.CommonRsyncArgs);
+            rsyncArguments.Add($"{syncPath} scalerunner@{sshIp}:/mnt/2");
             trace.Info($"Sync: {syncPath} to /mnt/2");
             return GCPCoordinator.RunProcess(
                     fileName: "rsync",
-                    arguments: $"-e \"ssh {Constants.CommonSshArgsFrozen}\" -aP {syncPath} --rsync-path=\"sudo rsync\" --no-owner --no-group scalerunner@{sshIp}:/mnt/2",
+                    arguments: string.Join(" ", rsyncArguments.ToArray()), 
                     workDirectory: "",
                     outputDataReceivedFunc: (_, args) => trace.Info(args.Data ?? ""),
                     errorDataReceivedFunc: (_, args) => trace.Info(args.Data ?? ""),
@@ -62,10 +65,12 @@ namespace GitHub.Runner.GCP
             var trace = hostContext.GetTrace(nameof(HostContext));
             var sshIp = System.Environment.GetEnvironmentVariable(Constants.RunnerIPVariable);
             var syncPath = hostContext.GetDirectory(WellKnownDirectory.Work);
+            var rsyncArguments = new List<string>(Constants.CommonRsyncArgs);
+            rsyncArguments.Add($"scalerunner@{sshIp}:/mnt/2/_temp/ {syncPath}/_temp");
             trace.Entering();
             return GCPCoordinator.RunProcess(
                     fileName: "rsync",
-                    arguments: $"-e \"ssh {Constants.CommonSshArgsFrozen}\" -aP --rsync-path=\"sudo rsync\" --no-owner --no-group scalerunner@{sshIp}:/mnt/2/_temp/ {syncPath}/_temp",
+                    arguments: string.Join(" ", rsyncArguments.ToArray()), 
                     workDirectory: "",
                     outputDataReceivedFunc: (_, args) => trace.Info(args.Data ?? ""),
                     errorDataReceivedFunc: (_, args) => trace.Info(args.Data ?? ""),

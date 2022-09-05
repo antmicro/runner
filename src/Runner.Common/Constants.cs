@@ -60,6 +60,13 @@ namespace GitHub.Runner.Common
         };
         public static string CommonSshArgsFrozen = string.Join(' ', CommonSshArgs);
 
+        public static List<string> CommonRsyncArgs = new List<string> {"-aP",
+            $"-e \"ssh {Constants.CommonSshArgsFrozen}\"",
+            "--rsync-path=\"sudo rsync\"",
+            "--no-owner",
+            "--no-group"
+        };
+
         // This enum is embedded within the Constants class to make it easier to reference and avoid
         // ambiguous type reference with System.Runtime.InteropServices.OSPlatform and System.Runtime.InteropServices.Architecture
         public enum OSPlatform
