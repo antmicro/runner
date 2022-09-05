@@ -221,7 +221,7 @@ def create_instance_call(instance_number, instance_name, boot_disk_name, externa
         },
         "scheduling": {
             "automaticRestart": "false",
-            "onHostMaintenance": "TERMINATE",
+            "onHostMaintenance": "MIGRATE",
             "preemptible": f"{preemptible_machine}",
         },
         "tags": {
