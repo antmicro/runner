@@ -55,7 +55,8 @@ namespace GitHub.Runner.Common
             "-o ConnectionAttempts=2",
             "-o ControlPath=~/.ssh/S.%r@%h:%p",
             "-o ControlMaster=auto",
-            "-o ControlPersist=15s"
+            "-o ControlPersist=15s",
+            "-o BatchMode=yes"
         };
         public static string CommonSshArgsFrozen = string.Join(' ', CommonSshArgs);
 
