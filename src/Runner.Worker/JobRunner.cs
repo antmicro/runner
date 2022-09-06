@@ -65,18 +65,6 @@ namespace GitHub.Runner.Worker
             Trace.Info($"Full repo name: {repoFullName}");
             Trace.Info($"Repo name: {repoName}");
 
-            var PipelineDirectory = repoName.ToString(CultureInfo.InvariantCulture);
-            var WorkspaceDirectory = Path.Combine(PipelineDirectory, repoName);
-
-            Trace.Info($"PipelineDirectory: {PipelineDirectory}");
-            Trace.Info($"WorkspaceDirectory: {WorkspaceDirectory}");
-
-            message.Variables["system.qemuDir"] = virtDir;
-            message.Variables["system.containerWorkspace"] = WorkspaceDirectory;
-
-            string messageSerialized = JsonConvert.SerializeObject(message);
-            JObject messageJson = JObject.Parse(messageSerialized);
-
             dynamic vmSpecs = JObject.Parse(File.ReadAllText(Path.Combine(rootDir, ".vm_specs.json")));
 
             // Setup the job server and job server queue.
@@ -100,6 +88,30 @@ namespace GitHub.Runner.Worker
                 // Create the job execution context.
                 jobContext = HostContext.CreateService<IExecutionContext>();
                 jobContext.InitializeJob(message, jobRequestCancellationToken);
+
+                var PipelineDirectory = repoName.ToString(CultureInfo.InvariantCulture);
+                string WorkspaceDirectory = Path.Combine(PipelineDirectory, repoName);
+                Trace.Info($"Validating directory permissions for: '{WorkspaceDirectory}'");
+                try
+                {
+                    Directory.CreateDirectory(WorkspaceDirectory);
+                    IOUtil.ValidateExecutePermission(WorkspaceDirectory);
+                }
+                catch (Exception ex)
+                {
+                    Trace.Error(ex);
+                    jobContext.Error(ex);
+                    return await CompleteJobAsync(jobServer, jobContext, message, TaskResult.Failed);
+                }
+
+                Trace.Info($"PipelineDirectory: {PipelineDirectory}");
+                Trace.Info($"WorkspaceDirectory: {WorkspaceDirectory}");
+
+                message.Variables["system.qemuDir"] = virtDir;
+                message.Variables["system.containerWorkspace"] = WorkspaceDirectory;
+
+                string messageSerialized = JsonConvert.SerializeObject(message);
+                JObject messageJson = JObject.Parse(messageSerialized);
                 Trace.Info("Starting the job execution context.");
                 jobContext.Start();
                 var githubContext = jobContext.ExpressionValues["github"] as GitHubContext;
