@@ -410,8 +410,12 @@ def execute_ssh_commands(ssh, commands):
 
         for l in stderr_lines:
             print(l.strip())
-        exit_code = stdout.channel.recv_exit_status()
-        if exit_code != 0:
+
+        while not stdout.channel.exit_status_ready():
+            print(f"Exit code for command <{cmd}> is not ready yet", file=sys.stderr)
+            time.sleep(1)
+
+        if stdout.channel.recv_exit_status()!= 0:
             print(f"Error while setting up machine! Exiting!")
             sys.exit(1)
 
