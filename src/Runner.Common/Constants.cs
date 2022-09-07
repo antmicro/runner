@@ -47,7 +47,8 @@ namespace GitHub.Runner.Common
 
         public static string LogDiskMountpoint = "/var/log/runner";
 
-        public static List<string> CommonSshArgs = new List<string> {"-q",
+        public static List<string> CommonSshArgs = new List<string> {"-vvy",
+            "-o SyslogFacility=LOCAL0",
             "-o UserKnownHostsFile=/dev/null",
             "-o StrictHostKeyChecking=no",
             "-o ServerAliveInterval=10",
