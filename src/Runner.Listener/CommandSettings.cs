@@ -5,7 +5,6 @@ using System.IO;
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
-using GitHub.DistributedTask.Logging;
 using GitHub.Runner.Common;
 using GitHub.Runner.Sdk;
 

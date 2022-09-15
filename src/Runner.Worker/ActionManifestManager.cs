@@ -10,9 +10,6 @@ using GitHub.DistributedTask.ObjectTemplating.Schema;
 using GitHub.DistributedTask.ObjectTemplating;
 using GitHub.DistributedTask.ObjectTemplating.Tokens;
 using GitHub.DistributedTask.Pipelines.ContextData;
-using YamlDotNet.Core;
-using YamlDotNet.Core.Events;
-using System.Globalization;
 using System.Linq;
 using Pipelines = GitHub.DistributedTask.Pipelines;
 
