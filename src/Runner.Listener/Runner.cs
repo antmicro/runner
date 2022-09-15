@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using GitHub.Services.WebApi;
 using Pipelines = GitHub.DistributedTask.Pipelines;
 using System.IO;
+using System.Linq;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using GitHub.Runner.Common;
