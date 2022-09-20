@@ -1,5 +1,5 @@
 #!/usr/bin/python3
-import os, sys, subprocess, json, click, paramiko, time, functools, platform, shlex, shutil, requests, uuid, datetime, random, socket, warnings
+import os, sys, subprocess, json, click, paramiko, time, functools, platform, shlex, shutil, requests, uuid, datetime, random, socket, warnings, logging, logging.handlers
 from collections import namedtuple, OrderedDict
 from cryptography.utils import CryptographyDeprecationWarning
 
@@ -14,6 +14,17 @@ for l in libs:
 
 import google.auth
 from google.auth.transport.requests import AuthorizedSession
+
+# Configure syslog-backed logging for Paramiko.
+logging.raiseExceptions = False
+paramiko_logger = logging.getLogger("paramiko")
+paramiko_logger.setLevel(logging.DEBUG)
+paramiko_logger.addHandler(
+        logging.handlers.SysLogHandler(
+            address="/tmp/gha_paramiko_log.sock",
+            facility=logging.handlers.SysLogHandler.LOG_LOCAL0
+            )
+        )
 
 USER = 'scalerunner'
 PUBKEY = os.path.join(os.path.expanduser('~'), '.ssh/id_rsa.pub'), f'/home/{USER}/.ssh/authorized_keys'
