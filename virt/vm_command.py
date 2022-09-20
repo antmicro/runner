@@ -17,14 +17,16 @@ from google.auth.transport.requests import AuthorizedSession
 
 # Configure syslog-backed logging for Paramiko.
 logging.raiseExceptions = False
+
+paramiko_syslog_handler = logging.handlers.SysLogHandler(
+        address="/tmp/gha_paramiko_log.sock",
+        facility=logging.handlers.SysLogHandler.LOG_LOCAL0
+        )
+paramiko_syslog_handler.setFormatter(logging.Formatter("[%(process)s] %(levelname)s:%(name)s:%(message)s"))
+
 paramiko_logger = logging.getLogger("paramiko")
 paramiko_logger.setLevel(logging.DEBUG)
-paramiko_logger.addHandler(
-        logging.handlers.SysLogHandler(
-            address="/tmp/gha_paramiko_log.sock",
-            facility=logging.handlers.SysLogHandler.LOG_LOCAL0
-            )
-        )
+paramiko_logger.addHandler(paramiko_syslog_handler)
 
 USER = 'scalerunner'
 PUBKEY = os.path.join(os.path.expanduser('~'), '.ssh/id_rsa.pub'), f'/home/{USER}/.ssh/authorized_keys'
@@ -462,7 +464,7 @@ def relative_self_link(self_link):
     return self_link.replace("https://www.googleapis.com/compute/v1/", "")
 
 def create_vm(instance_number, container_file, disk_name=None, preemptible_override=None, machine_type=None, service_account=None, ssh_tunnel_config=None, ssh_tunnel_key=None):
-    print("Attempting to spawn a machine..")
+    print("Attempting to spawn a machine... (PID: {})".format(os.getpid()))
 
     machine_type = machine_type or CONFIG.gcp.type
     check_machine_type(machine_type)
