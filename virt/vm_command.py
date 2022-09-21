@@ -604,6 +604,8 @@ def create_vm(instance_number, container_file, disk_name=None, preemptible_overr
         print('Copying initialization files failed!')
         print(e)
         sys.exit(1)
+    finally:
+        ssh_sftp.close()
 
     container_sif_location = '/mnt/container.sif'
 
