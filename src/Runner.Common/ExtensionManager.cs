@@ -60,6 +60,8 @@ namespace GitHub.Runner.Common
                     Add<T>(extensions, "GitHub.Runner.Worker.AddPathFileCommand, Runner.Worker");
                     Add<T>(extensions, "GitHub.Runner.Worker.SetEnvFileCommand, Runner.Worker");
                     Add<T>(extensions, "GitHub.Runner.Worker.CreateStepSummaryCommand, Runner.Worker");
+                    Add<T>(extensions, "GitHub.Runner.Worker.SaveStateFileCommand, Runner.Worker");
+                    Add<T>(extensions, "GitHub.Runner.Worker.SetOutputFileCommand, Runner.Worker");
                     break;
                 default:
                     // This should never happen.
