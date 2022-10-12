@@ -180,6 +180,9 @@ def wait_for_gcp(link):
         else:
             time.sleep(1)
             continue
+    #Timeout while waiting for GCP
+    #We don't want to exit here with exit code
+    print("Timeout while waiting for GCP to complete command!")
 
 
 
