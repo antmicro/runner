@@ -345,14 +345,14 @@ def create_ssh_connection(target, verbose=True):
     while ssh_timeout_c > 0:
         # Print every tenth occurence.
         if verbose and ssh_timeout_c % 10 == 0:
-            print('Waiting for SSH... [{}/{}] '.format(
+            print('Connecting... [{}/{}] '.format(
                 int(((ssh_timeout - ssh_timeout_c) / 10) + 1),
                 int(ssh_timeout / 10))
                 )
 
         # Timeout exceeded.
         if ssh_timeout_c == 0:
-            print('Timeout while waiting for SSH!')
+            print('Timeout while waiting for connection!')
             print(e)
             sys.exit(1)
 
