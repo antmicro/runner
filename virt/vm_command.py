@@ -340,7 +340,7 @@ def create_ssh_connection(target, verbose=True):
     ssh = paramiko.SSHClient()
     ssh.set_missing_host_key_policy(paramiko.client.AutoAddPolicy())
 
-    ssh_timeout = ssh_timeout_c = 50
+    ssh_timeout = ssh_timeout_c = 150
 
     while ssh_timeout_c > 0:
         # Print every tenth occurence.
