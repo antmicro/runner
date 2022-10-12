@@ -150,7 +150,7 @@ def get_secret(secret_name, namespace):
     print(secret)
 
 def wait_for_gcp(link):
-    for _ in range(0, 100):
+    for _ in range(0, 150):
         r = AUTHED_SESSION.get(link)
 
         print("Operation resource: {}, status code: {}, content: {}".format(link, r.status_code, r.text), file=sys.stderr)
@@ -180,6 +180,7 @@ def wait_for_gcp(link):
         else:
             time.sleep(1)
             continue
+
 
 
 def export_gcp_ip(link):
