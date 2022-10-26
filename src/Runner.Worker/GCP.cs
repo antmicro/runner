@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 using System.Diagnostics;
 using System.Collections.Generic;
 using GitHub.Runner.Sdk;
@@ -91,7 +92,8 @@ namespace GitHub.Runner.GCP
             // if it is an exclude pattern, then that file is skipped;
             // if it is an include pattern then that filename is not skipped;
             // if no matching pattern is found, then the filename is not skipped.
-            rsyncArguments.Add("--mkpath --include=\"**/action.yml\" --include=\"**/action.yaml\" --include=\"**/Dockerfile\" --exclude=\"*\"");
+            Directory.CreateDirectory(workerFilePath.Replace("/root/", coordinatorFilePath));
+            rsyncArguments.Add("--include=\"**/action.yml\" --include=\"**/action.yaml\" --include=\"**/Dockerfile\" --exclude=\"*\"");
             rsyncArguments.Add($"scalerunner@{sshIp}:{workerFilePath.Replace("/root/", "/mnt/2/")}/ {coordinatorFilePath}");
             trace.Entering();
             return GCPCoordinator.RunProcess(
