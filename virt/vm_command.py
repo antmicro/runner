@@ -222,7 +222,8 @@ def create_instance_call(instance_number, instance_name, boot_disk_name, externa
         "name": f"{instance_name}",
         "machineType": f"zones/{zone}/machineTypes/{machine_type}",
         "networkInterfaces": [{
-            "subnetwork": subnetwork,
+            "subnetwork": subnetwork['selfLink'],
+            "stackType": subnetwork['stackType']
         }],
         "metadata": {
             "items": [
@@ -564,7 +565,7 @@ def create_vm(instance_number, container_file, disk_name=None, preemptible_overr
                     machine_type, 
                     service_account_info,
                     zone,
-                    subnet['selfLink'],
+                    subnet,
                     )
         except requests.exceptions.HTTPError as e:
             print(e.response.text)
