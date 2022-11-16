@@ -133,7 +133,7 @@ namespace GitHub.Runner.Worker.Handlers
                     step.ExecutionContext.ExpressionValues["github"] = gitHubContext;
 
                     // Set GITHUB_ACTION_PATH
-                    step.ExecutionContext.SetGitHubContext("action_path", ActionDirectory);
+                    step.ExecutionContext.SetGitHubContext("action_path", GCPRunner.TranslateToGCPRunnerPath(ActionDirectory));
 
                     embeddedSteps.Add(step);
                 }
