@@ -5,16 +5,12 @@ using System.Linq;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
-using GitHub.DistributedTask.Expressions2;
 using GitHub.DistributedTask.ObjectTemplating.Tokens;
 using GitHub.DistributedTask.Pipelines.ContextData;
-using GitHub.DistributedTask.Pipelines.ObjectTemplating;
 using GitHub.DistributedTask.WebApi;
 using GitHub.Runner.Common;
 using GitHub.Runner.Sdk;
 using GitHub.Runner.GCP;
-using GitHub.Runner.Worker;
-using GitHub.Runner.Worker.Expressions;
 using Pipelines = GitHub.DistributedTask.Pipelines;
 
 
@@ -163,11 +159,10 @@ namespace GitHub.Runner.Worker.Handlers
             {
                 Trace.Info($"Processing composite step: DisplayName='{step.DisplayName}'");
 
-                // Add Expression Functions
-                step.ExecutionContext.ExpressionFunctions.Add(new FunctionInfo<HashFilesFunction>(PipelineTemplateConstants.HashFiles, 1, byte.MaxValue));
+                step.ExecutionContext.ExpressionValues["steps"] = ExecutionContext.Global.StepsContext.GetScope(step.ExecutionContext.ScopeName);
 
-                // Initialize env context
-                Trace.Info("Initialize Env context for embedded step");
+                // Populate env context for each step
+                Trace.Info("Initialize Env context for step");
 #if OS_WINDOWS
                 var envContext = new DictionaryContextData();
 #else

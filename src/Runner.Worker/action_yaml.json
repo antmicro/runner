@@ -112,13 +112,7 @@
                 "item-type": "composite-step"
             }
         },
-        "composite-step":{
-            "one-of": [
-                "run-step",
-                "uses-step" 
-            ]
-        },
-        "run-step": {
+        "composite-step": {
             "mapping": {
                 "properties": {
                     "name": "string-steps-context",
@@ -133,20 +127,6 @@
                         "type": "non-empty-string",
                         "required": true
                     }
-                }
-            }
-        },
-        "uses-step": {
-            "mapping": {
-                "properties": {
-                    "name": "string-steps-context",
-                    "id": "non-empty-string",
-                    "uses": {
-                        "type": "non-empty-string",
-                        "required": true
-                    },
-                    "with": "step-with",
-                    "env": "step-env"
                 }
             }
         },
@@ -200,23 +180,6 @@
             "string": {}
         },
         "step-env": {
-            "context": [
-                "github",
-                "inputs",
-                "strategy",
-                "matrix",
-                "steps",
-                "job",
-                "runner",
-                "env",
-                "hashFiles(1,255)"
-            ],
-            "mapping": {
-                "loose-key-type": "non-empty-string",
-                "loose-value-type": "string"
-            }
-        },
-        "step-with": {
             "context": [
                 "github",
                 "inputs",
