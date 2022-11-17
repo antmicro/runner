@@ -13,6 +13,7 @@ namespace GitHub.Runner.Worker
             "action_repository",
             "action",
             "actor",
+            "actor_id",
             "api_url",
             "base_ref",
             "env",
@@ -26,8 +27,10 @@ namespace GitHub.Runner.Worker
             "ref_protected",
             "ref_type",
             "ref",
-            "repository_owner",
             "repository",
+            "repository_id",
+            "repository_owner",
+            "repository_owner_id",
             "retention_days",
             "run_attempt",
             "run_id",
@@ -37,7 +40,9 @@ namespace GitHub.Runner.Worker
             "step_summary",
             "triggering_actor",
             "workflow",
-            "workspace",
+            "workflow_ref",
+            "workflow_sha",
+            "workspace"
         };
 
         public IEnumerable<KeyValuePair<string, string>> GetRuntimeEnvironmentVariables()
