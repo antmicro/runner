@@ -351,7 +351,8 @@ namespace GitHub.Runner.Listener
                                 continue;
                             }
                             HostContext.WritePerfCounter($"MessageReceived_{message.MessageType}");
-                            if (string.Equals(message.MessageType, AgentRefreshMessage.MessageType, StringComparison.OrdinalIgnoreCase))
+                            if (string.Equals(message.MessageType, AgentRefreshMessage.MessageType, StringComparison.OrdinalIgnoreCase) ||
+                                string.Equals(message.MessageType, RunnerRefreshMessage.MessageType, StringComparison.OrdinalIgnoreCase))
                             {
                                 var initRunnerVersion = _listener.GetInitRunnerVersion();
 
