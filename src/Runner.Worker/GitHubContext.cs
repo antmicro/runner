@@ -45,6 +45,12 @@ namespace GitHub.Runner.Worker
             "workspace"
         };
 
+        private readonly Dictionary<string, string> _staticEnvVars = new Dictionary<string, string>()
+        {
+            { "GITHUB_ACTIONS", "true" },
+            { "CI", "true" }
+        };
+
         public IEnumerable<KeyValuePair<string, string>> GetRuntimeEnvironmentVariables()
         {
             foreach (var data in this)
@@ -60,6 +66,11 @@ namespace GitHub.Runner.Worker
                         yield return new KeyValuePair<string, string>($"GITHUB_{data.Key.ToUpperInvariant()}", booleanValue.ToString());
                     }
                 }
+            }
+
+            foreach (var data in _staticEnvVars)
+            {
+                yield return data;
             }
         }
 
