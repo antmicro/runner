@@ -678,6 +678,7 @@ def create_vm(instance_number, container_file, disk_name=None, preemptible_overr
             f'sudo singularity instance start -C -e --dns {infer_dns_cmd} --writable-tmpfs {util_sif_location} util',
             ssh_tunnel_cmd,
             f'echo "::group::Starting {container_file}..."',
+            'sudo modprobe fuse',
             f'sudo singularity --debug instance start -C -e --dns {infer_dns_cmd} --overlay /mnt/1 --bind /mnt/2:/root,/mnt/aux,/dev/fuse {container_sif_location} i',
             'echo "::endgroup::"',
             'echo "::group::Checking container disks..."',
