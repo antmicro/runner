@@ -66,6 +66,12 @@ def get_project_id(numeric=False):
 PROJECT, PROJECT_ID = get_project_id(), get_project_id(True)
 AUTHED_SESSION = AuthorizedSession(google.auth.default()[0])
 
+def get_worker_image_name():
+    with requests.get(f"http://metadata.google.internal/computeMetadata/v1/instance/attributes/WORKER_IMAGE", headers={'Metadata-Flavor':'Google'}) as r:
+        if r.status_code != 200 or r.text.strip() == "":
+            return f"projects/{PROJECT_ID}/global/images/{CONFIG.gcp.image}"
+        return r.text.strip()
+
 def get_current_network():
     with requests.get(f"http://metadata.google.internal/computeMetadata/v1/instance/network-interfaces/0/network", headers={'Metadata-Flavor':'Google'}) as r:
         r.raise_for_status()
@@ -254,7 +260,7 @@ def create_instance_call(instance_number, instance_name, boot_disk_name, externa
             "deviceName": f"{boot_disk_name}",
             "initializeParams": {
                 "diskSizeGb": f"{CONFIG.machine.disk}",
-                "sourceImage": f"projects/{PROJECT_ID}/global/images/{CONFIG.gcp.image}",
+                "sourceImage": get_worker_image_name(),
             },
         },
             external_disk_info
