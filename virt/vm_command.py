@@ -655,6 +655,7 @@ def create_vm(instance_number, container_file, disk_name=None, preemptible_overr
             'sudo mkdir -p /mnt/1 /mnt/2/work /mnt/aux /mnt/3 /mnt/sargraph-mount /mnt/ram-disk /mnt/shared-tmp',
             'sudo mkdir -p /etc/default',
             'sudo mkdir -p /opt/sif',
+            'sudo chmod 1777 /mnt/shared-tmp',
             r'echo "SYSLOGD_ARGS=\"-R {}:5140 -L\"" | sudo cp /dev/stdin /etc/default/syslogd'.format(infer_dns_cmd),
             'sudo /etc/init.d/S01syslogd restart',
             f'logger {str(LABELS)}',
