@@ -652,7 +652,7 @@ def create_vm(instance_number, container_file, disk_name=None, preemptible_overr
 
     commands = (
             'uname -a',
-            'sudo mkdir -p /mnt/1 /mnt/2/work /mnt/aux /mnt/3 /mnt/sargraph-mount /mnt/ram-disk',
+            'sudo mkdir -p /mnt/1 /mnt/2/work /mnt/aux /mnt/3 /mnt/sargraph-mount /mnt/ram-disk /mnt/shared-tmp',
             'sudo mkdir -p /etc/default',
             'sudo mkdir -p /opt/sif',
             r'echo "SYSLOGD_ARGS=\"-R {}:5140 -L\"" | sudo cp /dev/stdin /etc/default/syslogd'.format(infer_dns_cmd),
@@ -680,12 +680,12 @@ def create_vm(instance_number, container_file, disk_name=None, preemptible_overr
             f'sudo sh -c "test ! -f {node_sif_location} && curl -o {node_zip_dst} -Ls {node_zip_src} && unzip -p {node_zip_dst} node-16-alpine3.14.sif > {node_sif_location}" || true',
             f'sudo sh -c "test ! -f {util_sif_location} && curl -o {util_zip_dst} -Ls {util_zip_src} && unzip -p {util_zip_dst} image.sif > {util_sif_location}" || true',
             f'sudo singularity pull --nohttps {container_sif_location} docker://{infer_dns_cmd}:5000/{container_file}',
-            f'sudo singularity instance start -C -e --dns {infer_dns_cmd} --overlay /mnt/3 --bind /mnt/2:/root,/mnt/aux,/mnt/sargraph-mount {node_sif_location} node',
+            f'sudo singularity instance start -C -e --dns {infer_dns_cmd} --overlay /mnt/3 --bind /mnt/2:/root,/mnt/aux,/mnt/sargraph-mount,/mnt/shared-tmp:/tmp {node_sif_location} node',
             f'sudo singularity instance start -C -e --dns {infer_dns_cmd} --writable-tmpfs {util_sif_location} util',
             ssh_tunnel_cmd,
             f'echo "::group::Starting {container_file}..."',
             'sudo modprobe fuse',
-            f'sudo singularity --debug instance start -C -e --dns {infer_dns_cmd} --overlay /mnt/1 --bind /mnt/2:/root,/mnt/aux,/dev/fuse {container_sif_location} i',
+            f'sudo singularity --debug instance start -C -e --dns {infer_dns_cmd} --overlay /mnt/1 --bind /mnt/2:/root,/mnt/aux,/dev/fuse,/mnt/shared-tmp:/tmp {container_sif_location} i',
             'echo "::endgroup::"',
             'echo "::group::Checking container disks..."',
             'sudo singularity exec -e instance://i df -h /',
