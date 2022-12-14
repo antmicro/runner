@@ -5,6 +5,8 @@ using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 using GitHub.Services.WebApi;
+using GitHub.Services.Results.Client;
+using GitHub.Services.OAuth;
 
 namespace GitHub.Runner.Common
 {
@@ -13,11 +15,14 @@ namespace GitHub.Runner.Common
     {
         Task ConnectAsync(VssConnection jobConnection);
 
+        void InitializeResultsClient(Uri uri, string token);
+
         // logging and console
         Task<TaskLog> AppendLogContentAsync(Guid scopeIdentifier, string hubName, Guid planId, int logId, Stream uploadStream, CancellationToken cancellationToken);
         Task AppendTimelineRecordFeedAsync(Guid scopeIdentifier, string hubName, Guid planId, Guid timelineId, Guid timelineRecordId, Guid stepId, IList<string> lines, CancellationToken cancellationToken);
         Task AppendTimelineRecordFeedAsync(Guid scopeIdentifier, string hubName, Guid planId, Guid timelineId, Guid timelineRecordId, Guid stepId, IList<string> lines, long startLine, CancellationToken cancellationToken);
         Task<TaskAttachment> CreateAttachmentAsync(Guid scopeIdentifier, string hubName, Guid planId, Guid timelineId, Guid timelineRecordId, String type, String name, Stream uploadStream, CancellationToken cancellationToken);
+        Task CreateStepSymmaryAsync(string planId, string jobId, string stepId, string file, CancellationToken cancellationToken);
         Task<TaskLog> CreateLogAsync(Guid scopeIdentifier, string hubName, Guid planId, TaskLog log, CancellationToken cancellationToken);
         Task<Timeline> CreateTimelineAsync(Guid scopeIdentifier, string hubName, Guid planId, Guid timelineId, CancellationToken cancellationToken);
         Task<List<TimelineRecord>> UpdateTimelineRecordsAsync(Guid scopeIdentifier, string hubName, Guid planId, Guid timelineId, IEnumerable<TimelineRecord> records, CancellationToken cancellationToken);
@@ -31,6 +36,7 @@ namespace GitHub.Runner.Common
         private bool _hasConnection;
         private VssConnection _connection;
         private TaskHttpClient _taskClient;
+        private ResultsHttpClient _resultsClient;
 
         public async Task ConnectAsync(VssConnection jobConnection)
         {
@@ -56,6 +62,11 @@ namespace GitHub.Runner.Common
             _hasConnection = true;
         }
 
+        public void InitializeResultsClient(Uri uri, string token)
+        {
+            var httpMessageHandler = HostContext.CreateHttpClientHandler();
+            this._resultsClient = new ResultsHttpClient(uri, httpMessageHandler, token, disposeHandler: true);
+        }
         private void CheckConnection()
         {
             if (!_hasConnection)
@@ -91,6 +102,16 @@ namespace GitHub.Runner.Common
             CheckConnection();
             return _taskClient.CreateAttachmentAsync(scopeIdentifier, hubName, planId, timelineId, timelineRecordId, type, name, uploadStream, cancellationToken: cancellationToken);
         }
+
+        public Task CreateStepSymmaryAsync(string planId, string jobId, string stepId, string file, CancellationToken cancellationToken)
+        {
+            if (_resultsClient != null)
+            {
+                return _resultsClient.UploadStepSummaryAsync(planId, jobId, stepId, file, cancellationToken: cancellationToken);
+            }
+            throw new InvalidOperationException("Results client is not initialized.");
+        }
+
 
         public Task<TaskLog> CreateLogAsync(Guid scopeIdentifier, string hubName, Guid planId, TaskLog log, CancellationToken cancellationToken)
         {
