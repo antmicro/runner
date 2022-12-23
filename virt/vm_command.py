@@ -234,7 +234,7 @@ def create_instance_call(instance_number, instance_name, boot_disk_name, externa
             "items": [
                 {
                     "key": "serial-port-enable",
-                    "value": "true",
+                    "value": True,
                 },
                 {
                     "key": "ssh-keys",
@@ -243,7 +243,7 @@ def create_instance_call(instance_number, instance_name, boot_disk_name, externa
             ],
         },
         "scheduling": {
-            "automaticRestart": "false",
+            "automaticRestart": False, 
             "onHostMaintenance": "TERMINATE" if preemptible_machine else "MIGRATE",
             "preemptible": preemptible_machine,
         },
@@ -254,8 +254,8 @@ def create_instance_call(instance_number, instance_name, boot_disk_name, externa
         },
         "disks": [{
             "type": f"{CONFIG.gcp.disk_type}",
-            "boot": "true",
-            "autoDelete": "true",
+            "boot": True,
+            "autoDelete": True,
             "deviceName": f"{boot_disk_name}",
             "initializeParams": {
                 "diskSizeGb": f"{CONFIG.machine.disk}",
