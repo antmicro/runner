@@ -31,7 +31,6 @@ paramiko_logger.addHandler(paramiko_syslog_handler)
 USER = 'scalerunner'
 PUBKEY = os.path.join(os.path.expanduser('~'), '.ssh/id_rsa.pub'), f'/home/{USER}/.ssh/authorized_keys'
 SARGRAPH = os.path.realpath('../sargraph/sargraph.py'), f'/home/{USER}/sargraph.py'
-PREEMPT = 'true'
 GH_ENV_LIST = ["GITHUB_JOB_FULL", "GITHUB_SHA", "GITHUB_RUN_ID"]
 
 SARGRAPH_RAMDISK_SIZE_MB = 50
@@ -245,8 +244,8 @@ def create_instance_call(instance_number, instance_name, boot_disk_name, externa
         },
         "scheduling": {
             "automaticRestart": "false",
-            "onHostMaintenance": "MIGRATE",
-            "preemptible": f"{preemptible_machine}",
+            "onHostMaintenance": "TERMINATE" if preemptible_machine else "MIGRATE",
+            "preemptible": preemptible_machine,
         },
         "tags": {
             "items": [
@@ -493,15 +492,15 @@ def create_vm(instance_number, container_file, disk_name=None, preemptible_overr
 
     # Ensure compatibility with pre-67adc3a .vm_specs file.
     try:
-        preemptible_machine = PREEMPT if CONFIG.machine.preemptible else 'false'
+        preemptible_machine = CONFIG.machine.preemptible
     except AttributeError:
-        preemptible_machine = PREEMPT
+        preemptible_machine = True
 
     # Allow overriding the setting at workflow level.
     if preemptible_override is not None:
-        preemptible_machine = PREEMPT if bool(preemptible_override) else 'false'
+        preemptible_machine = bool(preemptible_override)
 
-    print(f'Preemptible: {str2bool(preemptible_machine)}')
+    print(f'Preemptible: {preemptible_machine}')
 
     # First element is guaranteed to be the home zone (i.e. coordinator machine zone).
     zones_and_subnets = get_available_zones()
