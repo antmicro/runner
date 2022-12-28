@@ -177,8 +177,10 @@ namespace GitHub.Runner.Common
             }
 
             public static readonly string InternalTelemetryIssueDataKey = "_internal_telemetry";
+            public static readonly Guid TelemetryRecordId = new Guid("11111111-1111-1111-1111-111111111111");
             public static readonly string WorkerCrash = "WORKER_CRASH";
             public static readonly string UnsupportedCommand = "UNSUPPORTED_COMMAND";
+            public static readonly string ResultsUploadFailure = "RESULTS_UPLOAD_FAILURE";
             public static readonly string UnsupportedCommandMessageDisabled = "The `{0}` command is disabled. Please upgrade to using Environment Files or opt into unsecure command execution by setting the `ACTIONS_ALLOW_UNSECURE_COMMANDS` environment variable to `true`. For more information see: https://github.blog/changelog/2020-10-01-github-actions-deprecating-set-env-and-add-path-commands/";
             public static readonly string UnsupportedSummarySize = "$GITHUB_STEP_SUMMARY upload aborted, supports content up to a size of {0}k, got {1}k. For more information see: https://docs.github.com/actions/using-workflows/workflow-commands-for-github-actions#adding-a-markdown-summary";
             public static readonly string SummaryUploadError = "$GITHUB_STEP_SUMMARY upload aborted, an error occurred when uploading the summary. For more information see: https://docs.github.com/actions/using-workflows/workflow-commands-for-github-actions#adding-a-markdown-summary";

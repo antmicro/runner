@@ -19,6 +19,7 @@ namespace GitHub.Runner.Common
 
     public class SecretLogger : RunnerService, IPagingLogger
     {
+        public static string PagingFolder = "pages";
         // 8 MB
         public const int PageSize = 8 * 1024 * 1024;
         protected bool _removeLogsAfterUploadBucket = true;
@@ -32,6 +33,7 @@ namespace GitHub.Runner.Common
         protected long _totalLines;
         protected string _dataFileName;
         protected string _pagesFolder;
+        protected IJobServerQueue _jobServerQueue;
 
         protected Func<string, bool, bool, Task> _uploadLogs;
 
@@ -132,8 +134,6 @@ namespace GitHub.Runner.Common
 
     public class PagingLogger : SecretLogger
     {
-        private IJobServerQueue _jobServerQueue;
-
         public override void Initialize(IHostContext hostContext)
         {
             base.Initialize(hostContext);
