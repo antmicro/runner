@@ -623,7 +623,7 @@ def create_vm(instance_number, container_file, disk_name=None, preemptible_overr
     node_zip_src = 'https://github.com/antmicro/github-actions-singularity-node/releases/download/node-16-v0.1.3/node-16-v0.1.3.zip'
     node_zip_dst = '/mnt/node.zip'
 
-    util_sif_location = '/opt/sif/util.sif'
+    util_sif_location = '/opt/sif/utility.sif'
     util_zip_src = 'https://github.com/antmicro/github-actions-singularity-utility-container/releases/download/v0.1.2/gha-utility-container-v0.1.2.zip'
     util_zip_dst = '/mnt/util.zip'
 
