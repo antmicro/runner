@@ -65,8 +65,9 @@ def get_project_id(numeric=False):
 PROJECT, PROJECT_ID = get_project_id(), get_project_id(True)
 AUTHED_SESSION = AuthorizedSession(google.auth.default()[0])
 
-def get_worker_image_name():
-    with requests.get(f"http://metadata.google.internal/computeMetadata/v1/instance/attributes/WORKER_IMAGE", headers={'Metadata-Flavor':'Google'}) as r:
+def get_worker_image_name(architecture="X86_64"):
+    metadata_key = "WORKER_IMAGE_ARM64" if architecture == "ARM64" else "WORKER_IMAGE"
+    with requests.get(f"http://metadata.google.internal/computeMetadata/v1/instance/attributes/{metadata_key}", headers={'Metadata-Flavor':'Google'}) as r:
         if r.status_code != 200 or r.text.strip() == "":
             return f"projects/{PROJECT_ID}/global/images/{CONFIG.gcp.image}"
         return r.text.strip()
@@ -223,6 +224,7 @@ def describe_instance(instance_name):
 
 def create_instance_call(instance_number, instance_name, boot_disk_name, external_disk_info, preemptible_machine, machine_type, service_account, zone, subnetwork, uuid):
     URL = f"https://compute.googleapis.com/compute/v1/projects/{PROJECT_ID}/zones/{zone}/instances?requestId={uuid}"
+    architecture = "ARM64" if machine_type.startswith("t2a") else "X86_64"
     data = {
         "name": f"{instance_name}",
         "machineType": f"zones/{zone}/machineTypes/{machine_type}",
@@ -259,7 +261,7 @@ def create_instance_call(instance_number, instance_name, boot_disk_name, externa
             "deviceName": f"{boot_disk_name}",
             "initializeParams": {
                 "diskSizeGb": f"{CONFIG.machine.disk}",
-                "sourceImage": get_worker_image_name(),
+                "sourceImage": get_worker_image_name(architecture),
             },
         },
             external_disk_info
