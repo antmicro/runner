@@ -97,6 +97,18 @@ cd github-actions-runner-scalerunner
 # Compile bzImage
 cd buildroot && make BR2_EXTERNAL=../overlay/ scalenode_gcp_defconfig && make
 
+cd ..
+
+# Prepare a disk for GCP
+./make_gcp_image.sh
+
+# Upload the resulting tar archive
+./upload_gcp_image.sh $PROJECT $BUCKET
+
+# (optional) If you need ARM64 support, perform a full rebuild with ARM64 defconfig.
+rm -rf output/*
+cd buildroot && make clean && make BR2_EXTERNAL=../overlay/ scalenode_gcp_arm64_defconfig && make
+
 # Prepare a disk for GCP
 ./make_gcp_image.sh
 
@@ -104,7 +116,8 @@ cd buildroot && make BR2_EXTERNAL=../overlay/ scalenode_gcp_defconfig && make
 ./upload_gcp_image.sh $PROJECT $BUCKET
 ```
 
-Setup virtual infrastructure using Terraform:
+Setup virtual infrastructure using Terraform.
+If you need ARM64 support, make sure to fill out the `gcp_arm64_worker_image_name` variable. 
 
 ```bash
 git clone https://github.com/antmicro/github-actions-runner-terraform.git
@@ -135,6 +148,7 @@ cd /home/runner/github-actions-runner
 git submodule update --init --recursive
 
 # Copy the .vm_specs.json file and adjust the parameters accordingly.
+# For ARM64 support make sure to add some t2a-standard-* instances to allowed machine types.
 cp .vm_specs.example.json .vm_specs.json
 vim .vm_specs.json
 
@@ -233,6 +247,15 @@ The table below documents and describes their purpose.
 | `GHA_SSH_TUNNEL_KEY`                | base64 string | OpenSSH private key file                                                                                                           |
 | `GHA_SSH_TUNNEL_CONFIG_SECRET_NAME` | string        | Secret name from [GCP Secret Manager](https://cloud.google.com/secret-manager) containing OpenSSH configuration file for tunneling |
 | `GHA_SSH_TUNNEL_KEY_SECRET_NAME`    | string        | Secret name from [GCP Secret Manager](https://cloud.google.com/secret-manager) containing OpenSSH private key file                 |
+
+### ARM64 machines
+
+Spawning ARM64 machines requires the following steps to have been completed:
+1. The [worker image for ARM64](https://github.com/antmicro/github-actions-runner-scalerunner/blob/master/overlay/configs/scalenode_gcp_arm64_defconfig) has been built and uploaded to your GCP project.
+1. The `gcp_arm64_worker_image_name` variable in Terraform has been set or the `WORKER_IMAGE_ARM64` [metadata variable](https://github.com/antmicro/github-actions-runner-terraform/commit/487d32641f91493d26dcfe65b896c697cc361893) has been set manually on the coordinator machine.
+1. At least one of [T2A instance types](https://cloud.google.com/compute/docs/general-purpose-machines#t2a_machines) has been added to [allowed machine types](https://github.com/antmicro/runner/blob/3ba66d7bee8921ca334cd7a3ebb84a59ca7b2407/.vm_specs.example.json#L4).
+
+After ensuring the checklist above, set the `GHA_MACHINE_TYPE` variable in your workflow to a Tau T2A machine, e.g. `t2a-standard-4`.
 
 ### SSH port forwarding
 
