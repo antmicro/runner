@@ -618,14 +618,8 @@ def create_vm(instance_number, container_file, disk_name=None, preemptible_overr
         ssh_sftp.close()
 
     container_sif_location = '/mnt/container.sif'
-
     node_sif_location = '/opt/sif/node.sif'
-    node_zip_src = 'https://github.com/antmicro/github-actions-singularity-node/releases/download/node-16-v0.1.3/node-16-v0.1.3.zip'
-    node_zip_dst = '/mnt/node.zip'
-
     util_sif_location = '/opt/sif/utility.sif'
-    util_zip_src = 'https://github.com/antmicro/github-actions-singularity-utility-container/releases/download/v0.1.2/gha-utility-container-v0.1.2.zip'
-    util_zip_dst = '/mnt/util.zip'
 
     infer_dns_cmd = "$(echo $SSH_CONNECTION | awk '{ print $1 }')"
 
@@ -677,8 +671,6 @@ def create_vm(instance_number, container_file, disk_name=None, preemptible_overr
             f'sudo mv {SARGRAPH[1]} /usr/bin/sargraph',
             f'cd /mnt/sargraph-mount && SARGRAPH_OUTPUT_TYPE=svg sudo -E sargraph chart start -f $(findmnt -nr -o source -T /mnt)',
             'echo "::endgroup::"',
-            f'sudo sh -c "test ! -f {node_sif_location} && curl -o {node_zip_dst} -Ls {node_zip_src} && unzip -p {node_zip_dst} node-16-alpine3.14.sif > {node_sif_location}" || true',
-            f'sudo sh -c "test ! -f {util_sif_location} && curl -o {util_zip_dst} -Ls {util_zip_src} && unzip -p {util_zip_dst} image.sif > {util_sif_location}" || true',
             f'sudo singularity pull --nohttps {container_sif_location} docker://{infer_dns_cmd}:5000/{container_file}',
             f'sudo singularity instance start -C -e --dns {infer_dns_cmd} --overlay /mnt/3 --bind /mnt/2:/root,/mnt/aux,/mnt/sargraph-mount,/mnt/shared-tmp:/tmp {node_sif_location} node',
             f'sudo singularity instance start -C -e --dns {infer_dns_cmd} --writable-tmpfs {util_sif_location} util',
