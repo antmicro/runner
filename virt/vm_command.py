@@ -511,8 +511,6 @@ def create_vm(instance_number, container_file, disk_name=None, preemptible_overr
     # Create and start the virtual machine.
     gcloud_start = time.time()
     boot_disk_name = f"scalerunner-boot-disk"
-    boot_disk_path = f"/dev/disk/by-id/scsi-0Google_PersistentDisk_{boot_disk_name}"
-    boot_disk_ext_part = f"{boot_disk_path}-part2"
 
     ssh_tunnel_cmd = 'true'
 
@@ -677,7 +675,7 @@ def create_vm(instance_number, container_file, disk_name=None, preemptible_overr
             'sudo mount /mnt/ram-disk/sargraph-disk /mnt/sargraph-mount',
             f'chmod +x {SARGRAPH[1]}',
             f'sudo mv {SARGRAPH[1]} /usr/bin/sargraph',
-            f'cd /mnt/sargraph-mount && SARGRAPH_OUTPUT_TYPE=svg sudo -E sargraph chart start -f $(realpath {boot_disk_ext_part})',
+            f'cd /mnt/sargraph-mount && SARGRAPH_OUTPUT_TYPE=svg sudo -E sargraph chart start -f $(findmnt -nr -o source -T /mnt)',
             'echo "::endgroup::"',
             f'sudo sh -c "test ! -f {node_sif_location} && curl -o {node_zip_dst} -Ls {node_zip_src} && unzip -p {node_zip_dst} node-16-alpine3.14.sif > {node_sif_location}" || true',
             f'sudo sh -c "test ! -f {util_sif_location} && curl -o {util_zip_dst} -Ls {util_zip_src} && unzip -p {util_zip_dst} image.sif > {util_sif_location}" || true',
