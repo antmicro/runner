@@ -709,34 +709,6 @@ def check_rsyslog(instance_number):
             sys.exit(1)
         print(status)
 
-def detect_preempted_signal(instance_number):
-    instance_name = get_instance_name(instance_number)
-
-    URL = f'https://compute.googleapis.com/compute/v1/projects/{PROJECT_ID}/aggregated/operations'
-
-    r = AUTHED_SESSION.get(URL, params={'filter': f'(operationType eq compute.instances.preempted)', 'maxResults': 500})
-
-    if not str(r.status_code).startswith("2"):
-        print("Unable to get the list of operations!")
-        print(r.text)
-        sys.exit(1)
-
-    items = json.loads(r.text).get('items')
-
-    if items is not None:
-        for zone, items_in_zone in items.items():
-            for operation in (items_in_zone.get('operations') or []):
-                if operation['targetLink'].split('/')[-1] == instance_name:
-                    event_time = datetime.datetime.strptime(operation["startTime"], "%Y-%m-%dT%H:%M:%S.%f%z")
-                    now = datetime.datetime.utcnow().replace(tzinfo=datetime.timezone.utc)
-                    diff = now - event_time
-                    print(f"Found preempted event for instance: {instance_name} that occured: {diff} time ago")
-                    if diff.days == 0 and diff.seconds < 120:
-                        print("Found preempted event with diff lower than 2 minutes!")
-                        print(f"Instance {instance_name} killed by preempted event!")
-                        sys.exit(1)
-    print(f"Couldn't find preempted event for instance: {instance_name}!")
-
 def check_dmesg(instance_number):
     instance_name = get_instance_name(instance_number)
     target = os.environ[instance_name]
@@ -773,13 +745,13 @@ def check_mode_parameters(mode, instance_number, container_file):
         if container_file is None or not container_file:
             print(f"Required 'container_file' parameter in {mode} is missing or is empty!")
             sys.exit(1)
-    if mode in ["create_vm", "delete_vm", "check-rsyslog", "detect_preempted_signal", "check_dmesg"]:
+    if mode in ["create_vm", "delete_vm", "check-rsyslog", "check_dmesg"]:
         if instance_number is None:
             print(f"Required 'instance-number' parameter in {mode} is missing!")
             sys.exit(1)
 
 @click.command()
-@click.option('--mode', type=click.Choice(['create_vm', 'delete_vm', 'check-rsyslog', 'detect_preempted_signal', 'check_dmesg', 'delete_stale_instances', 'get_secret', 'get_project_id', 'get_zones', 'get_vm', 'get_vms', 'get_disks']), required = True)
+@click.option('--mode', type=click.Choice(['create_vm', 'delete_vm', 'check-rsyslog', 'check_dmesg', 'delete_stale_instances', 'get_secret', 'get_project_id', 'get_zones', 'get_vm', 'get_vms', 'get_disks']), required = True)
 @click.option('-n', '--instance-number', help='Instance number', required=False, default=None)
 @click.option('-s', '--container-file', help='Container file', required=False, default=None)
 @click.option('-d', '--disk-name', help='External disk name', required=False, default=None)
@@ -799,8 +771,6 @@ def main(mode, instance_number, container_file=None, disk_name=None, preemptible
         delete_vm(instance_number)
     elif mode == "check-rsyslog":
         check_rsyslog(instance_number)
-    elif mode == "detect_preempted_signal":
-        detect_preempted_signal(instance_number)
     elif mode == "check_dmesg":
         check_dmesg(instance_number)
     elif mode == "delete_stale_instances":

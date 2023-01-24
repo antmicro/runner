@@ -396,18 +396,6 @@ namespace GitHub.Runner.Worker.Handlers
                                 ExecutionContext.Error($"Unrecognized ping exit code {pingExitCode}");
                                 break;
                         }
-
-                        var instanceNumber = System.Environment.GetEnvironmentVariable(Constants.InstanceNumberVariable);
-                        var checkEventArgs = $"vm_command.py --mode detect_preempted_signal -n {instanceNumber}";
-                        GCPCoordinator.RunProcess(
-                                fileName: "python3",
-                                arguments: checkEventArgs,
-                                workDirectory: virtDir,
-                                outputDataReceivedFunc: (_, args) => ExecutionContext.Error(args.Data ?? ""),
-                                errorDataReceivedFunc: (_, args) => ExecutionContext.Error(args.Data ?? ""),
-                                exceptionFunc: (e) => { Trace.Info("Exception when checking reempted signal!"); Trace.Info(e.Message); },
-                                trace: Trace,
-                                exceptionReturnCode: 255);
                     }
 
                     ExecutionContext.Result = TaskResult.Failed;
