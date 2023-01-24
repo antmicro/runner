@@ -30,7 +30,6 @@ paramiko_logger.addHandler(paramiko_syslog_handler)
 
 USER = 'scalerunner'
 PUBKEY = os.path.join(os.path.expanduser('~'), '.ssh/id_rsa.pub'), f'/home/{USER}/.ssh/authorized_keys'
-SARGRAPH = os.path.realpath('../sargraph/sargraph.py'), f'/home/{USER}/sargraph.py'
 GH_ENV_LIST = ["GITHUB_JOB_FULL", "GITHUB_SHA", "GITHUB_RUN_ID"]
 
 SARGRAPH_RAMDISK_SIZE_MB = 50
@@ -606,16 +605,6 @@ def create_vm(instance_number, container_file, disk_name=None, preemptible_overr
 
     for l in stderr_lines:
         print(l.strip())
-
-    try:
-        ssh_sftp = ssh.open_sftp()
-        ssh_sftp.put(*SARGRAPH)
-    except Exception as e:
-        print('Copying initialization files failed!')
-        print(e)
-        sys.exit(1)
-    finally:
-        ssh_sftp.close()
 
     container_sif_location = '/mnt/container.sif'
     node_sif_location = '/opt/sif/node.sif'
