@@ -154,9 +154,9 @@ namespace GitHub.Runner.Worker.Handlers
                 var initCmd = $"### START ###\n";
                 if (actionName.StartsWith("actions/upload-artifact")) {
                     var virtDir = Path.Combine(new DirectoryInfo(HostContext.GetDirectory(WellKnownDirectory.Root)).Parent.FullName, "virt");
-                    var plotRemotePath = "/mnt/sargraph-mount/plot.svg";
+                    var plotWorkspacePath = $"{workspaceDir}/plot_{jobName}.svg";
                     var sargraphSshArguments = new List<string>(Constants.CommonSshArgs);
-                    sargraphSshArguments.Add($"scalerunner@{sshIp} -t bash -c 'sudo sargraph chart stop && sudo chmod 777 {plotRemotePath}'");
+                    sargraphSshArguments.Add($"scalerunner@{sshIp} -t bash -c 'sudo sargraph chart save {plotWorkspacePath.Replace("/root", "/mnt/2")}'");
                     var sargraphStopExitCode = GCPCoordinator.RunProcess(
                             fileName: "ssh",
                             arguments: string.Join(" ", sargraphSshArguments.ToArray()),
@@ -166,11 +166,6 @@ namespace GitHub.Runner.Worker.Handlers
                             exceptionFunc: (e) => { Trace.Info("Exception when stopping sargraph!"); Trace.Info(e.Message); },
                             trace: Trace,
                             exceptionReturnCode: 255);
-                    if (sargraphStopExitCode == 0) {
-                        var plotWorkspacePath = $"{workspaceDir}/plot_{jobName}.svg";
-                        // Mount command requires file to exist, before we can bind into it.
-                        initCmd += $"touch {plotWorkspacePath} && mount --bind {plotRemotePath} {plotWorkspacePath}\n";
-                    }
                 }
                 initCmd += exportStanzas + " " + file + " " + arguments_node + $"\n### END ###";
 
