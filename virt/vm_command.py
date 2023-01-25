@@ -1,5 +1,5 @@
 #!/usr/bin/python3
-import os, sys, subprocess, json, click, paramiko, time, functools, platform, shlex, shutil, requests, uuid, datetime, random, socket, warnings, logging, logging.handlers
+import os, sys, subprocess, json, click, paramiko, time, functools, platform, shlex, shutil, requests, uuid, datetime, random, socket, warnings, logging, logging.handlers, re
 from collections import namedtuple, OrderedDict
 from cryptography.utils import CryptographyDeprecationWarning
 
@@ -474,6 +474,21 @@ def delete_instance(instance_name):
 def relative_self_link(self_link):
     return self_link.replace("https://www.googleapis.com/compute/v1/", "")
 
+def stop_and_print_ascii_graph(instance_number):
+    instance_name = get_instance_name(instance_number)
+    instance_ip = describe_instance(instance_name)['networkInterfaces'][0]['networkIP']
+    ssh = create_ssh_connection(instance_ip)
+
+    ansi_escape = re.compile(r'(?:\x1B[@-_]|[\x80-\x9F])[0-?]*[ -/]*[@-~]')
+
+    _, stdout, stderr = ssh.exec_command(
+            'sudo -E sh -c "sargraph {0} stop >/dev/null 2>&1 && cd /mnt/sargraph-mount && rm -rf {1} && sargraph {0} plot {1} && cat {1}"'.format("chart", "plot.ascii")
+            )
+    stdout_lines, _ = stdout.readlines(), stderr.readlines()
+
+    for l in stdout_lines:
+        print(ansi_escape.sub('', l.strip()))
+
 def create_vm(instance_number, container_file, disk_name=None, preemptible_override=None, machine_type=None, service_account=None, ssh_tunnel_config=None, ssh_tunnel_key=None):
     print("Attempting to spawn a machine... (PID: {})".format(os.getpid()))
 
@@ -751,7 +766,7 @@ def check_mode_parameters(mode, instance_number, container_file):
             sys.exit(1)
 
 @click.command()
-@click.option('--mode', type=click.Choice(['create_vm', 'delete_vm', 'check-rsyslog', 'check_dmesg', 'delete_stale_instances', 'get_secret', 'get_project_id', 'get_zones', 'get_vm', 'get_vms', 'get_disks']), required = True)
+@click.option('--mode', type=click.Choice(['create_vm', 'delete_vm', 'check-rsyslog', 'check_dmesg', 'delete_stale_instances', 'get_secret', 'get_project_id', 'get_zones', 'get_vm', 'get_vms', 'get_disks', 'print_ascii_graph']), required = True)
 @click.option('-n', '--instance-number', help='Instance number', required=False, default=None)
 @click.option('-s', '--container-file', help='Container file', required=False, default=None)
 @click.option('-d', '--disk-name', help='External disk name', required=False, default=None)
@@ -787,6 +802,8 @@ def main(mode, instance_number, container_file=None, disk_name=None, preemptible
         print(list_auto_spawned_instances())
     elif mode == "get_disks":
         print(get_gcp_disks(disk_name))
+    elif mode == "print_ascii_graph":
+        stop_and_print_ascii_graph(instance_number)
     else:
         print(f"Unknown mode: {mode}! Exiting!")
         sys.exit(1)

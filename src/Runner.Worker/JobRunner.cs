@@ -515,6 +515,16 @@ namespace GitHub.Runner.Worker
 
             GCPCoordinator.RunProcess(
                     fileName: "python3",
+                    arguments: $"vm_command.py --mode print_ascii_graph -n {instanceNumber}",
+                    workDirectory: virtDir,
+                    outputDataReceivedFunc: (_, args) => { vmCtx.Output(args.Data ?? ""); Trace.Info(args.Data ?? ""); },
+                    errorDataReceivedFunc: (_, args) => Trace.Error(args.Data ?? ""),
+                    exceptionFunc: (e) => { Trace.Info("Exception when trying to fetch ASCII graphs!"); Trace.Info(e.Message); },
+                    trace: Trace,
+                    exceptionReturnCode: 255);
+
+            GCPCoordinator.RunProcess(
+                    fileName: "python3",
                     arguments: $"vm_command.py --mode delete_vm -n {instanceNumber}",
                     workDirectory: virtDir,
                     outputDataReceivedFunc: (_, args) => Trace.Info(args.Data ?? ""),
