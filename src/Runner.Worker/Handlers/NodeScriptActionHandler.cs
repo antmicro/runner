@@ -167,10 +167,9 @@ namespace GitHub.Runner.Worker.Handlers
                             trace: Trace,
                             exceptionReturnCode: 255);
                     if (sargraphStopExitCode == 0) {
-                        var workspaceLastComponent = githubContext["container_workspace"];
-                        var plotWorspacePath = $"{workspaceDir}/plot_{jobName}.svg";
+                        var plotWorkspacePath = $"{workspaceDir}/plot_{jobName}.svg";
                         // Mount command requires file to exist, before we can bind into it.
-                        initCmd += $"touch {plotWorspacePath} && mount --bind {plotRemotePath} {plotWorspacePath}\n";
+                        initCmd += $"touch {plotWorkspacePath} && mount --bind {plotRemotePath} {plotWorkspacePath}\n";
                     }
                 }
                 initCmd += exportStanzas + " " + file + " " + arguments_node + $"\n### END ###";
