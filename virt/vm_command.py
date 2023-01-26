@@ -664,7 +664,7 @@ def create_vm(instance_number, container_file, disk_name=None, preemptible_overr
             f'cd /mnt/sargraph-mount && SARGRAPH_OUTPUT_TYPE=svg sudo -E sargraph chart start -f $(findmnt -nr -o source -T /mnt) -n $(ip -o -4 route show to default | awk \'{{print $5}}\')',
             'echo "::endgroup::"',
             f'sudo singularity pull --nohttps {container_sif_location} docker://{infer_dns_cmd}:5000/{container_file}',
-            f'sudo singularity instance start -C -e --dns {infer_dns_cmd} --overlay /mnt/3 --bind /mnt/2:/root,/mnt/aux,/mnt/sargraph-mount,/mnt/shared-tmp:/tmp {node_sif_location} node',
+            f'sudo singularity instance start -C -e --dns {infer_dns_cmd} --overlay /mnt/3 --bind /mnt/2:/root,/mnt/aux,/mnt/shared-tmp:/tmp {node_sif_location} node',
             f'sudo singularity instance start -C -e --dns {infer_dns_cmd} --writable-tmpfs {util_sif_location} util',
             ssh_tunnel_cmd,
             f'echo "::group::Starting {container_file}..."',
