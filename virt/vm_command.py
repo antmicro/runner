@@ -627,16 +627,6 @@ def create_vm(instance_number, container_file, disk_name=None, preemptible_overr
 
     infer_dns_cmd = "$(echo $SSH_CONNECTION | awk '{ print $1 }')"
 
-    # Truncate local rsyslog log file
-    log_name = f'work/{get_instance_name(instance_number)}.c.{PROJECT}.internal.log'
-    command = f"{shutil.which('truncate')} -s0 {log_name}"
-    try:
-        subprocess.run(shlex.split(command),stderr=subprocess.STDOUT)
-    except subprocess.CalledProcessError as err:
-        print("Error while truncating local rsyslog file!")
-        print(err)
-        # Don't error out here, as it is not critical task
-
     container_file = container_file if "/" in container_file else "library/" + container_file
 
     # The layout of the /mnt partition is as follows:
@@ -695,35 +685,6 @@ def delete_vm(instance_number):
     delete_instance(instance_name)
     print(f"Machine deleted ({instance_name})")
 
-
-def check_preempted(current_log):
-    for line in current_log:
-        if "VM shutting down" in line:
-            return line[line.find("VM shutting down"):]
-    return None
-
-def check_rsyslog(instance_number):
-    instance_name = f'{get_instance_name(instance_number)}.c.{PROJECT}.internal'
-
-    current_log = []
-    found_labels = False
-
-    for line in reversed(list(open(f"work/{instance_name}.log"))):
-        if str(LABELS).replace("\'", "") in line.rstrip():
-            found_labels = True
-            break
-        current_log.append(line.rstrip())
-
-    if not found_labels:
-        print("Could not find rsyslog for current run!")
-        sys.exit(1)
-    else:
-        status = check_preempted(current_log)
-        if status is None:
-            print("Could not get status of shutdown!")
-            sys.exit(1)
-        print(status)
-
 def check_dmesg(instance_number):
     instance_name = get_instance_name(instance_number)
     target = os.environ[instance_name]
@@ -760,13 +721,13 @@ def check_mode_parameters(mode, instance_number, container_file):
         if container_file is None or not container_file:
             print(f"Required 'container_file' parameter in {mode} is missing or is empty!")
             sys.exit(1)
-    if mode in ["create_vm", "delete_vm", "check-rsyslog", "check_dmesg"]:
+    if mode in ["create_vm", "delete_vm", "check_dmesg"]:
         if instance_number is None:
             print(f"Required 'instance-number' parameter in {mode} is missing!")
             sys.exit(1)
 
 @click.command()
-@click.option('--mode', type=click.Choice(['create_vm', 'delete_vm', 'check-rsyslog', 'check_dmesg', 'delete_stale_instances', 'get_secret', 'get_project_id', 'get_zones', 'get_vm', 'get_vms', 'get_disks', 'print_ascii_graph']), required = True)
+@click.option('--mode', type=click.Choice(['create_vm', 'delete_vm', 'check_dmesg', 'delete_stale_instances', 'get_secret', 'get_project_id', 'get_zones', 'get_vm', 'get_vms', 'get_disks', 'print_ascii_graph']), required = True)
 @click.option('-n', '--instance-number', help='Instance number', required=False, default=None)
 @click.option('-s', '--container-file', help='Container file', required=False, default=None)
 @click.option('-d', '--disk-name', help='External disk name', required=False, default=None)
@@ -784,8 +745,6 @@ def main(mode, instance_number, container_file=None, disk_name=None, preemptible
         create_vm(instance_number, container_file, disk_name, preemptible_override, machine_type, service_account, ssh_tunnel_config, ssh_tunnel_key)
     elif mode == "delete_vm":
         delete_vm(instance_number)
-    elif mode == "check-rsyslog":
-        check_rsyslog(instance_number)
     elif mode == "check_dmesg":
         check_dmesg(instance_number)
     elif mode == "delete_stale_instances":

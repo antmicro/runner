@@ -532,15 +532,7 @@ namespace GitHub.Runner.Worker
                     exceptionFunc: (e) => { Trace.Info("Exception when trying to delete VM!"); Trace.Info(e.Message); },
                     trace: Trace,
                     exceptionReturnCode: 255);
-            GCPCoordinator.RunProcess(
-                    fileName: "python3",
-                    arguments: $"vm_command.py --mode check-rsyslog -n {instanceNumber}",
-                    workDirectory: virtDir,
-                    outputDataReceivedFunc: (_, args) => { vmCtx.Output(args.Data ?? ""); Trace.Info(args.Data ?? ""); },
-                    errorDataReceivedFunc: (_, args) => Trace.Error(args.Data ?? ""),
-                    exceptionFunc: (e) => { Trace.Info("Exception when trying to check rsyslog!"); Trace.Info(e.Message); },
-                    trace: Trace,
-                    exceptionReturnCode: 255);
+
             vmCtx.Complete();
             return true;
         }
