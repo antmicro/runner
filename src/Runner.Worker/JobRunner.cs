@@ -14,6 +14,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Net.Http;
+using GitHub.DistributedTask.WebApi;
 using GitHub.Runner.Common;
 using GitHub.Runner.Sdk;
 using GitHub.Runner.GCP;
@@ -48,8 +49,33 @@ namespace GitHub.Runner.Worker
             Trace.Info("Job ID {0}", message.JobId);
 
             DateTime jobStartTimeUtc = DateTime.UtcNow;
+            IRunnerService server = null;
 
             ServiceEndpoint systemConnection = message.Resources.Endpoints.Single(x => string.Equals(x.Name, WellKnownServiceEndpointNames.SystemVssConnection, StringComparison.OrdinalIgnoreCase));
+            if (string.Equals(message.MessageType, JobRequestMessageTypes.RunnerJobRequest, StringComparison.OrdinalIgnoreCase))
+            {
+                var runServer = HostContext.GetService<IRunServer>();
+                VssCredentials jobServerCredential = VssUtil.GetVssCredential(systemConnection);
+                await runServer.ConnectAsync(systemConnection.Url, jobServerCredential);
+                server = runServer;
+            }
+            else 
+            {
+                // Setup the job server and job server queue.
+                var jobServer = HostContext.GetService<IJobServer>();
+                VssCredentials jobServerCredential = VssUtil.GetVssCredential(systemConnection);
+                Uri jobServerUrl = systemConnection.Url;
+
+                Trace.Info($"Creating job server with URL: {jobServerUrl}");
+                // jobServerQueue is the throttling reporter.
+                _jobServerQueue = HostContext.GetService<IJobServerQueue>();
+                VssConnection jobConnection = VssUtil.CreateConnection(jobServerUrl, jobServerCredential, new DelegatingHandler[] { new ThrottlingReportHandler(_jobServerQueue) });
+                await jobServer.ConnectAsync(jobConnection);
+
+                _jobServerQueue.Start(message);
+                server = jobServer;
+            }
+            
 
             // Spawn Google VM
             var instanceNumber = Environment.GetEnvironmentVariable(Constants.InstanceNumberVariable);
@@ -69,23 +95,9 @@ namespace GitHub.Runner.Worker
 
             dynamic vmSpecs = JObject.Parse(File.ReadAllText(Path.Combine(rootDir, ".vm_specs.json")));
 
-            // Setup the job server and job server queue.
-            var jobServer = HostContext.GetService<IJobServer>();
-            VssCredentials jobServerCredential = VssUtil.GetVssCredential(systemConnection);
-            Uri jobServerUrl = systemConnection.Url;
-
-            Trace.Info($"Creating job server with URL: {jobServerUrl}");
-            // jobServerQueue is the throttling reporter.
-            _jobServerQueue = HostContext.GetService<IJobServerQueue>();
-            var delegatingHandlers = new List<DelegatingHandler>() { new ThrottlingReportHandler(_jobServerQueue) };
-            delegatingHandlers.Add(new RedirectMessageHandler(Trace));
-            VssConnection jobConnection = VssUtil.CreateConnection(jobServerUrl, jobServerCredential, delegatingHandlers);
-            await jobServer.ConnectAsync(jobConnection);
-
             Trace.Info("Creating pipeline server");
             _pipelinesHttpClient = jobConnection.GetClient<PipelinesHttpClient>();
 
-            _jobServerQueue.Start(message);
             HostContext.WritePerfCounter($"WorkerJobServerQueueStarted_{message.RequestId.ToString()}");
 
             IExecutionContext jobContext = null;
@@ -359,7 +371,8 @@ namespace GitHub.Runner.Worker
                 {
                     Trace.Error(ex);
                     jobContext.Error(ex);
-                    return await CompleteJobAsync(jobServer, jobContext, message, jobStartTimeUtc, TaskResult.Failed);
+                    return await CompleteJobAsync(server, jobContext, message, TaskResult.Failed);
+
                 }
 
                 if (jobContext.Global.WriteDebug)
@@ -391,7 +404,7 @@ namespace GitHub.Runner.Worker
 
                     FinalizeGcp(jobContext, message, vmSpecs);
 
-                    return await CompleteJobAsync(jobServer, jobContext, message, jobStartTimeUtc, TaskResult.Canceled);
+                    return await CompleteJobAsync(server, jobContext, message, TaskResult.Canceled);
                 }
                 catch (Exception ex)
                 {
@@ -402,7 +415,7 @@ namespace GitHub.Runner.Worker
 
                     FinalizeGcp(jobContext, message, vmSpecs);
 
-                    return await CompleteJobAsync(jobServer, jobContext, message, jobStartTimeUtc, TaskResult.Failed);
+                    return await CompleteJobAsync(server, jobContext, message, TaskResult.Failed);
                 }
 
                 // trace out all steps
@@ -429,7 +442,7 @@ namespace GitHub.Runner.Worker
                     // Log the error and fail the job.
                     Trace.Error($"Caught exception from job steps {nameof(StepsRunner)}: {ex}");
                     jobContext.Error(ex);
-                    return await CompleteJobAsync(jobServer, jobContext, message, jobStartTimeUtc, TaskResult.Failed);
+                    return await CompleteJobAsync(server, jobContext, message, TaskResult.Failed);
                 }
                 finally
                 {
@@ -451,7 +464,7 @@ namespace GitHub.Runner.Worker
                 Trace.Info($"Job result after all job steps finish: {jobContext.Result ?? TaskResult.Succeeded}");
 
                 Trace.Info("Completing the job execution context.");
-                return await CompleteJobAsync(jobServer, jobContext, message, jobStartTimeUtc);
+                return await CompleteJobAsync(server, jobContext, message);
             }
             finally
             {
@@ -464,6 +477,66 @@ namespace GitHub.Runner.Worker
 
                 await ShutdownQueue(throwOnFailure: false);
             }
+        }
+
+        private async Task<TaskResult> CompleteJobAsync(IRunnerService server, IExecutionContext jobContext, Pipelines.AgentJobRequestMessage message, TaskResult? taskResult = null)
+        {
+            if (server is IRunServer runServer)
+            {
+                return await CompleteJobAsync(runServer, jobContext, message, taskResult);
+            }
+            else if (server is IJobServer jobServer)
+            {
+                return await CompleteJobAsync(jobServer, jobContext, message, taskResult);
+            }
+            else
+            {
+                throw new NotSupportedException();
+            }
+        }
+
+        private async Task<TaskResult> CompleteJobAsync(IRunServer runServer, IExecutionContext jobContext, Pipelines.AgentJobRequestMessage message, TaskResult? taskResult = null)
+        {
+            jobContext.Debug($"Finishing: {message.JobDisplayName}");
+            TaskResult result = jobContext.Complete(taskResult);
+            if (jobContext.Global.Variables.TryGetValue("Node12ActionsWarnings", out var node12Warnings))
+            {
+                var actions = string.Join(", ", StringUtil.ConvertFromJson<HashSet<string>>(node12Warnings));
+                jobContext.Warning(string.Format(Constants.Runner.Node12DetectedAfterEndOfLife, actions));
+            }
+
+            // Make sure to clean temp after file upload since they may be pending fileupload still use the TEMP dir.
+            _tempDirectoryManager?.CleanupTempDirectory();
+
+            // Load any upgrade telemetry
+            LoadFromTelemetryFile(jobContext.Global.JobTelemetry);
+
+            // Make sure we don't submit secrets as telemetry
+            MaskTelemetrySecrets(jobContext.Global.JobTelemetry);
+
+            Trace.Info($"Raising job completed against run service");
+            var completeJobRetryLimit = 5;
+            var exceptions = new List<Exception>();
+            while (completeJobRetryLimit-- > 0)
+            {
+                try
+                {
+                    await runServer.CompleteJobAsync(message.Plan.PlanId, message.JobId, default);
+                    return result;
+                }
+                catch (Exception ex)
+                {
+                    Trace.Error($"Catch exception while attempting to complete job {message.JobId}, job request {message.RequestId}.");
+                    Trace.Error(ex);
+                    exceptions.Add(ex);
+                }
+
+                // delay 5 seconds before next retry.
+                await Task.Delay(TimeSpan.FromSeconds(5));
+            }
+
+            // rethrow exceptions from all attempts.
+            throw new AggregateException(exceptions);
         }
 
         private bool DecodeBase64OrAddIssue(KeyValuePair<String, String> envPair, IExecutionContext jobContext)

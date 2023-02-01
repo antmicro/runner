@@ -12,15 +12,15 @@ namespace GitHub.Services.Common
     public class RawHttpMessageHandler: HttpMessageHandler
     {
         public RawHttpMessageHandler(
-            FederatedCredential credentials,
-            RawClientHttpRequestSettings settings)
-            : this(credentials, settings, new HttpClientHandler())
+            FederatedCredential credentials)
+            : this(credentials, new RawClientHttpRequestSettings())
         {
         }
 
         public RawHttpMessageHandler(
-            FederatedCredential credentials)
-            : this(credentials, new RawClientHttpRequestSettings())
+            FederatedCredential credentials,
+            RawClientHttpRequestSettings settings)
+            : this(credentials, settings, new HttpClientHandler())
         {
         }
 
