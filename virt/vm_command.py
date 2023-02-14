@@ -669,7 +669,7 @@ def create_vm(instance_number, container_file, disk_name=None, preemptible_overr
             ssh_tunnel_cmd,
             f'echo "::group::Starting {container_file}..."',
             'sudo modprobe fuse',
-            f'sudo singularity --debug instance start -C -e --dns {infer_dns_cmd} --overlay /mnt/1 --bind /mnt/2:/root,/mnt/aux,/dev/fuse,/mnt/shared-tmp:/tmp {container_sif_location} i',
+            f'sudo singularity --debug instance start -C -e --dns {infer_dns_cmd} --no-mount /etc/localtime --overlay /mnt/1 --bind /mnt/2:/root,/mnt/aux,/dev/fuse,/mnt/shared-tmp:/tmp {container_sif_location} i',
             'echo "::endgroup::"',
             'echo "::group::Checking container disks..."',
             'sudo singularity exec -e instance://i df -h /',
