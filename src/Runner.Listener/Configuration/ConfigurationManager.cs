@@ -471,6 +471,7 @@ namespace GitHub.Runner.Listener.Configuration
             agent.Labels.Add(new AgentLabel("self-hosted", LabelType.System));
             agent.Labels.Add(new AgentLabel(VarUtil.OS, LabelType.System));
             agent.Labels.Add(new AgentLabel(VarUtil.OSArchitecture, LabelType.System));
+            agent.Labels.Add(new AgentLabel(Constants.CommonCustomLabel, LabelType.System));
 
             foreach (var userLabel in userLabels)
             {
@@ -497,6 +498,7 @@ namespace GitHub.Runner.Listener.Configuration
             agent.Labels.Add(new AgentLabel("self-hosted", LabelType.System));
             agent.Labels.Add(new AgentLabel(VarUtil.OS, LabelType.System));
             agent.Labels.Add(new AgentLabel(VarUtil.OSArchitecture, LabelType.System));
+            agent.Labels.Add(new AgentLabel(Constants.CommonCustomLabel, LabelType.System));
 
             foreach (var userLabel in userLabels)
             {
