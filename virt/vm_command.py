@@ -1,5 +1,5 @@
 #!/usr/bin/python3
-import os, sys, subprocess, json, click, paramiko, time, functools, platform, shlex, shutil, requests, uuid, datetime, random, socket, warnings, logging, logging.handlers, re
+import os, sys, subprocess, json, click, time, functools, platform, shlex, shutil, requests, uuid, datetime, random, socket, warnings, logging, logging.handlers, re
 from collections import namedtuple, OrderedDict
 from cryptography.utils import CryptographyDeprecationWarning
 
@@ -7,12 +7,12 @@ warnings.filterwarnings("ignore", category=CryptographyDeprecationWarning)
 
 print = functools.partial(print, flush=True)
 
-libs = ['google-auth-library-python', 'cachetools/src']
+libs = ['google-auth-library-python', 'cachetools/src', 'paramiko']
 
 for l in libs:
     sys.path.insert(0, os.path.dirname(os.path.realpath(__file__))+f'/../extra_python_deps/{l}')
 
-import google.auth
+import google.auth, paramiko
 from google.auth.transport.requests import AuthorizedSession
 
 # Configure syslog-backed logging for Paramiko.

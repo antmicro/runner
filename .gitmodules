@@ -7,3 +7,6 @@
 [submodule "extra_python_deps/cachetools"]
 	path = extra_python_deps/cachetools
 	url = https://github.com/tkem/cachetools.git
+[submodule "extra_python_deps/paramiko"]
+	path = extra_python_deps/paramiko
+	url = https://github.com/paramiko/paramiko.git
