@@ -11,6 +11,9 @@ using System.Linq;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using GitHub.Runner.Common;
+using GitHub.Runner.Common.Util;
+using GitHub.Runner.Listener.Check;
+using GitHub.Runner.Listener.Configuration;
 using GitHub.Runner.Sdk;
 
 namespace GitHub.Runner.Listener
@@ -113,6 +116,12 @@ namespace GitHub.Runner.Listener
                 // remove config files, remove service, and exit
                 if (command.Remove)
                 {
+                    // only remove local config files and exit
+                    if (command.RemoveLocalConfig)
+                    {
+                        configManager.DeleteLocalRunnerConfig();
+                        return Constants.Runner.ReturnCode.Success;
+                    }
                     try
                     {
                         await configManager.UnconfigureAsync(command);
@@ -421,7 +430,7 @@ namespace GitHub.Runner.Listener
                                 }
                             }
                             // Broker flow
-                            else if (string.Equals(message.MessageType, JobRequestMessageTypes.RunnerJobRequest, StringComparison.OrdinalIgnoreCase))
+                            else if (MessageUtil.IsRunServiceJob(message.MessageType))
                             {
                                 if (autoUpdateInProgress || runOnceJobReceived)
                                 {

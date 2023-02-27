@@ -14,6 +14,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Net.Http;
+using GitHub.DistributedTask.Pipelines;
 using GitHub.Runner.Common;
 using GitHub.Runner.Sdk;
 using GitHub.Runner.GCP;
@@ -26,7 +27,7 @@ namespace GitHub.Runner.Worker
     [ServiceLocator(Default = typeof(JobRunner))]
     public interface IJobRunner : IRunnerService
     {
-        Task<TaskResult> RunAsync(Pipelines.AgentJobRequestMessage message, CancellationToken jobRequestCancellationToken);
+        Task<TaskResult> RunAsync(AgentJobRequestMessage message, CancellationToken jobRequestCancellationToken);
     }
 
     public sealed class JobRunner : RunnerService, IJobRunner
@@ -36,7 +37,7 @@ namespace GitHub.Runner.Worker
         private const string RestrictedServiceAccountWarning = "Attachment of SA is restricted to non-fork PRs";
         private IBesServerHttpClient _besServerClient;
 
-        public async Task<TaskResult> RunAsync(Pipelines.AgentJobRequestMessage message, CancellationToken jobRequestCancellationToken)
+        public async Task<TaskResult> RunAsync(AgentJobRequestMessage message, CancellationToken jobRequestCancellationToken)
         {
             // Validate parameters.
             Trace.Entering();
@@ -50,14 +51,14 @@ namespace GitHub.Runner.Worker
             IRunnerService server = null;
 
             ServiceEndpoint systemConnection = message.Resources.Endpoints.Single(x => string.Equals(x.Name, WellKnownServiceEndpointNames.SystemVssConnection, StringComparison.OrdinalIgnoreCase));
-            if (string.Equals(message.MessageType, JobRequestMessageTypes.RunnerJobRequest, StringComparison.OrdinalIgnoreCase))
+            if (MessageUtil.IsRunServiceJob(message.MessageType))
             {
                 var runServer = HostContext.GetService<IRunServer>();
                 VssCredentials jobServerCredential = VssUtil.GetVssCredential(systemConnection);
                 await runServer.ConnectAsync(systemConnection.Url, jobServerCredential);
                 server = runServer;
             }
-            else 
+            else
             {
                 // Setup the job server and job server queue.
                 var jobServer = HostContext.GetService<IJobServer>();
@@ -73,7 +74,7 @@ namespace GitHub.Runner.Worker
                 _jobServerQueue.Start(message);
                 server = jobServer;
             }
-            
+
 
             // Spawn Google VM
             var instanceNumber = Environment.GetEnvironmentVariable(Constants.InstanceNumberVariable);
