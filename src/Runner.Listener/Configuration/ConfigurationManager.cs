@@ -30,12 +30,14 @@ namespace GitHub.Runner.Listener.Configuration
     {
         private IConfigurationStore _store;
         private IRunnerServer _runnerServer;
+        private IRunnerDotcomServer _dotcomServer;
         private ITerminal _term;
 
         public override void Initialize(IHostContext hostContext)
         {
             base.Initialize(hostContext);
             _runnerServer = HostContext.GetService<IRunnerServer>();
+            _dotcomServer = HostContext.GetService<IRunnerDotcomServer>();
             Trace.Verbose("Creating _store");
             _store = hostContext.GetService<IConfigurationStore>();
             Trace.Verbose("store created");
@@ -87,6 +89,7 @@ namespace GitHub.Runner.Listener.Configuration
             ICredentialProvider credProvider = null;
             VssCredentials creds = null;
             _term.WriteSection("Authentication");
+            string registerToken = string.Empty;
             while (true)
             {
                 // When testing against a dev deployment of Actions Service, set this environment variable
@@ -104,9 +107,11 @@ namespace GitHub.Runner.Listener.Configuration
                 else
                 {
                     runnerSettings.GitHubUrl = inputUrl;
-                    var registerToken = await GetRunnerTokenAsync(command, inputUrl, "registration");
+                    registerToken = await GetRunnerTokenAsync(command, inputUrl, "registration");
                     GitHubAuthResult authResult = await GetTenantCredential(inputUrl, registerToken, Constants.RunnerEvent.Register);
                     runnerSettings.ServerUrl = authResult.TenantUrl;
+                    runnerSettings.UseV2Flow = authResult.UseV2Flow;
+                    _term.WriteLine($"Using V2 flow: {runnerSettings.UseV2Flow}");
                     creds = authResult.ToVssCredentials();
                     Trace.Info("cred retrieved via GitHub auth");
                 }
@@ -159,9 +164,17 @@ namespace GitHub.Runner.Listener.Configuration
             // If we have more than one runner group available, allow the user to specify which one to be added into
             string poolName = null;
             TaskAgentPool agentPool = null;
-            List<TaskAgentPool> agentPools = await _runnerServer.GetAgentPoolsAsync();
-            TaskAgentPool defaultPool = agentPools?.Where(x => x.IsInternal).FirstOrDefault();
+            List<TaskAgentPool> agentPools;
+            if (runnerSettings.UseV2Flow)
+            {
+                agentPools = await _dotcomServer.GetRunnerGroupsAsync(runnerSettings.GitHubUrl, registerToken);
+            }
+            else
+            {
+                agentPools = await _runnerServer.GetAgentPoolsAsync();
+            }
 
+            TaskAgentPool defaultPool = agentPools?.Where(x => x.IsInternal).FirstOrDefault();
             if (agentPools?.Where(x => !x.IsHosted).Count() > 0)
             {
                 poolName = command.GetRunnerGroupName(defaultPool?.Name);
@@ -197,8 +210,16 @@ namespace GitHub.Runner.Listener.Configuration
 
                 var userLabels = command.GetLabels();
                 _term.WriteLine();
+                List<TaskAgent> agents;
+                if (runnerSettings.UseV2Flow)
+                {
+                    agents = await _dotcomServer.GetRunnersAsync(runnerSettings.PoolId, runnerSettings.GitHubUrl, registerToken, runnerSettings.AgentName);
+                }
+                else
+                {
+                    agents = await _runnerServer.GetAgentsAsync(runnerSettings.PoolId, runnerSettings.AgentName);
+                }
 
-                var agents = await _runnerServer.GetAgentsAsync(runnerSettings.PoolId, runnerSettings.AgentName);
                 Trace.Verbose("Returns {0} agents", agents.Count);
                 agent = agents.FirstOrDefault();
                 if (agent != null)
@@ -234,7 +255,15 @@ namespace GitHub.Runner.Listener.Configuration
 
                     try
                     {
-                        agent = await _runnerServer.AddAgentAsync(runnerSettings.PoolId, agent);
+                        if (runnerSettings.UseV2Flow)
+                        {
+                            agent = await _dotcomServer.AddRunnerAsync(runnerSettings.PoolId, agent, runnerSettings.GitHubUrl, registerToken);
+                        }
+                        else
+                        {
+                            agent = await _runnerServer.AddAgentAsync(runnerSettings.PoolId, agent);
+                        }
+
                         _term.WriteSuccessMessage("Runner successfully added");
                         break;
                     }
@@ -601,7 +630,7 @@ namespace GitHub.Runner.Listener.Configuration
                     {
                         var response = await httpClient.PostAsync(githubApiUrl, new StringContent(string.Empty));
                         responseStatus = response.StatusCode;
-                        var githubRequestId = GetGitHubRequestId(response.Headers);
+                        var githubRequestId = _dotcomServer.GetGitHubRequestId(response.Headers);
 
                         if (response.IsSuccessStatusCode)
                         {
@@ -664,7 +693,7 @@ namespace GitHub.Runner.Listener.Configuration
                     {
                         var response = await httpClient.PostAsync(githubApiUrl, new StringContent(StringUtil.ConvertToJson(bodyObject), null, "application/json"));
                         responseStatus = response.StatusCode;
-                        var githubRequestId = GetGitHubRequestId(response.Headers);
+                        var githubRequestId = _dotcomServer.GetGitHubRequestId(response.Headers);
 
                         if (response.IsSuccessStatusCode)
                         {
@@ -692,15 +721,6 @@ namespace GitHub.Runner.Listener.Configuration
                 await Task.Delay(backOff);
             }
             return null;
-        }
-
-        private string GetGitHubRequestId(HttpResponseHeaders headers)
-        {
-            if (headers.TryGetValues("x-github-request-id", out var headerValues))
-            {
-                return headerValues.FirstOrDefault();
-            }
-            return string.Empty;
         }
     }
 }

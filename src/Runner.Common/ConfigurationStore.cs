@@ -49,6 +49,9 @@ namespace GitHub.Runner.Common
         [DataMember(Name = "PullRequestSecurity", EmitDefaultValue = false)]
         public PullRequestSecuritySettings PullRequestSecuritySettings { get; set; }
 
+        [DataMember(EmitDefaultValue = false)]
+        public bool UseV2Flow { get; set; }
+
         [IgnoreDataMember]
         public bool IsHostedServer
         {
