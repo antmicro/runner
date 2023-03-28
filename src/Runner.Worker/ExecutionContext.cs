@@ -67,6 +67,7 @@ namespace GitHub.Runner.Worker
         TaskResult? CommandResult { get; set; }
         CancellationToken CancellationToken { get; }
         GlobalContext Global { get; }
+        string CustomPrefix { get; set; }
 
         Dictionary<string, string> IntraActionState { get; }
         Dictionary<string, VariableValue> JobOutputs { get; }
@@ -94,7 +95,7 @@ namespace GitHub.Runner.Worker
         // Initialize
         void InitializeJob(Pipelines.AgentJobRequestMessage message, CancellationToken token);
         void CancelToken();
-        IExecutionContext CreateChild(Guid recordId, string displayName, string refName, string scopeName, string contextName, ActionRunStage stage, Dictionary<string, string> intraActionState = null, int? recordOrder = null, IPagingLogger logger = null, bool isEmbedded = false, CancellationTokenSource cancellationTokenSource = null, Guid embeddedId = default(Guid), string siblingScopeName = null);
+        IExecutionContext CreateChild(Guid recordId, string displayName, string refName, string scopeName, string contextName, ActionRunStage stage, Dictionary<string, string> intraActionState = null, int? recordOrder = null, IPagingLogger logger = null, bool isEmbedded = false, CancellationTokenSource cancellationTokenSource = null, Guid embeddedId = default(Guid), string siblingScopeName = null, string customPrefix = null);
         IExecutionContext CreateEmbeddedChild(string scopeName, string contextName, Guid embeddedId, ActionRunStage stage, Dictionary<string, string> intraActionState = null, string siblingScopeName = null);
 
         // logging
@@ -153,6 +154,7 @@ namespace GitHub.Runner.Worker
         private CancellationTokenSource _cancellationTokenSource;
         private TaskCompletionSource<int> _forceCompleted = new TaskCompletionSource<int>();
         private bool _throttlingReported = false;
+        private string _customPrefix = "";
 
         // only job level ExecutionContext will track throttling delay.
         private long _totalThrottlingDelayInMilliseconds = 0;
@@ -248,6 +250,17 @@ namespace GitHub.Runner.Worker
             }
         }
 
+        public string CustomPrefix
+        {
+            get => _customPrefix;
+            set
+            {
+                if (value != null) {
+                    _customPrefix = value;
+                }
+            }
+        }
+
         public override void Initialize(IHostContext hostContext)
         {
             base.Initialize(hostContext);
@@ -309,7 +322,7 @@ namespace GitHub.Runner.Worker
             Root.PostJobSteps.Push(step);
         }
 
-        public IExecutionContext CreateChild(Guid recordId, string displayName, string refName, string scopeName, string contextName, ActionRunStage stage, Dictionary<string, string> intraActionState = null, int? recordOrder = null, IPagingLogger logger = null, bool isEmbedded = false, CancellationTokenSource cancellationTokenSource = null, Guid embeddedId = default(Guid), string siblingScopeName = null)
+        public IExecutionContext CreateChild(Guid recordId, string displayName, string refName, string scopeName, string contextName, ActionRunStage stage, Dictionary<string, string> intraActionState = null, int? recordOrder = null, IPagingLogger logger = null, bool isEmbedded = false, CancellationTokenSource cancellationTokenSource = null, Guid embeddedId = default(Guid), string siblingScopeName = null, string customPrefix = null)
         {
             Trace.Entering();
 
@@ -360,6 +373,7 @@ namespace GitHub.Runner.Worker
             }
 
             child.IsEmbedded = isEmbedded;
+            child.CustomPrefix = customPrefix != null ? customPrefix : _customPrefix;
 
             return child;
         }
@@ -978,7 +992,8 @@ namespace GitHub.Runner.Worker
         // Do not add a format string overload. See comment on ExecutionContext.Write().
         public static void Output(this IExecutionContext context, string message, string outputType = "")
         {
-            string msg = "", pre = "", post = "", preTime = AnsiColors.Green;
+            string msg = "", msgColorBegin = "", msgColorEnd = "", preColorBegin = AnsiColors.Green;
+            string prefixWithColorReset = "";
             bool isGhControl = message.StartsWith(WellKnownTags.Group) || message.StartsWith(WellKnownTags.EndGroup);
             Regex r = new Regex(@"^\++\s");
 
@@ -988,15 +1003,18 @@ namespace GitHub.Runner.Worker
             }
             else
             {
-                if (outputType == "stderr") preTime = AnsiColors.Red;
+                if (outputType == "stderr") preColorBegin = AnsiColors.Red;
                 if (r.Matches(message).Count > 0)
                 {
-                    pre  = AnsiColors.Blue;
-                    post = AnsiColors.Reset;
-                    preTime = AnsiColors.Green;
+                    msgColorBegin  = AnsiColors.Blue;
+                    msgColorEnd = AnsiColors.Reset;
+                    preColorBegin = AnsiColors.Green;
                 }
 
-                msg = $"{preTime}{DateTime.Now.ToString("HH:mm:ss")}{AnsiColors.Reset} | {pre}{message}{post}";
+                prefixWithColorReset = string.IsNullOrEmpty(context.CustomPrefix) ? 
+                    $"{DateTime.Now.ToString("HH:mm:ss")}{AnsiColors.Reset} |" : 
+                    $"{context.CustomPrefix}{AnsiColors.Reset}";
+                msg = $"{preColorBegin}{prefixWithColorReset} {msgColorBegin}{message}{msgColorEnd}";
             }
             context.Write(null, msg);
         }
