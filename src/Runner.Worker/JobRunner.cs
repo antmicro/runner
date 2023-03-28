@@ -189,6 +189,11 @@ namespace GitHub.Runner.Worker
 
                                 tunnelKeyGcp = val;
                                 break;
+                            case "GHA_CUSTOM_LINE_PREFIX":
+                                Trace.Info("Custom line prefix for logs was provided");
+
+                                jobContext.CustomPrefix = val;
+                                break;
                             default:
                                 Trace.Info($"Ignoring variable {pair.Key}");
                                 break;
