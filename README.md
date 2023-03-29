@@ -247,6 +247,7 @@ The table below documents and describes their purpose.
 | `GHA_SSH_TUNNEL_KEY`                | base64 string | OpenSSH private key file                                                                                                           |
 | `GHA_SSH_TUNNEL_CONFIG_SECRET_NAME` | string        | Secret name from [GCP Secret Manager](https://cloud.google.com/secret-manager) containing OpenSSH configuration file for tunneling |
 | `GHA_SSH_TUNNEL_KEY_SECRET_NAME`    | string        | Secret name from [GCP Secret Manager](https://cloud.google.com/secret-manager) containing OpenSSH private key file                 |
+| `GHA_CUSTOM_LINE_PREFIX`            | string        | Custom line prefix for logs, if empty or not specified, time (in format HH:mm:ss) will be used                                      |
 
 ### ARM64 machines
 
