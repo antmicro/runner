@@ -105,7 +105,7 @@ def get_available_zones():
     # Extract zones belonging to all regions with subnetworks associated with the current network.
     for region in regions:
         for zone in region['zones']:
-            if any(region_with_subnet in zone for region_with_subnet in regions_with_subnets.keys()):
+            if any(f"{region_with_subnet}-" in zone for region_with_subnet in regions_with_subnets.keys()):
                 split_zone = zone.split('/')[-1]
 
                 to_append = (
