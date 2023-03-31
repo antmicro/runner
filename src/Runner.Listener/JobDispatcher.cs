@@ -757,7 +757,7 @@ namespace GitHub.Runner.Listener
         {
             Trace.Entering();
 
-            var logFolder = Path.Combine(HostContext.GetDirectory(WellKnownDirectory.Diag), PagingLogger.PagingFolder);
+            var logFolder = HostContext.GetDirectory(WellKnownDirectory.Pages);
             if (!Directory.Exists(logFolder))
             {
                 return;

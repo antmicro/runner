@@ -1,4 +1,4 @@
-﻿using GitHub.Runner.Common.Util;
+using GitHub.Runner.Common.Util;
 using System;
 using System.IO;
 
@@ -17,8 +17,6 @@ namespace GitHub.Runner.Common
 
     public class PagingLogger : RunnerService, IPagingLogger
     {
-        public static string PagingFolder = "pages";
-
         // 8 MB
         public const int PageSize = 8 * 1024 * 1024;
 
@@ -39,7 +37,7 @@ namespace GitHub.Runner.Common
         {
             base.Initialize(hostContext);
             _totalLines = 0;
-            _pagesFolder = Path.Combine(hostContext.GetDirectory(WellKnownDirectory.Diag), PagingFolder);
+            _pagesFolder = hostContext.GetDirectory(WellKnownDirectory.Pages);
             _jobServerQueue = HostContext.GetService<IJobServerQueue>();
             Directory.CreateDirectory(_pagesFolder);
         }

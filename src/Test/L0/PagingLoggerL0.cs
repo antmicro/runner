@@ -1,4 +1,4 @@
-﻿using GitHub.Runner.Common.Util;
+using GitHub.Runner.Common.Util;
 using Moq;
 using System;
 using System.IO;
@@ -15,7 +15,6 @@ namespace GitHub.Runner.Common.Tests.Listener
         public PagingLoggerL0()
         {
             _jobServerQueue = new Mock<IJobServerQueue>();
-            PagingLogger.PagingFolder = "pages_" + Guid.NewGuid().ToString();
         }
 
         private void CleanLogFolder()
@@ -23,7 +22,7 @@ namespace GitHub.Runner.Common.Tests.Listener
             using (TestHostContext hc = new TestHostContext(this))
             {
                 //clean test data if any old test forgot
-                string pagesFolder = Path.Combine(hc.GetDirectory(WellKnownDirectory.Diag), PagingLogger.PagingFolder);
+                string pagesFolder = hc.GetDirectory(WellKnownDirectory.Pages);
                 if (Directory.Exists(pagesFolder))
                 {
                     Directory.Delete(pagesFolder, true);

@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -306,6 +306,12 @@ namespace GitHub.Runner.Common
                     path = Path.Combine(
                             new DirectoryInfo(GetDirectory(WellKnownDirectory.Root)).Parent.FullName,
                             "_configuration");
+                    break;
+
+                case WellKnownDirectory.Pages:
+                    path = Path.Combine(
+                        GetDirectory(WellKnownDirectory.Diag),
+                        Constants.Path.PagingFolder);
                     break;
 
                 default:
