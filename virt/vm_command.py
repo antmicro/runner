@@ -14,6 +14,9 @@ import warnings
 import logging
 import logging.handlers
 import re
+import glob
+import itertools
+from typing import List, Dict, Tuple
 from collections import namedtuple, OrderedDict
 from cryptography.utils import CryptographyDeprecationWarning
 
@@ -864,6 +867,67 @@ def check_mode_parameters(mode, instance_number, container_file):
             sys.exit(1)
 
 
+def get_bucket_list():
+    with AUTHED_SESSION.get(
+        "https://storage.googleapis.com/storage/v1/b",
+        params={"project": PROJECT}
+    ) as r:
+        r.raise_for_status()
+        return r.json()["items"]
+
+
+def get_bucket_objects(bucket_name="gha-test-secret-logs"):
+    with AUTHED_SESSION.get(
+        f"https://storage.googleapis.com/storage/v1/b/{bucket_name}/o",
+    ) as r:
+        r.raise_for_status()
+        _json = r.json()
+        return _json["items"] if "items" in _json else []
+
+
+def upload_object_to_bucket(
+    bucket_name: str,
+    file_path: str,
+    destination_folder: str,
+) -> Tuple[bool, Dict]:
+    file_name = file_path.split('/')[-1]
+    with AUTHED_SESSION.post(
+        f"https://storage.googleapis.com/upload/storage/v1/b/{bucket_name}/o",
+        headers={
+            "Content-Type": "text/plain",
+        },
+        params={
+            "name": f"{destination_folder}/{file_name}",
+            "uploadType": "media",
+        },
+        files={file_name: open(file_path, 'rb')}
+    ) as r:
+        return r.status_code == 200, r.json()
+
+
+def upload_multiple_object_to_bucket(
+    bucket_name: str,
+    files_paths: List[str],
+    folders_paths: List[str],
+    destination_folder: str,
+):
+    all_logs, not_sended = 0, 0
+    for file_path in itertools.chain(
+            *[glob.glob(file) for file in files_paths],
+            *[glob.glob(f"{folder}/*") for folder in folders_paths]):
+        all_logs += 1
+        success, details = upload_object_to_bucket(
+            bucket_name, file_path, destination_folder)
+
+        if not success:
+            not_sended += 1
+            print(
+                f"File {file_path} cannot be uploaded, error "
+                f"{details['error']['code']}:\n{details['error']['message']}",
+                file=sys.stderr,
+            )
+
+
 @click.command()
 @click.option(
     "--mode",
@@ -880,6 +944,7 @@ def check_mode_parameters(mode, instance_number, container_file):
             "get_vms",
             "get_disks",
             "print_ascii_graph",
+            "upload_logs"
         ]
     ),
     required=True,
@@ -923,6 +988,34 @@ def check_mode_parameters(mode, instance_number, container_file):
     required=False,
     default=None,
 )
+@click.option(
+    "--bucket-name",
+    help="Name of the bucket where logs will be uploaded",
+    required=False,
+    default=None,
+)
+@click.option(
+    "--file-path",
+    help="Path to log file which will be uploaded to bucket, can contains asterisks which will be matched with glob",
+    required=False,
+    default=[],
+    multiple=True,
+)
+@click.option(
+    "--folder-path",
+    help="Path to folder containing log files which will be uploaded to bucket",
+    type=click.Path(exists=True),
+    required=False,
+    default=[],
+    multiple=True,
+)
+@click.option(
+    "--destination-folder",
+    help="Name of the folder where files should be saved (inside of the bucket)",
+    type=str,
+    required=False,
+    default=None,
+)
 def main(
     mode,
     instance_number,
@@ -936,6 +1029,10 @@ def main(
     secret_name=None,
     secret_namespace=None,
     zone=None,
+    bucket_name=None,
+    file_path=[],
+    folder_path=[],
+    destination_folder=None,
 ):
     check_mode_parameters(mode, instance_number, container_file)
     if mode == "create_vm":
@@ -969,6 +1066,9 @@ def main(
         print(get_gcp_disks(disk_name))
     elif mode == "print_ascii_graph":
         stop_and_print_ascii_graph(instance_number)
+    elif mode == "upload_logs":
+        upload_multiple_object_to_bucket(
+            bucket_name, file_path, folder_path, destination_folder)
     else:
         print(f"Unknown mode: {mode}! Exiting!")
         sys.exit(1)
