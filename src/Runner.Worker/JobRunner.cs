@@ -34,10 +34,6 @@ namespace GitHub.Runner.Worker
         private ITempDirectoryManager _tempDirectoryManager;
         private const string RestrictedServiceAccountWarning = "Attachment of SA is restricted to non-fork PRs";
 
-        private string _runNumber;
-        private string _runAttempt;
-        private string _jobDisplayName;
-
         public async Task<TaskResult> RunAsync(Pipelines.AgentJobRequestMessage message, CancellationToken jobRequestCancellationToken)
         {
             // Validate parameters.
@@ -52,11 +48,6 @@ namespace GitHub.Runner.Worker
 
             ServiceEndpoint systemConnection = message.Resources.Endpoints.Single(x => string.Equals(x.Name, WellKnownServiceEndpointNames.SystemVssConnection, StringComparison.OrdinalIgnoreCase));
 
-            var ghJson = message.ContextData["github"].ToJToken();
-            _runNumber = ghJson["run_number"].ToString();
-            _runAttempt = ghJson["run_attempt"].ToString();
-            _jobDisplayName = message.JobDisplayName;
-
             // Spawn Google VM
             var instanceNumber = Environment.GetEnvironmentVariable(Constants.InstanceNumberVariable);
             var rootDir = new DirectoryInfo(HostContext.GetDirectory(WellKnownDirectory.Root)).Parent.FullName;
@@ -68,7 +59,7 @@ namespace GitHub.Runner.Worker
 
             Trace.Info($"Job container: {message.JobContainer}");
 
-            var repoFullName = $"{ghJson["repository"]}";
+            var repoFullName = $"{message.ContextData["github"].ToJToken()["repository"]}";
             var repoName = repoFullName.Substring(repoFullName.LastIndexOf('/') + 1);
             Trace.Info($"Full repo name: {repoFullName}");
             Trace.Info($"Repo name: {repoName}");
@@ -458,20 +449,23 @@ namespace GitHub.Runner.Worker
 
         private void UploadLogsToBucket(Pipelines.AgentJobRequestMessage message, IExecutionContext context, string virtDir)
         {
-            var bucketName = Environment.GetEnvironmentVariable(Constants.BucketNameVariable);
-            if (bucketName == null)
-            {
-                Trace.Info("There is no bucket specified - logs won't be backuped.");
-                return;
-            }
+            // Upload all pages from main job context, as it's parent of other contexts, it contains
+            // every log send to github. Pages have "_{pageNumber}.log" sufix.
             var pathToLogs = Path.Combine(
                 HostContext.GetDirectory(WellKnownDirectory.Pages),
                 $"{message.Timeline.Id}_{message.JobId}_*"
             );
-            Trace.Info($"Trying to upload logs (from {pathToLogs}) to bucket: {bucketName}");
+
+            var ghJson = message.ContextData["github"].ToJToken();
+            var repositoryName = ghJson["repository"].ToString().Split('/')[^1];
+            var runNumber = ghJson["run_number"].ToString();
+            var runAttempt = ghJson["run_attempt"].ToString();
+            var jobDisplayName = message.JobDisplayName;
+
+            Trace.Info($"Trying to upload logs (from {pathToLogs}) to bucket, if \"LOG_BUCKET_NAME\" metadata is specified");
             GCPCoordinator.RunProcess(
                 fileName: "python3",
-                arguments: $"vm_command.py --mode upload_logs --bucket-name {bucketName} --destination-folder \"run_{_runNumber}/attempt_{_runAttempt}/{_jobDisplayName}\" --file-path {pathToLogs}",
+                arguments: $"vm_command.py --mode upload_logs --destination-folder \"{repositoryName}/run_{runNumber}/attempt_{runAttempt}/{jobDisplayName}\" --file-path {pathToLogs}",
                 workDirectory: virtDir,
                 outputDataReceivedFunc: (_, args) => { 
                     Trace.Info(args.Data ?? "");

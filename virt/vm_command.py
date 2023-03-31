@@ -16,7 +16,8 @@ import logging.handlers
 import re
 import glob
 import itertools
-from typing import List, Dict, Tuple
+import enum
+from typing import List, Dict, Tuple, Optional
 from collections import namedtuple, OrderedDict
 from cryptography.utils import CryptographyDeprecationWarning
 
@@ -50,6 +51,13 @@ paramiko_syslog_handler.setFormatter(
 paramiko_logger = logging.getLogger("paramiko")
 paramiko_logger.setLevel(logging.DEBUG)
 paramiko_logger.addHandler(paramiko_syslog_handler)
+
+
+class METADATA(str, enum.Enum):
+    WORKER_IMAGE = "WORKER_IMAGE"
+    WORKER_IMAGE_ARM64 = "WORKER_IMAGE_ARM64"
+    LOG_BUCKET_NAME = "LOG_BUCKET_NAME"
+
 
 USER = "scalerunner"
 PUBKEY = (
@@ -104,13 +112,23 @@ AUTHED_SESSION = AuthorizedSession(google.auth.default()[0])
 
 
 def get_worker_image_name(architecture="X86_64"):
-    metadata_key = "WORKER_IMAGE_ARM64" if architecture == "ARM64" else "WORKER_IMAGE"
+    metadata_key = METADATA.WORKER_IMAGE_ARM64 if architecture == "ARM64" else METADATA.WORKER_IMAGE
     with requests.get(
         f"http://metadata.google.internal/computeMetadata/v1/instance/attributes/{metadata_key}",
         headers={"Metadata-Flavor": "Google"},
     ) as r:
         if r.status_code != 200 or r.text.strip() == "":
             return f"projects/{PROJECT_ID}/global/images/{CONFIG.gcp.image}"
+        return r.text.strip()
+
+
+def get_bucket_name():
+    with requests.get(
+        f"http://metadata.google.internal/computeMetadata/v1/instance/attributes/{METADATA.LOG_BUCKET_NAME}",
+        headers={"Metadata-Flavor": "Google"},
+    ) as r:
+        if r.status_code != 200 or r.text.strip() == "":
+            return None
         return r.text.strip()
 
 
@@ -906,11 +924,18 @@ def upload_object_to_bucket(
 
 
 def upload_multiple_object_to_bucket(
-    bucket_name: str,
     files_paths: List[str],
     folders_paths: List[str],
     destination_folder: str,
+    bucket_name: Optional[str] = None,
 ):
+    if bucket_name is None:
+        bucket_name = get_bucket_name()
+        if bucket_name is None:
+            return
+
+    print("Trying to upload logs to bucket")
+
     all_logs, not_sended = 0, 0
     for file_path in itertools.chain(
             *[glob.glob(file) for file in files_paths],
@@ -1068,7 +1093,7 @@ def main(
         stop_and_print_ascii_graph(instance_number)
     elif mode == "upload_logs":
         upload_multiple_object_to_bucket(
-            bucket_name, file_path, folder_path, destination_folder)
+            file_path, folder_path, destination_folder, bucket_name)
     else:
         print(f"Unknown mode: {mode}! Exiting!")
         sys.exit(1)

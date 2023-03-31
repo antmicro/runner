@@ -46,7 +46,6 @@ namespace GitHub.Runner.Common
         public static string PluginTracePrefix = "##[plugin.trace]";
         public static readonly int RunnerDownloadRetryMaxAttempts = 3;
         public static string CommonCustomLabel = "gcp-custom-runners";
-        public static readonly string BucketNameVariable = "LOG_BUCKET_NAME";
 
         public static string LogDiskMountpoint = "/var/log/runner";
 
