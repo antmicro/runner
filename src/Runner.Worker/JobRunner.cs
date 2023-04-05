@@ -447,36 +447,6 @@ namespace GitHub.Runner.Worker
             }
         }
 
-        private void UploadLogsToBucket(Pipelines.AgentJobRequestMessage message, IExecutionContext context, string virtDir)
-        {
-            // Upload all pages from main job context, as it's parent of other contexts, it contains
-            // every log send to github. Pages have "_{pageNumber}.log" sufix.
-            var pathToLogs = Path.Combine(
-                HostContext.GetDirectory(WellKnownDirectory.Pages),
-                $"{message.Timeline.Id}_{message.JobId}_*"
-            );
-
-            var ghJson = message.ContextData["github"].ToJToken();
-            var repositoryName = ghJson["repository"].ToString().Split('/')[^1];
-            var runNumber = ghJson["run_number"].ToString();
-            var runAttempt = ghJson["run_attempt"].ToString();
-            var jobDisplayName = message.JobDisplayName;
-
-            Trace.Info($"Trying to upload logs (from {pathToLogs}) to bucket, if \"LOG_BUCKET_NAME\" metadata is specified");
-            GCPCoordinator.RunProcess(
-                fileName: "python3",
-                arguments: $"vm_command.py --mode upload_logs --destination-folder \"{repositoryName}/run_{runNumber}/attempt_{runAttempt}/{jobDisplayName}\" --file-path {pathToLogs}",
-                workDirectory: virtDir,
-                outputDataReceivedFunc: (_, args) => { 
-                    Trace.Info(args.Data ?? "");
-                    context.Output(args.Data ?? "");
-                },
-                errorDataReceivedFunc: (_, args) => Trace.Error(args.Data ?? ""),
-                exceptionFunc: (e) => { Trace.Info("Exception when uploading logs to bucket!"); Trace.Info(e.Message); },
-                trace: Trace,
-                exceptionReturnCode: 255);
-        }
-
         private string GetGcpSecret(string secretName, string secretNamespace)
         {
             var output = new StringBuilder();
@@ -556,8 +526,6 @@ namespace GitHub.Runner.Worker
                     exceptionFunc: (e) => { Trace.Info("Exception when trying to fetch ASCII graphs!"); Trace.Info(e.Message); },
                     trace: Trace,
                     exceptionReturnCode: 255);
-
-            UploadLogsToBucket(message, vmCtx, virtDir);
 
             GCPCoordinator.RunProcess(
                     fileName: "python3",

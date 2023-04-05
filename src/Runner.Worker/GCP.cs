@@ -106,5 +106,29 @@ namespace GitHub.Runner.GCP
                     trace: trace,
                     exceptionReturnCode: 255);
         }
+
+        public static int UploadFileToBucket(IHostContext hostContext, string filePath, string destinationFolder, DataReceivedEventHandler outputDataHandler = null, DataReceivedEventHandler errorDataHandler = null)
+        {
+            var trace = hostContext.GetTrace(nameof(hostContext));
+            string virtDir = Path.Combine(new DirectoryInfo(hostContext.GetDirectory(WellKnownDirectory.Root)).Parent.FullName, "virt");
+        
+            return GCPCoordinator.RunProcess(
+                fileName: "python3",
+                arguments: $"vm_command.py --mode upload_logs --destination-folder \"{destinationFolder}\" --file-path {filePath}",
+                workDirectory: virtDir,
+                outputDataReceivedFunc: (_, args) => {
+                    if (outputDataHandler != null)
+                        outputDataHandler(_, args);
+                    trace.Info(args.Data ?? "");
+                },
+                errorDataReceivedFunc: (_, args) => {
+                    if (errorDataHandler != null)
+                        errorDataHandler(_, args);
+                    trace.Error(args.Data ?? "");
+                },
+                exceptionFunc: (e) => { trace.Info("Exception when uploading logs to bucket!"); trace.Info(e.Message); },
+                trace: trace,
+                exceptionReturnCode: 255);
+        }
     }
 }
