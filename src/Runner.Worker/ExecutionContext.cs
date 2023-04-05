@@ -19,6 +19,7 @@ using GitHub.DistributedTask.WebApi;
 using GitHub.Runner.Common.Util;
 using GitHub.Runner.Common;
 using GitHub.Runner.Sdk;
+using GitHub.Runner.GCP;
 using GitHub.Runner.Worker.Container;
 using GitHub.Services.WebApi;
 using Newtonsoft.Json;
@@ -107,7 +108,7 @@ namespace GitHub.Runner.Worker
         TaskResult Complete(TaskResult? result = null, string currentOperation = null, string resultCode = null);
         void SetEnvContext(string name, string value);
         void SetRunnerContext(string name, string value);
-        string GetGitHubContext(string name);
+        string GetGitHubContext(string name, string _default = null);
         void SetGitHubContext(string name, string value);
         void SetOutput(string name, string value, out string reference);
         void SetTimeout(TimeSpan? timeout);
@@ -369,7 +370,8 @@ namespace GitHub.Runner.Worker
             else
             {
                 child._logger = HostContext.CreateService<IPagingLogger>();
-                child._logger.Setup(_mainTimelineId, recordId);
+                child._logger.Setup(_mainTimelineId, recordId, UploadLogToBucket);
+                child._logger.EnabledBucketLogs = false;
             }
 
             child.IsEmbedded = isEmbedded;
@@ -478,7 +480,7 @@ namespace GitHub.Runner.Worker
             githubContext[name] = new StringContextData(value);
         }
 
-        public string GetGitHubContext(string name)
+        public string GetGitHubContext(string name, string _default = null)
         {
             ArgUtil.NotNullOrEmpty(name, nameof(name));
             var githubContext = ExpressionValues["github"] as GitHubContext;
@@ -495,7 +497,7 @@ namespace GitHub.Runner.Worker
             }
             else
             {
-                return null;
+                return _default;
             }
         }
 
@@ -748,7 +750,8 @@ namespace GitHub.Runner.Worker
 
             // Logger (must be initialized before writing warnings).
             _logger = HostContext.CreateService<IPagingLogger>();
-            _logger.Setup(_mainTimelineId, _record.Id);
+            _logger.Setup(_mainTimelineId, _record.Id, UploadLogToBucket);
+            _logger.EnabledBucketLogs = Root == this;
 
             // Initialize 'echo on action command success' property, default to false, unless Step_Debug is set
             EchoOnActionCommand = Global.Variables.Step_Debug ?? false;
@@ -779,6 +782,13 @@ namespace GitHub.Runner.Worker
                 lock (_parentExecutionContext._loggerLock)
                 {
                     _parentExecutionContext._logger.Write(msg);
+                }
+                if (Root != _parentExecutionContext)
+                {
+                    lock (Root._loggerLock)
+                    {
+                        Root._logger.Write(msg);
+                    }
                 }
             }
 
@@ -948,6 +958,15 @@ namespace GitHub.Runner.Worker
 
             var newGuid = Guid.NewGuid();
             return CreateChild(newGuid, displayName, newGuid.ToString("N"), null, null, ActionRunStage.Post, intraActionState, _childTimelineRecordOrder - Root.PostJobSteps.Count, siblingScopeName: siblingScopeName);
+        }
+
+        private void UploadLogToBucket(string pathToLog)
+        {
+            string repositoryName = GetGitHubContext("repository", "").Trim().Split('/')[^1];
+            string runNumber = GetGitHubContext("run_number", "").Trim();
+            string runAttempt = GetGitHubContext("run_attempt", "").Trim();
+            string destinationFolder = $"{repositoryName}/run_{runNumber}/attempt_{runAttempt}/{_record.Name}";
+            GCPCoordinator.UploadFileToBucket(HostContext, pathToLog, destinationFolder);
         }
     }
 

@@ -1,4 +1,3 @@
-using GitHub.Runner.Common.Util;
 using System;
 using System.IO;
 
@@ -8,11 +7,13 @@ namespace GitHub.Runner.Common
     public interface IPagingLogger : IRunnerService
     {
         long TotalLines { get; }
-        void Setup(Guid timelineId, Guid timelineRecordId);
+        void Setup(Guid timelineId, Guid timelineRecordId, Action<string> uploadToBucket = null);
 
         void Write(string message);
 
         void End();
+
+        bool EnabledBucketLogs { set; }
     }
 
     public class PagingLogger : RunnerService, IPagingLogger
@@ -31,7 +32,15 @@ namespace GitHub.Runner.Common
         private string _pagesFolder;
         private IJobServerQueue _jobServerQueue;
 
+        private bool _enabledUploadToBucket = false;
+        private Action<string> _uploadToBucket;
+
         public long TotalLines => _totalLines;
+
+        public bool EnabledBucketLogs
+        {
+            set => _enabledUploadToBucket = value;
+        }
 
         public override void Initialize(IHostContext hostContext)
         {
@@ -42,10 +51,11 @@ namespace GitHub.Runner.Common
             Directory.CreateDirectory(_pagesFolder);
         }
 
-        public void Setup(Guid timelineId, Guid timelineRecordId)
+        public void Setup(Guid timelineId, Guid timelineRecordId, Action<string> uploatToBucket = null)
         {
             _timelineId = timelineId;
             _timelineRecordId = timelineRecordId;
+            _uploadToBucket = uploatToBucket;
         }
 
         //
@@ -113,6 +123,10 @@ namespace GitHub.Runner.Common
                 _pageWriter.Dispose();
                 _pageWriter = null;
                 _pageData = null;
+
+                if (_enabledUploadToBucket)
+                    _uploadToBucket(_dataFileName);
+
                 _jobServerQueue.QueueFileUpload(_timelineId, _timelineRecordId, "DistributedTask.Core.Log", "CustomToolLog", _dataFileName, true);
             }
         }
