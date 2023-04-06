@@ -35,6 +35,8 @@ namespace GitHub.Runner.Common
         event EventHandler Unloading;
         void ShutdownRunner(ShutdownReason reason);
         void WritePerfCounter(string counter);
+
+        string BucketName { get; set; }
     }
 
     public enum StartupType
@@ -70,6 +72,7 @@ namespace GitHub.Runner.Common
         public event EventHandler Unloading;
         public CancellationToken RunnerShutdownToken => _runnerShutdownTokenSource.Token;
         public ShutdownReason RunnerShutdownReason { get; private set; }
+        public string BucketName { get; set; }
         public ISecretMasker SecretMasker => _secretMasker;
         public List<ProductInfoHeaderValue> UserAgents => _userAgents;
         public RunnerWebProxy WebProxy => _webProxy;
