@@ -51,7 +51,7 @@ namespace GitHub.Runner.Worker
             // Spawn Google VM
             var instanceNumber = Environment.GetEnvironmentVariable(Constants.InstanceNumberVariable);
             var rootDir = new DirectoryInfo(HostContext.GetDirectory(WellKnownDirectory.Root)).Parent.FullName;
-            var virtDir = Path.Combine(rootDir, "virt");
+            var virtDir = HostContext.GetDirectory(WellKnownDirectory.Virt);
 
             Trace.Info($"Runner instance: {instanceNumber}");
 
@@ -217,8 +217,8 @@ namespace GitHub.Runner.Worker
 
                 if (!String.IsNullOrEmpty(tunnelConfigGcp) && !String.IsNullOrEmpty(tunnelKeyGcp))
                 {
-                    tunnelConfig = GetGcpSecret(tunnelConfigGcp, repoName);
-                    tunnelKey = GetGcpSecret(tunnelKeyGcp, repoName);
+                    tunnelConfig = GCPCoordinator.GetGcpSecret(HostContext, tunnelConfigGcp, repoName);
+                    tunnelKey = GCPCoordinator.GetGcpSecret(HostContext, tunnelKeyGcp, repoName);
                 }
 
                 if (!String.IsNullOrEmpty(tunnelConfig) && !String.IsNullOrEmpty(tunnelKey))
@@ -299,6 +299,9 @@ namespace GitHub.Runner.Worker
                     vmCtx.Complete();
                     return await CompleteJobAsync(jobServer, jobContext, message, TaskResult.Failed);
                 }
+
+                // get and set bucket name for logs
+                HostContext.BucketName = GCPCoordinator.GetGcpBucketName(HostContext);
 
                 // Setup TEMP directories
                 _tempDirectoryManager = HostContext.GetService<ITempDirectoryManager>();
@@ -445,26 +448,6 @@ namespace GitHub.Runner.Worker
 
                 await ShutdownQueue(throwOnFailure: false);
             }
-        }
-
-        private string GetGcpSecret(string secretName, string secretNamespace)
-        {
-            var output = new StringBuilder();
-
-            var rootDir = new DirectoryInfo(HostContext.GetDirectory(WellKnownDirectory.Root)).Parent.FullName;
-            var virtDir = Path.Combine(rootDir, "virt");
-
-            GCPCoordinator.RunProcess(
-                    fileName: "python3",
-                    arguments: $"vm_command.py --mode get_secret --secret-name {secretName} --secret-namespace {secretNamespace}",
-                    workDirectory: virtDir,
-                    outputDataReceivedFunc: (_, args) => { output.Append(args.Data ?? ""); },
-                    errorDataReceivedFunc: (_, args) => Trace.Error(args.Data ?? ""),
-                    exceptionFunc: (e) => { Trace.Info($"Exception when trying to get secret {secretNamespace} / {secretName}"); Trace.Info(e.Message); },
-                    trace: Trace,
-                    exceptionReturnCode: 255);
-
-            return output.ToString().Trim();
         }
 
         private bool DecodeBase64OrAddIssue(KeyValuePair<String, String> envPair, IExecutionContext jobContext)

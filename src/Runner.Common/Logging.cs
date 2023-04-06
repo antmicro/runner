@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Text.RegularExpressions;
 
 namespace GitHub.Runner.Common
 {
@@ -14,6 +15,8 @@ namespace GitHub.Runner.Common
         void End();
 
         bool EnabledBucketLogs { set; }
+        int PageCount { get; }
+        void SetSecret(bool secret);
     }
 
     public class PagingLogger : RunnerService, IPagingLogger
@@ -35,7 +38,10 @@ namespace GitHub.Runner.Common
         private bool _enabledUploadToBucket = false;
         private Action<string> _uploadToBucket;
 
+        private bool _secret = false;
+
         public long TotalLines => _totalLines;
+        public int PageCount => _pageCount;
 
         public bool EnabledBucketLogs
         {
@@ -124,10 +130,23 @@ namespace GitHub.Runner.Common
                 _pageWriter = null;
                 _pageData = null;
 
-                if (_enabledUploadToBucket)
+                if (_enabledUploadToBucket || _secret)
                     _uploadToBucket(_dataFileName);
 
-                _jobServerQueue.QueueFileUpload(_timelineId, _timelineRecordId, "DistributedTask.Core.Log", "CustomToolLog", _dataFileName, true);
+                if (!_secret)
+                    _jobServerQueue.QueueFileUpload(_timelineId, _timelineRecordId, "DistributedTask.Core.Log", "CustomToolLog", _dataFileName, true);
+            }
+        }
+
+        public void SetSecret(bool secret){
+            if (secret != _secret)
+            {
+                if (_pageWriter != null)
+                    EndPage();
+                _secret = secret;
+                Create();
+
+                EnabledBucketLogs = _secret;
             }
         }
     }

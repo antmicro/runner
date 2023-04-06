@@ -128,6 +128,8 @@ namespace GitHub.Runner.Worker
         // others
         void ForceTaskComplete();
         void RegisterPostJobStep(IStep step);
+        void SetSecret(bool secret, string stepName = null);
+        string GetLogsURLOnBucket(bool? secret = null, string stepName = null, bool incPageCount = false);
     }
 
     public sealed class ExecutionContext : RunnerService, IExecutionContext
@@ -174,6 +176,10 @@ namespace GitHub.Runner.Worker
         public ActionsEnvironmentReference ActionsEnvironment { get; private set; }
         public DictionaryContextData ExpressionValues { get; } = new DictionaryContextData();
         public IList<IFunctionInfo> ExpressionFunctions { get; } = new List<IFunctionInfo>();
+
+        private bool _secret = false;
+        private string _stepName = null;
+        private Regex _whiteSymbols = new Regex(@"[\s-]+");
 
         // Shared pointer across job-level execution context and step-level execution contexts
         public GlobalContext Global { get; private set; }
@@ -370,7 +376,7 @@ namespace GitHub.Runner.Worker
             else
             {
                 child._logger = HostContext.CreateService<IPagingLogger>();
-                child._logger.Setup(_mainTimelineId, recordId, UploadLogToBucket);
+                child._logger.Setup(_mainTimelineId, recordId, child.UploadLogToBucket);
                 child._logger.EnabledBucketLogs = false;
             }
 
@@ -777,7 +783,7 @@ namespace GitHub.Runner.Worker
             }
 
             // write to job level execution context's log file.
-            if (_parentExecutionContext != null)
+            if (!_secret && _parentExecutionContext != null)
             {
                 lock (_parentExecutionContext._loggerLock)
                 {
@@ -792,7 +798,8 @@ namespace GitHub.Runner.Worker
                 }
             }
 
-            _jobServerQueue.QueueWebConsoleLine(_record.Id, msg, totalLines);
+            if (!_secret)
+                _jobServerQueue.QueueWebConsoleLine(_record.Id, msg, totalLines);
             return totalLines;
         }
 
@@ -807,7 +814,10 @@ namespace GitHub.Runner.Worker
                 throw new FileNotFoundException($"Can't attach (type:{type} name:{name}) file: {filePath}. File does not exist.");
             }
 
-            _jobServerQueue.QueueFileUpload(_mainTimelineId, _record.Id, type, name, filePath, deleteSource: false);
+            if (!_secret)
+                _jobServerQueue.QueueFileUpload(_mainTimelineId, _record.Id, type, name, filePath, deleteSource: false);
+            else
+                UploadLogToBucket(filePath); 
         }
 
         // Add OnMatcherChanged
@@ -910,6 +920,14 @@ namespace GitHub.Runner.Worker
             return Root._matchers ?? Array.Empty<IssueMatcherConfig>();
         }
 
+        public void SetSecret(bool secret, string stepName = null)
+        {
+            _secret = secret;
+            if (stepName != null)
+                _stepName = _whiteSymbols.Replace(stepName.Trim(), "_") + "_";
+            _logger.SetSecret(secret);
+        }
+
         private void InitializeTimelineRecord(Guid timelineId, Guid timelineRecordId, Guid? parentTimelineRecordId, string recordType, string displayName, string refName, int? order)
         {
             _mainTimelineId = timelineId;
@@ -960,14 +978,33 @@ namespace GitHub.Runner.Worker
             return CreateChild(newGuid, displayName, newGuid.ToString("N"), null, null, ActionRunStage.Post, intraActionState, _childTimelineRecordOrder - Root.PostJobSteps.Count, siblingScopeName: siblingScopeName);
         }
 
-        private void UploadLogToBucket(string pathToLog)
+        private string GetBucketDestinationFolder()
         {
             string repositoryName = GetGitHubContext("repository", "").Trim().Split('/')[^1];
             string runNumber = GetGitHubContext("run_number", "").Trim();
             string runAttempt = GetGitHubContext("run_attempt", "").Trim();
-            string destinationFolder = $"{repositoryName}/run_{runNumber}/attempt_{runAttempt}/{_record.Name}";
-            GCPCoordinator.UploadFileToBucket(HostContext, pathToLog, destinationFolder);
+            return $"{repositoryName}/run_{runNumber}/attempt_{runAttempt}/{Root._record.Name}";
         }
+
+        private string GetBucketDestinationFileName(bool? secret = null, string stepName = null, bool incPageCount = false)
+        {
+            if (stepName != null)
+                stepName = _whiteSymbols.Replace(stepName.Trim(), "_") + "_";
+            if (secret ?? _secret)
+                return $"secret_step_{stepName ?? _stepName ?? ""}{_record.Id}_{_logger.PageCount + (incPageCount ? 1 : 0)}.log";
+            else
+                return $"logs_{_logger.PageCount + (incPageCount ? 1 : 0)}.log";
+        }
+
+        public string GetLogsURLOnBucket(bool? secret = null, string stepName = null, bool incPageCount = false)
+        {
+            return $"https://storage.cloud.google.com/{HostContext.BucketName}/{GetBucketDestinationFolder()}/{GetBucketDestinationFileName(secret, stepName, incPageCount)}";
+        }
+
+        private void UploadLogToBucket(string pathToLog)
+        {
+            GCPCoordinator.UploadFileToBucket(HostContext, pathToLog, GetBucketDestinationFolder(), GetBucketDestinationFileName());
+        }           
     }
 
     // The Error/Warning/etc methods are created as extension methods to simplify unit testing.

@@ -113,11 +113,11 @@ namespace GitHub.Runner.GCP
             var trace = hostContext.GetTrace(nameof(GCPCoordinator));
             string virtDir = hostContext.GetDirectory(WellKnownDirectory.Virt);
             string bucketNameArg = hostContext.BucketName != null ? $" --bucket-name {hostContext.BucketName} " : "";
-            string fileNameArg = logNameOnBucket != null ? $"--destination-file-name {logNameOnBucket}" : "";
+            string fileNameArg = logNameOnBucket != null ? $" --destination-file-name {logNameOnBucket} " : "";
         
             return GCPCoordinator.RunProcess(
                 fileName: "python3",
-                arguments: $"vm_command.py --mode upload_logs --destination-folder \"{destinationFolder}\" --file-path {filePath} {fileNameArg}",
+                arguments: $"vm_command.py --mode upload_logs --destination-folder \"{destinationFolder}\" --file-path {filePath}{fileNameArg}{bucketNameArg}",
                 workDirectory: virtDir,
                 outputDataReceivedFunc: (_, args) => {
                     if (outputDataHandler != null)

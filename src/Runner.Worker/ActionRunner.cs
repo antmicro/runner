@@ -1,6 +1,7 @@
-﻿using System;
+using System;
 using System.IO;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using GitHub.DistributedTask.ObjectTemplating;
 using GitHub.DistributedTask.ObjectTemplating.Tokens;
@@ -10,6 +11,7 @@ using GitHub.DistributedTask.Pipelines.ObjectTemplating;
 using GitHub.Runner.Common.Util;
 using GitHub.Runner.Worker.Handlers;
 using Pipelines = GitHub.DistributedTask.Pipelines;
+using GitHub.Runner.GCP;
 using GitHub.Runner.Common;
 using GitHub.Runner.Sdk;
 using System.Collections.Generic;
@@ -188,6 +190,33 @@ namespace GitHub.Runner.Worker
             ExecutionContext.Debug("Loading inputs");
             var templateEvaluator = ExecutionContext.ToPipelineTemplateEvaluator();
             var inputs = templateEvaluator.EvaluateStepInputs(Action.Inputs, ExecutionContext.ExpressionValues, ExecutionContext.ExpressionFunctions);
+
+            // Check if step is secret
+            string secret = null;
+            if (inputs.ContainsKey("script") && inputs["script"].StartsWith(Constants.SecretScriptPrefix))
+            {
+                Trace.Info("Looking for secret");
+                var repoFullName = ExecutionContext.GetGitHubContext("repository");
+                ArgUtil.NotNull(repoFullName, nameof(repoFullName));
+                var secret_script = GCPCoordinator.GetGcpSecret(HostContext, inputs["script"], repoFullName.Split('/')[^1]);
+                if (!string.IsNullOrEmpty(secret_script))
+                {
+                    secret_script = Encoding.UTF8.GetString(Convert.FromBase64String(secret_script));
+                    Trace.Info($"Secret found: {secret_script}");
+                    secret = inputs["script"];
+                    inputs["script"] = $"({secret_script})"; 
+                    ExecutionContext.Output("Output of this step is hidden");
+                    if (string.IsNullOrEmpty(HostContext.BucketName))
+                        ExecutionContext.Warning("Bucket name was not specified -- logs won't be available anywhere");
+                    else
+                        ExecutionContext.Output($"It will be available at {ExecutionContext.GetLogsURLOnBucket(true, this.DisplayName, true)}");
+                    ExecutionContext.SetSecret(true, this.DisplayName);
+                }
+                else
+                {
+                    Trace.Warning($"No secret script found for: {inputs["script"]}");
+                }
+            }
 
             var userInputs = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (KeyValuePair<string, string> input in inputs)
