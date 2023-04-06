@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.Diagnostics;
 using System.Collections.Generic;
+using System.Text;
 using GitHub.Runner.Sdk;
 using GitHub.Runner.Common;
 
@@ -107,14 +108,16 @@ namespace GitHub.Runner.GCP
                     exceptionReturnCode: 255);
         }
 
-        public static int UploadFileToBucket(IHostContext hostContext, string filePath, string destinationFolder, DataReceivedEventHandler outputDataHandler = null, DataReceivedEventHandler errorDataHandler = null)
+        public static int UploadFileToBucket(IHostContext hostContext, string filePath, string destinationFolder, string logNameOnBucket = null, DataReceivedEventHandler outputDataHandler = null, DataReceivedEventHandler errorDataHandler = null)
         {
-            var trace = hostContext.GetTrace(nameof(hostContext));
-            string virtDir = Path.Combine(new DirectoryInfo(hostContext.GetDirectory(WellKnownDirectory.Root)).Parent.FullName, "virt");
+            var trace = hostContext.GetTrace(nameof(GCPCoordinator));
+            string virtDir = hostContext.GetDirectory(WellKnownDirectory.Virt);
+            string bucketNameArg = hostContext.BucketName != null ? $" --bucket-name {hostContext.BucketName} " : "";
+            string fileNameArg = logNameOnBucket != null ? $"--destination-file-name {logNameOnBucket}" : "";
         
             return GCPCoordinator.RunProcess(
                 fileName: "python3",
-                arguments: $"vm_command.py --mode upload_logs --destination-folder \"{destinationFolder}\" --file-path {filePath}",
+                arguments: $"vm_command.py --mode upload_logs --destination-folder \"{destinationFolder}\" --file-path {filePath} {fileNameArg}",
                 workDirectory: virtDir,
                 outputDataReceivedFunc: (_, args) => {
                     if (outputDataHandler != null)
@@ -129,6 +132,45 @@ namespace GitHub.Runner.GCP
                 exceptionFunc: (e) => { trace.Info("Exception when uploading logs to bucket!"); trace.Info(e.Message); },
                 trace: trace,
                 exceptionReturnCode: 255);
+        }
+        
+        public static string GetGcpBucketName(IHostContext hostContext)
+        {
+            var trace = hostContext.GetTrace(nameof(GCPCoordinator));
+            var output = new StringBuilder();
+            var virtDir = hostContext.GetDirectory(WellKnownDirectory.Virt);
+
+            GCPCoordinator.RunProcess(
+                    fileName: "python3",
+                    arguments: "vm_command.py --mode get_bucket_name",
+                    workDirectory: virtDir,
+                    outputDataReceivedFunc: (_, args) => { output.Append(args.Data ?? ""); },
+                    errorDataReceivedFunc: (_, args) => trace.Error(args.Data ?? ""),
+                    exceptionFunc: (e) => { trace.Info("Exception when trying to get bucket name"); trace.Info(e.Message); },
+                    trace: trace,
+                    exceptionReturnCode: 255);
+                    
+            string result = output.ToString().Trim();
+            return string.IsNullOrEmpty(result) ? null : result;
+        }
+        
+        public static string GetGcpSecret(IHostContext hostContext, string secretName, string secretNamespace)
+        {
+            var trace = hostContext.GetTrace(nameof(GCPCoordinator));
+            var output = new StringBuilder();
+            var virtDir = hostContext.GetDirectory(WellKnownDirectory.Virt);
+
+            GCPCoordinator.RunProcess(
+                    fileName: "python3",
+                    arguments: $"vm_command.py --mode get_secret --secret-name {secretName} --secret-namespace {secretNamespace}",
+                    workDirectory: virtDir,
+                    outputDataReceivedFunc: (_, args) => { output.Append(args.Data ?? ""); },
+                    errorDataReceivedFunc: (_, args) => trace.Error(args.Data ?? ""),
+                    exceptionFunc: (e) => { trace.Info($"Exception when trying to get secret {secretNamespace} / {secretName}"); trace.Info(e.Message); },
+                    trace: trace,
+                    exceptionReturnCode: 255);
+
+            return output.ToString().Trim();
         }
     }
 }

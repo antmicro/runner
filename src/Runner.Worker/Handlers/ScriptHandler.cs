@@ -366,8 +366,7 @@ namespace GitHub.Runner.Worker.Handlers
                     {
                         ExecutionContext.Error("This error indicates issues with communication with the worker instance.");
 
-                        var rootDir = new DirectoryInfo(HostContext.GetDirectory(WellKnownDirectory.Root)).Parent.FullName;
-                        var virtDir = Path.Combine(rootDir, "virt");
+                        var virtDir = HostContext.GetDirectory(WellKnownDirectory.Virt);
 
                         var pingExitCode = GCPCoordinator.RunProcess(
                                 fileName: "ping",

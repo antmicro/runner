@@ -153,7 +153,7 @@ namespace GitHub.Runner.Worker.Handlers
 
                 var initCmd = $"### START ###\n";
                 if (actionName.StartsWith("actions/upload-artifact")) {
-                    var virtDir = Path.Combine(new DirectoryInfo(HostContext.GetDirectory(WellKnownDirectory.Root)).Parent.FullName, "virt");
+                    var virtDir = HostContext.GetDirectory(WellKnownDirectory.Virt);
                     var plotWorkspacePath = $"{workspaceDir}/plot_{jobName}.svg";
                     var sargraphSshArguments = new List<string>(Constants.CommonSshArgs);
                     sargraphSshArguments.Add($"scalerunner@{sshIp} -t bash -c 'sudo sargraph chart save {plotWorkspacePath.Replace("/root", "/mnt/2")}'");
