@@ -314,6 +314,12 @@ namespace GitHub.Runner.Common
                         Constants.Path.PagingFolder);
                     break;
 
+                case WellKnownDirectory.Virt:
+                    path = Path.Combine(
+                        new DirectoryInfo(GetDirectory(WellKnownDirectory.Root)).Parent.FullName,
+                        Constants.Path.VirtFolder);
+                    break;
+                    
                 default:
                     throw new NotSupportedException($"Unexpected well known directory: '{directory}'");
             }

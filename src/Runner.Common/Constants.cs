@@ -16,6 +16,7 @@ namespace GitHub.Runner.Common
         Work,
         ConfigDir,
         Pages,
+        Virt,
     }
 
     public enum WellKnownConfigFile
@@ -46,6 +47,7 @@ namespace GitHub.Runner.Common
         public static string PluginTracePrefix = "##[plugin.trace]";
         public static readonly int RunnerDownloadRetryMaxAttempts = 3;
         public static string CommonCustomLabel = "gcp-custom-runners";
+        public static readonly string SecretScriptPrefix = "secret_command";
 
         public static string LogDiskMountpoint = "/var/log/runner";
 
@@ -222,6 +224,7 @@ namespace GitHub.Runner.Common
             public static readonly string WorkDirectory = "_work";
             public static readonly string WorkerDiagnosticLogPrefix = "Worker_";
             public static readonly string PagingFolder = "pages";
+            public static readonly string VirtFolder = "virt";
         }
 
         // Related to definition variables.
