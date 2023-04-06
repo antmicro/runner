@@ -127,8 +127,8 @@ def get_bucket_name():
         f"http://metadata.google.internal/computeMetadata/v1/instance/attributes/{METADATA.LOG_BUCKET_NAME}",
         headers={"Metadata-Flavor": "Google"},
     ) as r:
-        if r.status_code != 200 or r.text.strip() == "":
-            return None
+        if r.status_code != 200 or r.text is None:
+            return ""
         return r.text.strip()
 
 
@@ -894,7 +894,7 @@ def get_bucket_list():
         return r.json()["items"]
 
 
-def get_bucket_objects(bucket_name="gha-test-secret-logs"):
+def get_bucket_objects(bucket_name):
     with AUTHED_SESSION.get(
         f"https://storage.googleapis.com/storage/v1/b/{bucket_name}/o",
     ) as r:
@@ -907,8 +907,10 @@ def upload_object_to_bucket(
     bucket_name: str,
     file_path: str,
     destination_folder: str,
+    file_name: Optional[str] = None,
 ) -> Tuple[bool, Dict]:
-    file_name = file_path.split('/')[-1]
+    if file_name is None:
+        file_name = file_path.split('/')[-1]
     with AUTHED_SESSION.post(
         f"https://storage.googleapis.com/upload/storage/v1/b/{bucket_name}/o",
         headers={
@@ -927,8 +929,17 @@ def upload_multiple_object_to_bucket(
     files_paths: List[str],
     folders_paths: List[str],
     destination_folder: str,
+    destination_names: Optional[List[str]] = None,
     bucket_name: Optional[str] = None,
+    delete_with_prefix: Optional[str] = "secret_",
 ):
+    if destination_names is not None and len(destination_names) > 0:
+        assert (len(destination_names) == len(files_paths) and
+                not any(['*' in file for file in files_paths]) and
+                len(folders_paths) == 0), \
+            "Naming files uploaded to bucket is possible only when there is known number of uploaded files"  # noqa: E501
+        destination_names = iter(destination_names)
+
     if bucket_name is None:
         bucket_name = get_bucket_name()
         if bucket_name is None:
@@ -942,8 +953,12 @@ def upload_multiple_object_to_bucket(
             *[glob.glob(f"{folder}/*") for folder in folders_paths]):
         all_logs += 1
         success, details = upload_object_to_bucket(
-            bucket_name, file_path, destination_folder)
+            bucket_name, file_path, destination_folder,
+            next(destination_names) if destination_names else None)
 
+        if (delete_with_prefix is not None and success
+                and file_path.split('/')[-1].startswith(delete_with_prefix)):
+            os.remove(file_path)
         if not success:
             not_sended += 1
             print(
@@ -969,7 +984,8 @@ def upload_multiple_object_to_bucket(
             "get_vms",
             "get_disks",
             "print_ascii_graph",
-            "upload_logs"
+            "upload_logs",
+            "get_bucket_name",
         ]
     ),
     required=True,
@@ -1041,6 +1057,13 @@ def upload_multiple_object_to_bucket(
     required=False,
     default=None,
 )
+@click.option(
+    "--destination-file-name",
+    help="String with name for file that should be used on bucket. It's not compatible with asterisks in --file-path and with --folder-path",
+    required=False,
+    default=None,
+    multiple=True,
+)
 def main(
     mode,
     instance_number,
@@ -1058,6 +1081,7 @@ def main(
     file_path=[],
     folder_path=[],
     destination_folder=None,
+    destination_file_name=None,
 ):
     check_mode_parameters(mode, instance_number, container_file)
     if mode == "create_vm":
@@ -1093,7 +1117,11 @@ def main(
         stop_and_print_ascii_graph(instance_number)
     elif mode == "upload_logs":
         upload_multiple_object_to_bucket(
-            file_path, folder_path, destination_folder, bucket_name)
+            file_path, folder_path,
+            destination_folder, destination_file_name, bucket_name
+        )
+    elif mode == "get_bucket_name":
+        print(get_bucket_name())
     else:
         print(f"Unknown mode: {mode}! Exiting!")
         sys.exit(1)
