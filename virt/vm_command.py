@@ -931,7 +931,7 @@ def upload_multiple_object_to_bucket(
     destination_folder: str,
     destination_names: Optional[List[str]] = None,
     bucket_name: Optional[str] = None,
-    delete_with_prefix: Optional[str] = "secret_",
+    remove: bool = False,
 ):
     if destination_names is not None and len(destination_names) > 0:
         assert (len(destination_names) == len(files_paths) and
@@ -939,25 +939,25 @@ def upload_multiple_object_to_bucket(
                 len(folders_paths) == 0), \
             "Naming files uploaded to bucket is possible only when there is known number of uploaded files"  # noqa: E501
         destination_names = iter(destination_names)
+    all_files = itertools.chain(
+        *[glob.glob(file) for file in files_paths],
+        *[glob.glob(f"{folder}/*") for folder in folders_paths])
 
     if bucket_name is None:
         bucket_name = get_bucket_name()
         if bucket_name is None:
-            return
+            return sum(1 for _ in all_files)
 
     print("Trying to upload logs to bucket")
 
     all_logs, not_sended = 0, 0
-    for file_path in itertools.chain(
-            *[glob.glob(file) for file in files_paths],
-            *[glob.glob(f"{folder}/*") for folder in folders_paths]):
+    for file_path in all_files:
         all_logs += 1
         success, details = upload_object_to_bucket(
             bucket_name, file_path, destination_folder,
             next(destination_names) if destination_names else None)
 
-        if (delete_with_prefix is not None and success
-                and file_path.split('/')[-1].startswith(delete_with_prefix)):
+        if remove and success:
             os.remove(file_path)
         if not success:
             not_sended += 1
@@ -966,6 +966,7 @@ def upload_multiple_object_to_bucket(
                 f"{details['error']['code']}:\n{details['error']['message']}",
                 file=sys.stderr,
             )
+    return not_sended
 
 
 @click.command()
@@ -1064,6 +1065,11 @@ def upload_multiple_object_to_bucket(
     default=None,
     multiple=True,
 )
+@click.option(
+    "--remove-uploaded",
+    help="Remove file after successfull upload",
+    is_flag=True,
+)
 def main(
     mode,
     instance_number,
@@ -1082,6 +1088,7 @@ def main(
     folder_path=[],
     destination_folder=None,
     destination_file_name=None,
+    remove_uploaded=False,
 ):
     check_mode_parameters(mode, instance_number, container_file)
     if mode == "create_vm":
@@ -1116,10 +1123,12 @@ def main(
     elif mode == "print_ascii_graph":
         stop_and_print_ascii_graph(instance_number)
     elif mode == "upload_logs":
-        upload_multiple_object_to_bucket(
+        missing = upload_multiple_object_to_bucket(
             file_path, folder_path,
-            destination_folder, destination_file_name, bucket_name
+            destination_folder, destination_file_name,
+            bucket_name, remove_uploaded
         )
+        sys.exit(missing)
     elif mode == "get_bucket_name":
         print(get_bucket_name())
     else:
