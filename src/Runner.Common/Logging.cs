@@ -1,6 +1,5 @@
 using System;
 using System.IO;
-using System.Text.RegularExpressions;
 
 namespace GitHub.Runner.Common
 {
@@ -8,7 +7,7 @@ namespace GitHub.Runner.Common
     public interface IPagingLogger : IRunnerService
     {
         long TotalLines { get; }
-        void Setup(Guid timelineId, Guid timelineRecordId, Action<string> uploadToBucket = null);
+        void Setup(Guid timelineId, Guid timelineRecordId, Action<string, bool> uploadToBucket = null);
 
         void Write(string message);
 
@@ -16,29 +15,26 @@ namespace GitHub.Runner.Common
 
         bool EnabledBucketLogs { set; }
         int PageCount { get; }
-        void SetSecret(bool secret);
     }
 
-    public class PagingLogger : RunnerService, IPagingLogger
+    public class SecretLogger : RunnerService, IPagingLogger
     {
         // 8 MB
         public const int PageSize = 8 * 1024 * 1024;
+        protected bool _removeLogsAfterUploadBucket = true;
 
-        private Guid _timelineId;
-        private Guid _timelineRecordId;
-        private FileStream _pageData;
-        private StreamWriter _pageWriter;
-        private int _byteCount;
-        private int _pageCount;
-        private long _totalLines;
-        private string _dataFileName;
-        private string _pagesFolder;
-        private IJobServerQueue _jobServerQueue;
+        protected Guid _timelineId;
+        protected Guid _timelineRecordId;
+        protected FileStream _pageData;
+        protected StreamWriter _pageWriter;
+        protected int _byteCount;
+        protected int _pageCount;
+        protected long _totalLines;
+        protected string _dataFileName;
+        protected string _pagesFolder;
 
-        private bool _enabledUploadToBucket = false;
-        private Action<string> _uploadToBucket;
-
-        private bool _secret = false;
+        protected bool _enabledUploadToBucket = true;
+        protected Action<string, bool> _uploadToBucket;
 
         public long TotalLines => _totalLines;
         public int PageCount => _pageCount;
@@ -53,11 +49,10 @@ namespace GitHub.Runner.Common
             base.Initialize(hostContext);
             _totalLines = 0;
             _pagesFolder = hostContext.GetDirectory(WellKnownDirectory.Pages);
-            _jobServerQueue = HostContext.GetService<IJobServerQueue>();
             Directory.CreateDirectory(_pagesFolder);
         }
 
-        public void Setup(Guid timelineId, Guid timelineRecordId, Action<string> uploatToBucket = null)
+        public void Setup(Guid timelineId, Guid timelineRecordId, Action<string, bool> uploatToBucket = null)
         {
             _timelineId = timelineId;
             _timelineRecordId = timelineRecordId;
@@ -110,16 +105,22 @@ namespace GitHub.Runner.Common
             NewPage();
         }
 
+        protected virtual string LogFileName()
+        {
+            return $"{_timelineId}_{_timelineRecordId}_secret_{_pageCount}.log";
+        }
+
         private void NewPage()
         {
             EndPage();
             _byteCount = 0;
-            _dataFileName = Path.Combine(_pagesFolder, $"{_timelineId}_{_timelineRecordId}_{++_pageCount}.log");
+            ++_pageCount;
+            _dataFileName = Path.Combine(_pagesFolder, LogFileName());
             _pageData = new FileStream(_dataFileName, FileMode.CreateNew);
             _pageWriter = new StreamWriter(_pageData, System.Text.Encoding.UTF8);
         }
 
-        private void EndPage()
+        protected virtual void EndPage()
         {
             if (_pageWriter != null)
             {
@@ -130,24 +131,35 @@ namespace GitHub.Runner.Common
                 _pageWriter = null;
                 _pageData = null;
 
-                if (_enabledUploadToBucket || _secret)
-                    _uploadToBucket(_dataFileName);
+                if (_enabledUploadToBucket)
+                    _uploadToBucket(_dataFileName, _removeLogsAfterUploadBucket);
+            }
+        }
+    }
 
-                if (!_secret)
-                    _jobServerQueue.QueueFileUpload(_timelineId, _timelineRecordId, "DistributedTask.Core.Log", "CustomToolLog", _dataFileName, true);
+    public class PagingLogger : SecretLogger
+    {
+        private IJobServerQueue _jobServerQueue;
+
+        public override void Initialize(IHostContext hostContext)
+        {
+            base.Initialize(hostContext);
+            _jobServerQueue = HostContext.GetService<IJobServerQueue>();
+            _removeLogsAfterUploadBucket = false;
+        }
+
+        protected override void EndPage()
+        {
+            if (_pageWriter != null)
+            {
+                base.EndPage();
+                _jobServerQueue.QueueFileUpload(_timelineId, _timelineRecordId, "DistributedTask.Core.Log", "CustomToolLog", _dataFileName, true);
             }
         }
 
-        public void SetSecret(bool secret){
-            if (secret != _secret)
-            {
-                if (_pageWriter != null)
-                    EndPage();
-                _secret = secret;
-                Create();
-
-                EnabledBucketLogs = _secret;
-            }
+        protected override string LogFileName()
+        {
+            return $"{_timelineId}_{_timelineRecordId}_{_pageCount}.log";
         }
     }
 }
