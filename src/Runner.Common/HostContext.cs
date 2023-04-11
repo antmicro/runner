@@ -29,7 +29,7 @@ namespace GitHub.Runner.Common
         string GetConfigFile(WellKnownConfigFile configFile);
         Tracing GetTrace(string name);
         Task Delay(TimeSpan delay, CancellationToken cancellationToken);
-        T CreateService<T>() where T : class, IRunnerService;
+        T CreateService<T>(Type target = null) where T : class, IRunnerService;
         T GetService<T>() where T : class, IRunnerService;
         void SetDefaultCulture(string name);
         event EventHandler Unloading;
@@ -418,10 +418,13 @@ namespace GitHub.Runner.Common
         /// <summary>
         /// Creates a new instance of T.
         /// </summary>
-        public T CreateService<T>() where T : class, IRunnerService
+        public T CreateService<T>(Type target = null) where T : class, IRunnerService
         {
-            Type target;
-            if (!_serviceTypes.TryGetValue(typeof(T), out target))
+            if (target != null && !target.IsAssignableTo(typeof(T)))
+            {
+                throw new Exception($"Specified target {target} doesn't match requested service");
+            }
+            else if (!_serviceTypes.TryGetValue(typeof(T), out target))
             {
                 // Infer the concrete type from the ServiceLocatorAttribute.
                 CustomAttributeData attribute = typeof(T)
