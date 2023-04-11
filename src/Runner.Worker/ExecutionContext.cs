@@ -129,7 +129,6 @@ namespace GitHub.Runner.Worker
         void ForceTaskComplete();
         void RegisterPostJobStep(IStep step);
         void SetSecret(bool secret, string stepName = null);
-        string GetLogsURLOnBucket(bool? secret = null, string stepName = null, bool incPageCount = false);
     }
 
     public sealed class ExecutionContext : RunnerService, IExecutionContext
@@ -147,6 +146,7 @@ namespace GitHub.Runner.Worker
         private IssueMatcherConfig[] _matchers;
 
         private IPagingLogger _logger;
+        private IPagingLogger _secretLogger;
         private IJobServerQueue _jobServerQueue;
         private ExecutionContext _parentExecutionContext;
 
@@ -179,7 +179,7 @@ namespace GitHub.Runner.Worker
 
         private bool _secret = false;
         private string _stepName = null;
-        private Regex _whiteSymbols = new Regex(@"[\s-]+");
+        private Regex _whiteSymbols = new Regex(@"[\s-_]+");
 
         // Shared pointer across job-level execution context and step-level execution contexts
         public GlobalContext Global { get; private set; }
@@ -406,6 +406,12 @@ namespace GitHub.Runner.Worker
 
         public TaskResult Complete(TaskResult? result = null, string currentOperation = null, string resultCode = null)
         {
+            if (_secretLogger != null)
+            {
+                _secretLogger.End();
+                _secret = false;
+            }
+            
             if (result != null)
             {
                 Result = result;
@@ -779,7 +785,7 @@ namespace GitHub.Runner.Worker
             lock (_loggerLock)
             {
                 totalLines = _logger.TotalLines + 1;
-                _logger.Write(msg);
+                (_secret ? _secretLogger : _logger).Write(msg);
             }
 
             // write to job level execution context's log file.
@@ -923,9 +929,13 @@ namespace GitHub.Runner.Worker
         public void SetSecret(bool secret, string stepName = null)
         {
             _secret = secret;
+            if (secret && _secretLogger is null)
+            {
+                _secretLogger = HostContext.CreateService<IPagingLogger>(typeof(SecretLogger));
+                _secretLogger.Setup(_mainTimelineId, _record.Id, UploadLogToBucket);
+            }
             if (stepName != null)
                 _stepName = _whiteSymbols.Replace(stepName.Trim(), "_") + "_";
-            _logger.SetSecret(secret);
         }
 
         private void InitializeTimelineRecord(Guid timelineId, Guid timelineRecordId, Guid? parentTimelineRecordId, string recordType, string displayName, string refName, int? order)
@@ -986,25 +996,39 @@ namespace GitHub.Runner.Worker
             return $"{repositoryName}/run_{runNumber}/attempt_{runAttempt}/{Root._record.Name}";
         }
 
-        private string GetBucketDestinationFileName(bool? secret = null, string stepName = null, bool incPageCount = false)
+        private string GetBucketDestinationFileName()
         {
-            if (stepName != null)
-                stepName = _whiteSymbols.Replace(stepName.Trim(), "_") + "_";
-            if (secret ?? _secret)
-                return $"secret_step_{stepName ?? _stepName ?? ""}{_record.Id}_{_logger.PageCount + (incPageCount ? 1 : 0)}.log";
+            if (_secret)
+                return $"secret_step_{_stepName ?? ""}{_record.Id}_{_secretLogger.PageCount}.log";
             else
-                return $"logs_{_logger.PageCount + (incPageCount ? 1 : 0)}.log";
+                return $"logs_{_logger.PageCount}.log";
         }
 
-        public string GetLogsURLOnBucket(bool? secret = null, string stepName = null, bool incPageCount = false)
+        public string GetLogsURLOnBucket()
         {
-            return $"https://storage.cloud.google.com/{HostContext.BucketName}/{GetBucketDestinationFolder()}/{GetBucketDestinationFileName(secret, stepName, incPageCount)}";
+            return $"https://storage.cloud.google.com/{HostContext.BucketName}/{GetBucketDestinationFolder()}/{GetBucketDestinationFileName()}";
         }
 
-        private void UploadLogToBucket(string pathToLog)
+        private void UploadLogToBucket(string pathToLog, bool removeUploaded = false)
         {
-            GCPCoordinator.UploadFileToBucket(HostContext, pathToLog, GetBucketDestinationFolder(), GetBucketDestinationFileName());
-        }           
+            Action<string, string> output = _secret ? (s, t) => {} : OutputWithoutSecret;
+            int notUploadedLogs = GCPCoordinator.UploadFileToBucket(HostContext, pathToLog, GetBucketDestinationFolder(), GetBucketDestinationFileName(), removeUploaded,
+                outputDataHandler: (_, args) => output(args.Data ?? "", "")
+            );
+
+            if (notUploadedLogs == 0)
+                output($"Logs are available at {GetLogsURLOnBucket()}", "");
+            else
+                output($"{notUploadedLogs} log files were not uploaded to bucket", "stderr");
+        }
+
+        private void OutputWithoutSecret(string message, string outputType = "")
+        {
+            bool _tmpSecret = _secret;
+            _secret = false;
+            ExecutionContextExtension.Output(this, message, outputType);
+            _secret = _tmpSecret;
+        }
     }
 
     // The Error/Warning/etc methods are created as extension methods to simplify unit testing.

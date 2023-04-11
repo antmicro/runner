@@ -207,9 +207,7 @@ namespace GitHub.Runner.Worker
                     inputs["script"] = $"({secret_script})"; 
                     ExecutionContext.Output("Output of this step is hidden");
                     if (string.IsNullOrEmpty(HostContext.BucketName))
-                        ExecutionContext.Warning("Bucket name was not specified -- logs won't be available anywhere");
-                    else
-                        ExecutionContext.Output($"It will be available at {ExecutionContext.GetLogsURLOnBucket(true, this.DisplayName, true)}");
+                        ExecutionContext.Warning("Bucket name was not specified -- execution log will be lost");
                     ExecutionContext.SetSecret(true, this.DisplayName);
                 }
                 else
