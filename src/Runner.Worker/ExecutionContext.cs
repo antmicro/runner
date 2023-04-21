@@ -1011,19 +1011,20 @@ namespace GitHub.Runner.Worker
 
         private void UploadLogToBucket(string pathToLog, bool removeUploaded = false)
         {
-            Action<string, string> output = _secret ? (s, t) => {} : OutputWithoutSecret;
-            int notUploadedLogs = GCPCoordinator.UploadFileToBucket(HostContext, pathToLog, GetBucketDestinationFolder(), GetBucketDestinationFileName(), removeUploaded,
-                outputDataHandler: (_, args) => output(args.Data ?? "", "")
-            );
+            OutputWithoutSecret("Trying to upload logs to bucket...");
+
+            int notUploadedLogs = GCPCoordinator.UploadFileToBucket(HostContext, pathToLog, GetBucketDestinationFolder(), GetBucketDestinationFileName(), removeUploaded);
 
             if (notUploadedLogs == 0)
-                output($"Logs are available at {GetLogsURLOnBucket()}", "");
+                OutputWithoutSecret($"Logs are available at {GetLogsURLOnBucket()}", "");
             else
-                output($"{notUploadedLogs} log files were not uploaded to bucket", "stderr");
+                OutputWithoutSecret($"{notUploadedLogs} log files were not uploaded to bucket", "stderr");
         }
 
         private void OutputWithoutSecret(string message, string outputType = "")
         {
+            if (Root == this)
+                return;
             bool _tmpSecret = _secret;
             _secret = false;
             ExecutionContextExtension.Output(this, message, outputType);

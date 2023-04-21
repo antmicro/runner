@@ -424,7 +424,7 @@ namespace GitHub.Runner.Common
             {
                 throw new Exception($"Specified target {target} doesn't match requested service");
             }
-            else if (!_serviceTypes.TryGetValue(typeof(T), out target))
+            else if (target == null && !_serviceTypes.TryGetValue(typeof(T), out target))
             {
                 // Infer the concrete type from the ServiceLocatorAttribute.
                 CustomAttributeData attribute = typeof(T)
