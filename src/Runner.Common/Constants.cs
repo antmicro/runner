@@ -171,6 +171,7 @@ namespace GitHub.Runner.Common
                 public const int RetryableError = 2;
                 public const int RunnerUpdating = 3;
                 public const int RunOnceRunnerUpdating = 4;
+                public const int InterruptSignal = 5;
             }
 
             public static readonly string InternalTelemetryIssueDataKey = "_internal_telemetry";

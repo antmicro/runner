@@ -21,6 +21,7 @@ namespace GitHub.Runner.Listener
     public interface IJobDispatcher : IRunnerService
     {
         bool Busy { get; }
+        EventWaitHandle BusyEvent { get; }
         TaskCompletionSource<bool> RunOnceJobCompleted { get; }
         void Run(Pipelines.AgentJobRequestMessage message, bool runOnce = false);
         bool Cancel(JobCancelMessage message);
@@ -68,11 +69,14 @@ namespace GitHub.Runner.Listener
             // _channelTimeout should in range [30,  300] seconds
             _channelTimeout = TimeSpan.FromSeconds(Math.Min(Math.Max(channelTimeoutSeconds, 30), 300));
             Trace.Info($"Set runner/worker IPC timeout to {_channelTimeout.TotalSeconds} seconds.");
+
+            BusyEvent = new EventWaitHandle(true, EventResetMode.ManualReset);
         }
 
         public TaskCompletionSource<bool> RunOnceJobCompleted => _runOnceJobCompleted;
 
         public bool Busy { get; private set; }
+        public EventWaitHandle BusyEvent { get; private set; }
 
         public void Run(Pipelines.AgentJobRequestMessage jobRequestMessage, bool runOnce = false)
         {
@@ -316,6 +320,7 @@ namespace GitHub.Runner.Listener
 
         private async Task RunAsync(Pipelines.AgentJobRequestMessage message, string orchestrationId, WorkerDispatcher previousJobDispatch, CancellationToken jobRequestCancellationToken, CancellationToken workerCancelTimeoutKillToken)
         {
+            BusyEvent.Reset();
             Busy = true;
             try
             {
@@ -629,6 +634,7 @@ namespace GitHub.Runner.Listener
             finally
             {
                 Busy = false;
+                BusyEvent.Set();
             }
         }
 

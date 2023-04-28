@@ -95,7 +95,7 @@ namespace GitHub.Runner.Listener
 
                     _term.WriteLine();
                     _term.WriteSuccessMessage("Connected to GitHub");
-		    _term.WriteSuccessMessage("This is a forked version!");
+                    _term.WriteSuccessMessage("This is a forked version!");
                     _term.WriteLine();
 
                     _session = await _runnerServer.CreateAgentSessionAsync(
