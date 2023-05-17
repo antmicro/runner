@@ -302,7 +302,7 @@ namespace GitHub.Runner.Worker.Handlers
 #endif
             ExecutionContext.Debug($"{fileName} {arguments}");
 
-            GCPCoordinator.SynchronizeCoordinatorFiles(HostContext);
+            GCPCoordinator.SynchronizeCoordinatorFiles(HostContext, ExecutionContext.GetGitHubContext("repository"));
 
             Trace.Info(githubContext["job_id"]);
 

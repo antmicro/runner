@@ -43,13 +43,14 @@ namespace GitHub.Runner.GCP
             }
         }
 
-        public static int SynchronizeCoordinatorFiles(IHostContext hostContext) {
+        public static int SynchronizeCoordinatorFiles(IHostContext hostContext, string repoFullName) {
             var trace = hostContext.GetTrace(nameof(HostContext));
             var sshIp = System.Environment.GetEnvironmentVariable(Constants.RunnerIPVariable);
             // We need to append '/' at the end of the path to only sync content of the
             // work directory instead of the work directory itself
             var syncPath = hostContext.GetDirectory(WellKnownDirectory.Work) + "/";
             var rsyncArguments = new List<string>(Constants.CommonRsyncArgs);
+            rsyncArguments.Add($"--exclude=\"{repoFullName.Split("/")[^1]}/**/*\"");
             rsyncArguments.Add($"{syncPath} scalerunner@{sshIp}:/mnt/2");
             trace.Info($"Sync: {syncPath} to /mnt/2");
             return GCPCoordinator.RunProcess(
