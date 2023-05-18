@@ -813,7 +813,9 @@ def create_vm(
         "sudo mount /mnt/ram-disk/sargraph-disk /mnt/sargraph-mount",
         "cd /mnt/sargraph-mount && SARGRAPH_OUTPUT_TYPE=svg sudo -E sargraph chart start -f $(findmnt -nr -o source -T /mnt) -n $(ip -o -4 route show to default | awk '{{print $5}}')",
         'echo "::endgroup::"',
-        f"sudo singularity pull --no-https {container_sif_location} docker://{infer_dns_cmd}:5000/{container_file}",
+        "sudo singularity pull " + (
+            f"--no-https {container_sif_location} docker://{infer_dns_cmd}:5000/{container_file}" 
+            if re.search(r"^[^/]+\.[^/]+/", container_file) is None else f"{container_sif_location} docker://{container_file}"),
         f"sudo singularity instance start -C -e --dns {infer_dns_cmd} --overlay /mnt/3 --bind /mnt/2:/root,/mnt/aux,/mnt/shared-tmp:/tmp {node_sif_location} node",
         f"sudo singularity instance start -C -e --dns {infer_dns_cmd} --writable-tmpfs {util_sif_location} util",
         ssh_tunnel_cmd,
