@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Runtime.Serialization;
 using System.Security.Cryptography;
 using GitHub.Runner.Common;
@@ -20,19 +20,19 @@ namespace GitHub.Runner.Listener.Configuration
         /// key is returned to the caller.
         /// </summary>
         /// <returns>An <c>RSACryptoServiceProvider</c> instance representing the key for the runner</returns>
-        RSA CreateKey();
+        RSA CreateKey(int? runnerId = null);
 
         /// <summary>
         /// Deletes the RSA key managed by the key manager.
         /// </summary>
-        void DeleteKey();
+        void DeleteKey(int? runnerId = null);
 
         /// <summary>
         /// Gets the <c>RSACryptoServiceProvider</c> instance currently stored by the key manager. 
         /// </summary>
         /// <returns>An <c>RSACryptoServiceProvider</c> instance representing the key for the runner</returns>
         /// <exception cref="CryptographicException">No key exists in the store</exception>
-        RSA GetKey();
+        RSA GetKey(int? runnerId = null);
     }
 
     // Newtonsoft 10 is not working properly with dotnet RSAParameters class

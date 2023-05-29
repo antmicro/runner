@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Runtime.Serialization;
 using GitHub.Runner.Common;
@@ -13,7 +13,7 @@ namespace GitHub.Runner.Listener.Configuration
     public interface ICredentialManager : IRunnerService
     {
         ICredentialProvider GetCredentialProvider(string credType);
-        VssCredentials LoadCredentials();
+        VssCredentials LoadCredentials(int? runnerId = null);
     }
 
     public class CredentialManager : RunnerService, ICredentialManager
@@ -40,32 +40,32 @@ namespace GitHub.Runner.Listener.Configuration
             return creds;
         }
 
-        public VssCredentials LoadCredentials()
+        public VssCredentials LoadCredentials(int? runnerId)
         {
             IConfigurationStore store = HostContext.GetService<IConfigurationStore>();
 
-            if (!store.HasCredentials())
+            if (!store.HasCredentials(runnerId))
             {
                 throw new InvalidOperationException("Credentials not stored.  Must reconfigure.");
             }
 
-            CredentialData credData = store.GetCredentials();
-            var migratedCred = store.GetMigratedCredentials();
+            CredentialData credData = store.GetCredentials(runnerId);
+            var migratedCred = store.GetMigratedCredentials(runnerId);
             if (migratedCred != null)
             {
                 credData = migratedCred;
 
                 // Re-write .credentials with Token URL
-                store.SaveCredential(credData);
+                store.SaveCredential(credData, runnerId);
 
                 // Delete .credentials_migrated
-                store.DeleteMigratedCredential();
+                store.DeleteMigratedCredential(runnerId);
             }
 
             ICredentialProvider credProv = GetCredentialProvider(credData.Scheme);
             credProv.CredentialData = credData;
 
-            VssCredentials creds = credProv.GetVssCredentials(HostContext);
+            VssCredentials creds = credProv.GetVssCredentials(HostContext, runnerId);
 
             return creds;
         }
