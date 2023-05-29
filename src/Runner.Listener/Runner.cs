@@ -2,6 +2,7 @@ using GitHub.DistributedTask.WebApi;
 using GitHub.Runner.Listener.Configuration;
 using GitHub.Runner.Common.Util;
 using System;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using GitHub.Services.WebApi;
@@ -22,8 +23,8 @@ namespace GitHub.Runner.Listener
 
     public sealed class Runner : RunnerService, IRunner
     {
-        private IMessageListener _listener;
-        private IJobDispatcher _jobDispatcher;
+        private IMultiMessageListener _multiMessageListener;
+        private IJobDispatcher[] _jobDispatchers;
         private ITerminal _term;
         private bool _inConfigStage;
         private ManualResetEvent _completedCommand = new ManualResetEvent(false);
@@ -36,6 +37,9 @@ namespace GitHub.Runner.Listener
         {
             base.Initialize(hostContext);
             _term = HostContext.GetService<ITerminal>();
+
+            _multiMessageListener = HostContext.GetService<IMultiMessageListener>();
+            _jobDispatchers = new IJobDispatcher[Constants.AvailableRunnerInstances];
         }
 
         public bool NumberProvided()
@@ -170,7 +174,7 @@ namespace GitHub.Runner.Listener
                     return Constants.Runner.ReturnCode.Success;
                 }
 
-                RunnerSettings settings = configManager.LoadSettings();
+                RunnerSettings settings = configManager.LoadSettings();  // TODO: check if (default) null is ok
 
                 var store = HostContext.GetService<IConfigurationStore>();
                 bool configuredAsService = store.IsServiceConfigured();
@@ -257,7 +261,7 @@ namespace GitHub.Runner.Listener
                 _returnCode = Constants.Runner.ReturnCode.InterruptSignal;
                 if (_messageQueueLoopTokenSource != null)
                     _messageQueueLoopTokenSource.Cancel();
-                _deleteListenerSession = _listener.DeleteSessionAsync();
+                _deleteListenerSession = _multiMessageListener.DeleteSessionsAsync();
             }
         }
 
@@ -267,16 +271,22 @@ namespace GitHub.Runner.Listener
             try
             {
                 Trace.Info(nameof(RunAsync));
-                _listener = HostContext.GetService<IMessageListener>();
-                if (!await _listener.CreateSessionAsync(HostContext.RunnerShutdownToken))
-                {
-                    return Constants.Runner.ReturnCode.TerminatedError;
-                }
+
+                int code = await _multiMessageListener.CreateSessionsAsync(HostContext);
+                if (code == Constants.Runner.ReturnCode.TerminatedError)
+                    return code;
 
                 HostContext.WritePerfCounter("SessionCreated");
                 _term.WriteLine($"{DateTime.UtcNow:u}: Listening for Jobs");
 
                 _messageQueueLoopTokenSource = CancellationTokenSource.CreateLinkedTokenSource(HostContext.RunnerShutdownToken);
+
+                Task<MessageForRunner?> getNextMessage;
+                MessageForRunner? receivedMessage;
+                TaskAgentMessage message;
+                bool skipMessageDeletion;
+                int runnerId;
+
                 try
                 {
                     var notification = HostContext.GetService<IJobNotification>();
@@ -285,15 +295,21 @@ namespace GitHub.Runner.Listener
 
                     bool autoUpdateInProgress = false;
                     bool runOnceJobReceived = false;
-                    _jobDispatcher = HostContext.CreateService<IJobDispatcher>();
+                    for (int i = 0; i < _jobDispatchers.Length; ++i)
+                    {
+                        _jobDispatchers[i] = HostContext.CreateService<IJobDispatcher>();
+                        _jobDispatchers[i].RunnerServer = _multiMessageListener.MessageListeners[i].RunnerServer;
+                    }
+
+                    _multiMessageListener.InitTasks(_messageQueueLoopTokenSource.Token);
 
                     while (!HostContext.RunnerShutdownToken.IsCancellationRequested && !_exiting)
                     {
-                        TaskAgentMessage message = null;
-                        bool skipMessageDeletion = false;
+                        message = null;
+                        runnerId = -1;
+                        skipMessageDeletion = false;
                         try
                         {
-                            Task<TaskAgentMessage> getNextMessage = _listener.GetNextMessageAsync(_messageQueueLoopTokenSource.Token);
                             if (autoUpdateInProgress)
                             {
                                 Trace.Verbose("Auto update task running at backend, waiting for getNextMessage or selfUpdateTask to finish.");
@@ -303,7 +319,7 @@ namespace GitHub.Runner.Listener
                                 _messageQueueLoopTokenSource.Cancel();
                                 try
                                 {
-                                    await getNextMessage;
+                                    await _multiMessageListener.WaitForAllMessages();
                                 }
                                 catch (Exception ex)
                                 {
@@ -320,18 +336,25 @@ namespace GitHub.Runner.Listener
                                 }
                             }
 
+                            getNextMessage = _multiMessageListener.GetNextMessage(_messageQueueLoopTokenSource.Token);
+
                             if (runOnceJobReceived)
                             {
                                 Trace.Verbose("One time used runner has start running its job, waiting for getNextMessage or the job to finish.");
-                                Task completeTask = await Task.WhenAny(getNextMessage, _jobDispatcher.RunOnceJobCompleted.Task);
-                                if (completeTask == _jobDispatcher.RunOnceJobCompleted.Task)
+                                Task completeTask = await Task.WhenAny(
+                                    getNextMessage,
+                                    Task.WhenAny(
+                                        from jobDispatcher in _jobDispatchers select jobDispatcher.RunOnceJobCompleted.Task
+                                    )
+                                );
+                                if (!Object.ReferenceEquals(completeTask, getNextMessage))
                                 {
                                     Trace.Info("Job has finished at backend, the runner will exit since it is running under onetime use mode.");
                                     Trace.Info("Stop message queue looping.");
                                     _messageQueueLoopTokenSource.Cancel();
                                     try
                                     {
-                                        await getNextMessage;
+                                        await _multiMessageListener.WaitForAllMessages();
                                     }
                                     catch (Exception ex)
                                     {
@@ -342,16 +365,16 @@ namespace GitHub.Runner.Listener
                                 }
                             }
 
-                            try {
-                                message = await getNextMessage; //get next message
-                            } catch (OperationCanceledException) {
-                                // getNextMessage was cancelled
-                                continue;
-                            }
+                            receivedMessage = await getNextMessage;
+                            if (receivedMessage == null)
+                                continue; // getNextMessage was cancelled
+                            message = receivedMessage?.Message;
+                            runnerId = (int) receivedMessage?.RunnerId;
+
                             HostContext.WritePerfCounter($"MessageReceived_{message.MessageType}");
                             if (string.Equals(message.MessageType, AgentRefreshMessage.MessageType, StringComparison.OrdinalIgnoreCase))
                             {
-                                var initRunnerVersion = _listener.GetInitRunnerVersion();
+                                var initRunnerVersion = _multiMessageListener.GetInitRunnerVersion();
 
 
                                 if (autoUpdateInProgress == false)
@@ -396,7 +419,7 @@ namespace GitHub.Runner.Listener
                                 else
                                 {
                                     var jobMessage = StringUtil.ConvertFromJson<Pipelines.AgentJobRequestMessage>(message.Body);
-                                    _jobDispatcher.Run(jobMessage, runOnce);
+                                    _jobDispatchers[runnerId].Run(jobMessage, runOnce);
                                     if (runOnce)
                                     {
                                         Trace.Info("One time used runner received job message.");
@@ -407,7 +430,8 @@ namespace GitHub.Runner.Listener
                             else if (string.Equals(message.MessageType, JobCancelMessage.MessageType, StringComparison.OrdinalIgnoreCase))
                             {
                                 var cancelJobMessage = JsonUtility.FromString<JobCancelMessage>(message.Body);
-                                bool jobCancelled = _jobDispatcher.Cancel(cancelJobMessage);
+                                _jobDispatchers[runnerId].Cancel(cancelJobMessage);
+                                bool jobCancelled = false;
                                 skipMessageDeletion = (autoUpdateInProgress || runOnceJobReceived) && !jobCancelled;
 
                                 if (skipMessageDeletion)
@@ -417,7 +441,7 @@ namespace GitHub.Runner.Listener
                             }
                             else
                             {
-                                Trace.Error($"Received message {message.MessageId} with unsupported message type {message.MessageType}.");
+                                Trace.Error($"Received message {message.MessageType} with unsupported message type {message.MessageType}.");
                             }
                         }
                         finally
@@ -426,7 +450,7 @@ namespace GitHub.Runner.Listener
                             {
                                 try
                                 {
-                                    await _listener.DeleteMessageAsync(message);
+                                    await _multiMessageListener.MessageListeners[runnerId].DeleteMessageAsync(message);
                                 }
                                 catch (Exception ex)
                                 {
@@ -444,15 +468,19 @@ namespace GitHub.Runner.Listener
                 finally
                 {
                     //TODO: make sure we don't mask more important exception
-                    await (_deleteListenerSession != null ?
-                        _deleteListenerSession :
-                        _listener.DeleteSessionAsync());
+                    try {
+                        await (_deleteListenerSession != null ?
+                            _deleteListenerSession : _multiMessageListener.DeleteSessionsAsync()
+                        );
+                    } catch (AccessDeniedException) {
+                        Trace.Warning("Access Denied exception during closing listeners");
+                    }
 
-                    if (_jobDispatcher != null)
+                    foreach (var jobDispatcher in _jobDispatchers)
                     {
-                        _jobDispatcher.BusyEvent.WaitOne();
-                        await _jobDispatcher.ShutdownAsync();
-                        _jobDispatcher.BusyEvent.Dispose();
+                        jobDispatcher.BusyEvent.WaitOne();
+                        await jobDispatcher.ShutdownAsync();
+                        jobDispatcher.BusyEvent.Dispose();
                     }
 
                     _messageQueueLoopTokenSource.Dispose();
@@ -515,5 +543,6 @@ Examples:
     _term.WriteLine($@"  .{separator}config.{ext} --url <url> --token <token> --runasservice");
 #endif
         }
+
     }
 }

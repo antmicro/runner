@@ -20,8 +20,13 @@ namespace GitHub.Runner.Listener
     [ServiceLocator(Default = typeof(JobDispatcher))]
     public interface IJobDispatcher : IRunnerService
     {
+        static private int _number_id = 0;
+        static int NumberId {
+            get { return _number_id++; }
+        }
         bool Busy { get; }
         EventWaitHandle BusyEvent { get; }
+        IRunnerServer RunnerServer { get; set; }
         TaskCompletionSource<bool> RunOnceJobCompleted { get; }
         void Run(Pipelines.AgentJobRequestMessage message, bool runOnce = false);
         bool Cancel(JobCancelMessage message);
@@ -51,9 +56,15 @@ namespace GitHub.Runner.Listener
 
         private TaskCompletionSource<bool> _runOnceJobCompleted = new TaskCompletionSource<bool>();
 
+        private int _instanceNumberId;
+
+        public IRunnerServer RunnerServer { get; set; }
+
         public override void Initialize(IHostContext hostContext)
         {
             base.Initialize(hostContext);
+
+            _instanceNumberId = IJobDispatcher.NumberId;
 
             // get pool id from config
             var configurationStore = hostContext.GetService<IConfigurationStore>();
@@ -239,11 +250,10 @@ namespace GitHub.Runner.Listener
                 // if the runner received a new job request while a previous job request is still running, this typically indicate two situations
                 // 1. an runner bug cause server and runner mismatch on the state of the job request, ex. runner not renew jobrequest properly but think it still own the job reqest, however server already abandon the jobrequest.
                 // 2. a server bug or design change that allow server send more than one job request to an given runner that haven't finish previous job request.
-                var runnerServer = HostContext.GetService<IRunnerServer>();
                 TaskAgentJobRequest request = null;
                 try
                 {
-                    request = await runnerServer.GetAgentRequestAsync(_poolId, jobDispatch.RequestId, CancellationToken.None);
+                    request = await RunnerServer.GetAgentRequestAsync(_poolId, jobDispatch.RequestId, CancellationToken.None);
                 }
                 catch (Exception ex)
                 {
@@ -426,7 +436,7 @@ namespace GitHub.Runner.Listener
                                 var assemblyDirectory = HostContext.GetDirectory(WellKnownDirectory.Bin);
                                 string workerFileName = Path.Combine(assemblyDirectory, _workerProcessName);
                                 var workerEnv = new Dictionary<string, string>(){
-                                    {Constants.InstanceNumberVariable, Environment.GetEnvironmentVariable(Constants.InstanceNumberVariable)},
+                                    {Constants.InstanceNumberVariable, $"{_instanceNumberId}"},
                                     {"GITHUB_JOB_FULL", jobNameSanitized},
                                     {"GITHUB_SHA", $"{message.ContextData["github"].ToJToken()["sha"]}"},
                                     {"GITHUB_RUN_ID", $"{message.ContextData["github"].ToJToken()["run_id"]}"},
@@ -640,7 +650,6 @@ namespace GitHub.Runner.Listener
 
         public async Task RenewJobRequestAsync(int poolId, long requestId, Guid lockToken, string orchestrationId, TaskCompletionSource<int> firstJobRequestRenewed, CancellationToken token)
         {
-            var runnerServer = HostContext.GetService<IRunnerServer>();
             TaskAgentJobRequest request = null;
             int firstRenewRetryLimit = 5;
             int encounteringError = 0;
@@ -651,7 +660,7 @@ namespace GitHub.Runner.Listener
             {
                 try
                 {
-                    request = await runnerServer.RenewAgentRequestAsync(poolId, requestId, lockToken, orchestrationId, token);
+                    request = await RunnerServer.RenewAgentRequestAsync(poolId, requestId, lockToken, orchestrationId, token);
 
                     Trace.Info($"Successfully renew job request {requestId}, job is valid till {request.LockedUntil.Value}");
 
@@ -664,7 +673,7 @@ namespace GitHub.Runner.Listener
                     if (encounteringError > 0)
                     {
                         encounteringError = 0;
-                        runnerServer.SetConnectionTimeout(RunnerConnectionType.JobRequest, TimeSpan.FromSeconds(60));
+                        RunnerServer.SetConnectionTimeout(RunnerConnectionType.JobRequest, TimeSpan.FromSeconds(60));
                         HostContext.WritePerfCounter("JobRenewRecovered");
                     }
 
@@ -736,7 +745,7 @@ namespace GitHub.Runner.Listener
                         // Re-establish connection to server in order to avoid affinity with server.
                         // Reduce connection timeout to 30 seconds (from 60s)
                         HostContext.WritePerfCounter("ResetJobRenewConnection");
-                        await runnerServer.RefreshConnectionAsync(RunnerConnectionType.JobRequest, TimeSpan.FromSeconds(30));
+                        await RunnerServer.RefreshConnectionAsync(RunnerConnectionType.JobRequest, TimeSpan.FromSeconds(30));
 
                         try
                         {
@@ -883,14 +892,13 @@ namespace GitHub.Runner.Listener
                 return;
             }
 
-            var runnerServer = HostContext.GetService<IRunnerServer>();
             int completeJobRequestRetryLimit = 5;
             List<Exception> exceptions = new List<Exception>();
             while (completeJobRequestRetryLimit-- > 0)
             {
                 try
                 {
-                    await runnerServer.FinishAgentRequestAsync(poolId, message.RequestId, lockToken, DateTime.UtcNow, result, CancellationToken.None);
+                    await RunnerServer.FinishAgentRequestAsync(poolId, message.RequestId, lockToken, DateTime.UtcNow, result, CancellationToken.None);
                     return;
                 }
                 catch (TaskAgentJobNotFoundException)

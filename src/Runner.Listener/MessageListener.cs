@@ -19,7 +19,9 @@ namespace GitHub.Runner.Listener
     [ServiceLocator(Default = typeof(MessageListener))]
     public interface IMessageListener : IRunnerService
     {
-        Task<Boolean> CreateSessionAsync(CancellationToken token);
+        int RunnerId { get; }
+        IRunnerServer RunnerServer { get; }
+        Task<Boolean> CreateSessionAsync(int runnerId, CancellationToken token);
         Task DeleteSessionAsync();
         Task<TaskAgentMessage> GetNextMessageAsync(CancellationToken token);
         Task DeleteMessageAsync(TaskAgentMessage message);
@@ -28,6 +30,7 @@ namespace GitHub.Runner.Listener
 
     public sealed class MessageListener : RunnerService, IMessageListener
     {
+        private int _runnerId;
         private long? _lastMessageId;
         private RunnerSettings _settings;
         private ITerminal _term;
@@ -39,12 +42,20 @@ namespace GitHub.Runner.Listener
         private readonly TimeSpan _clockSkewRetryLimit = TimeSpan.FromMinutes(30);
         private readonly Dictionary<string, int> _sessionCreationExceptionTracker = new Dictionary<string, int>();
 
+        public int RunnerId {
+            get => _runnerId;
+        }
+
+        public IRunnerServer RunnerServer {
+            get => _runnerServer;
+        }
+
         public override void Initialize(IHostContext hostContext)
         {
             base.Initialize(hostContext);
 
             _term = HostContext.GetService<ITerminal>();
-            _runnerServer = HostContext.GetService<IRunnerServer>();
+            _runnerServer = HostContext.CreateService<IRunnerServer>();
         }
 
         public string GetInitRunnerVersion()
@@ -52,20 +63,22 @@ namespace GitHub.Runner.Listener
             return _session.Agent.Version;
         }
 
-        public async Task<Boolean> CreateSessionAsync(CancellationToken token)
+        public async Task<Boolean> CreateSessionAsync(int runnerId, CancellationToken token)
         {
             Trace.Entering();
+            Trace.Info($"Creating session for {nameof(runnerId)}: {runnerId}...");
+            _runnerId = runnerId;
 
             // Settings
             var configManager = HostContext.GetService<IConfigurationManager>();
-            _settings = configManager.LoadSettings();
+            _settings = configManager.LoadSettings(_runnerId);
             var serverUrl = _settings.ServerUrl;
             Trace.Info(_settings);
 
             // Create connection.
             Trace.Info("Loading Credentials");
             var credMgr = HostContext.GetService<ICredentialManager>();
-            VssCredentials creds = credMgr.LoadCredentials();
+            VssCredentials creds = credMgr.LoadCredentials(_runnerId);
 
             var agent = new TaskAgentReference
             {
@@ -223,7 +236,7 @@ namespace GitHub.Runner.Listener
                     Trace.Error(ex);
 
                     // don't retry if SkipSessionRecover = true, DT service will delete agent session to stop agent from taking more jobs.
-                    if (ex is TaskAgentSessionExpiredException && !_settings.SkipSessionRecover && await CreateSessionAsync(token))
+                    if (ex is TaskAgentSessionExpiredException && !_settings.SkipSessionRecover && await CreateSessionAsync(_runnerId, token))
                     {
                         Trace.Info($"{nameof(TaskAgentSessionExpiredException)} received, recovered by recreate session.");
                     }
@@ -327,7 +340,7 @@ namespace GitHub.Runner.Listener
             {
                 // The agent session encryption key uses the AES symmetric algorithm
                 var keyManager = HostContext.GetService<IRSAKeyManager>();
-                using (var rsa = keyManager.GetKey())
+                using (var rsa = keyManager.GetKey(RunnerId))
                 {
                     var padding = _session.UseFipsEncryption ? RSAEncryptionPadding.OaepSHA256 : RSAEncryptionPadding.OaepSHA1;
                     return aes.CreateDecryptor(rsa.Decrypt(_session.EncryptionKey.Value, padding), message.IV);
