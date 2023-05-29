@@ -48,6 +48,17 @@ namespace GitHub.Runner.Common
         public static readonly int RunnerDownloadRetryMaxAttempts = 3;
         public static string CommonCustomLabel = "gcp-custom-runners";
         public static readonly string SecretScriptPrefix = "_secret_";
+        public static readonly int AvailableRunnerInstances;
+
+        static Constants()
+        {
+            if (!string.IsNullOrEmpty(Environment.GetEnvironmentVariable("GH_RUNNER_SCALE")))
+                AvailableRunnerInstances = int.Parse(Environment.GetEnvironmentVariable("GH_RUNNER_SCALE"));
+            else if (!string.IsNullOrEmpty(Environment.GetEnvironmentVariable(InstanceNumberVariable)))
+                AvailableRunnerInstances = int.Parse(Environment.GetEnvironmentVariable(InstanceNumberVariable)) + 1;
+            else
+                AvailableRunnerInstances = 1;
+        }
 
         public static string LogDiskMountpoint = "/var/log/runner";
 

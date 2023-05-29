@@ -1,4 +1,4 @@
-﻿using GitHub.Runner.Common.Util;
+using GitHub.Runner.Common.Util;
 using GitHub.Runner.Sdk;
 using System;
 using System.Collections.Generic;
@@ -118,33 +118,38 @@ namespace GitHub.Runner.Common
     public interface IConfigurationStore : IRunnerService
     {
         bool IsConfigured();
-        bool IsServiceConfigured();
-        bool HasCredentials();
-        CredentialData GetCredentials();
-        CredentialData GetMigratedCredentials();
-        RunnerSettings GetSettings();
-        void SaveCredential(CredentialData credential);
-        void SaveSettings(RunnerSettings settings);
-        void DeleteCredential();
-        void DeleteMigratedCredential();
-        void DeleteSettings();
+        bool IsConfigured(int? runnerId);
+        bool IsServiceConfigured(int? runnerId = null);
+        bool HasCredentials(int? runnerId = null);
+        CredentialData GetCredentials(int? runnerId = null);
+        CredentialData GetMigratedCredentials(int? runnerId = null);
+        RunnerSettings GetSettings(int? runnerId = null);
+        void SaveCredential(CredentialData credential, int? runnerId = null);
+        void SaveSettings(RunnerSettings settings, int? runnerId = null);
+        void DeleteCredential(int? runnerId = null);
+        void DeleteMigratedCredential(int? runnerId = null);
+        void DeleteSettings(int? runnerId = null);
     }
 
     public sealed class ConfigurationStore : RunnerService, IConfigurationStore
     {
         private string _binPath;
-        private string _configFilePath;
-        private string _credFilePath;
-        private string _migratedCredFilePath;
-        private string _serviceConfigFilePath;
+        private Func<int?, string> _configFilePath;
+        private Func<int?, string> _credFilePath;
+        private Func<int?, string> _migratedCredFilePath;
+        private Func<int?, string> _serviceConfigFilePath;
 
-        private CredentialData _creds;
-        private CredentialData _migratedCreds;
-        private RunnerSettings _settings;
+        private CredentialData[] _creds;
+        private CredentialData[] _migratedCreds;
+        private RunnerSettings[] _settings;
 
         public override void Initialize(IHostContext hostContext)
         {
             base.Initialize(hostContext);
+
+            _creds = new CredentialData[Constants.AvailableRunnerInstances];
+            _migratedCreds = new CredentialData[Constants.AvailableRunnerInstances];
+            _settings = new RunnerSettings[Constants.AvailableRunnerInstances];
 
             var credentialsDir = HostContext.GetDirectory(WellKnownDirectory.ConfigDir);
             Directory.CreateDirectory(credentialsDir);
@@ -158,25 +163,25 @@ namespace GitHub.Runner.Common
             RootFolder = HostContext.GetDirectory(WellKnownDirectory.Root);
             Trace.Info("RootFolder: {0}", RootFolder);
 
-            _configFilePath = hostContext.GetConfigFile(WellKnownConfigFile.Runner);
+            _configFilePath = (int? id) => hostContext.GetConfigFile(WellKnownConfigFile.Runner, id);
             Trace.Info("ConfigFilePath: {0}", _configFilePath);
 
-            _credFilePath = hostContext.GetConfigFile(WellKnownConfigFile.Credentials);
+            _credFilePath = (int? id) => hostContext.GetConfigFile(WellKnownConfigFile.Credentials, id);
             Trace.Info("CredFilePath: {0}", _credFilePath);
 
-            _migratedCredFilePath = hostContext.GetConfigFile(WellKnownConfigFile.MigratedCredentials);
+            _migratedCredFilePath = (int? id) => hostContext.GetConfigFile(WellKnownConfigFile.MigratedCredentials, id);
             Trace.Info("MigratedCredFilePath: {0}", _migratedCredFilePath);
 
-            _serviceConfigFilePath = hostContext.GetConfigFile(WellKnownConfigFile.Service);
+            _serviceConfigFilePath = (int? id) => hostContext.GetConfigFile(WellKnownConfigFile.Service, id);
             Trace.Info("ServiceConfigFilePath: {0}", _serviceConfigFilePath);
         }
 
         public string RootFolder { get; private set; }
 
-        public bool HasCredentials()
+        public bool HasCredentials(int? runnerId)
         {
             Trace.Info("HasCredentials()");
-            bool credsStored = (new FileInfo(_credFilePath)).Exists || (new FileInfo(_migratedCredFilePath)).Exists;
+            bool credsStored = (new FileInfo(_credFilePath(runnerId))).Exists || (new FileInfo(_migratedCredFilePath(runnerId))).Exists;
             Trace.Info("stored {0}", credsStored);
             return credsStored;
         }
@@ -184,102 +189,120 @@ namespace GitHub.Runner.Common
         public bool IsConfigured()
         {
             Trace.Info("IsConfigured()");
-            bool configured = new FileInfo(_configFilePath).Exists;
+            bool configured = true;
+            for (int i = 0; i < Constants.AvailableRunnerInstances; ++i)
+                configured &= new FileInfo(_configFilePath(i)).Exists;
             Trace.Info("IsConfigured: {0}", configured);
             return configured;
         }
 
-        public bool IsServiceConfigured()
+        public bool IsConfigured(int? runnerId)
+        {
+            Trace.Info("IsConfigured(int runnerId)");
+            bool configured = new FileInfo(_configFilePath(runnerId)).Exists;
+            Trace.Info("IsConfigured: {0}", configured);
+            return configured;
+        }
+
+        public bool IsServiceConfigured(int? runnerId)
         {
             Trace.Info("IsServiceConfigured()");
-            bool serviceConfigured = (new FileInfo(_serviceConfigFilePath)).Exists;
+            bool serviceConfigured = (new FileInfo(_serviceConfigFilePath(runnerId))).Exists;
             Trace.Info($"IsServiceConfigured: {serviceConfigured}");
             return serviceConfigured;
         }
 
-        public CredentialData GetCredentials()
+        private int ValidateRunnerId(int? runnerId)
         {
-            if (_creds == null)
-            {
-                _creds = IOUtil.LoadObject<CredentialData>(_credFilePath);
-            }
-
-            return _creds;
+            return (runnerId == null) ? int.Parse(Environment.GetEnvironmentVariable(Constants.InstanceNumberVariable)) : (int) runnerId;
         }
 
-        public CredentialData GetMigratedCredentials()
+        public CredentialData GetCredentials(int? runnerId)
         {
-            if (_migratedCreds == null && File.Exists(_migratedCredFilePath))
+            int id = ValidateRunnerId(runnerId);
+            if (_creds[id] == null)
             {
-                _migratedCreds = IOUtil.LoadObject<CredentialData>(_migratedCredFilePath);
+                _creds[id] = IOUtil.LoadObject<CredentialData>(_credFilePath(runnerId));
             }
 
-            return _migratedCreds;
+            return _creds[id];
         }
 
-        public RunnerSettings GetSettings()
+        public CredentialData GetMigratedCredentials(int? runnerId)
         {
-            if (_settings == null)
+            int id = ValidateRunnerId(runnerId);
+            if (_migratedCreds[id] == null && File.Exists(_migratedCredFilePath(runnerId)))
+            {
+                _migratedCreds[id] = IOUtil.LoadObject<CredentialData>(_migratedCredFilePath(runnerId));
+            }
+
+            return _migratedCreds[id];
+        }
+
+        public RunnerSettings GetSettings(int? runnerId)
+        {
+            int id = ValidateRunnerId(runnerId);
+            if (_settings[id] == null)
             {
                 RunnerSettings configuredSettings = null;
-                if (File.Exists(_configFilePath))
+                if (File.Exists(_configFilePath(runnerId)))
                 {
-                    string json = File.ReadAllText(_configFilePath, Encoding.UTF8);
+                    string json = File.ReadAllText(_configFilePath(runnerId), Encoding.UTF8);
                     Trace.Info($"Read setting file: {json.Length} chars");
                     configuredSettings = StringUtil.ConvertFromJson<RunnerSettings>(json);
                 }
 
                 ArgUtil.NotNull(configuredSettings, nameof(configuredSettings));
-                _settings = configuredSettings;
+                _settings[id] = configuredSettings;
             }
 
-            return _settings;
+            return _settings[id];
         }
 
-        public void SaveCredential(CredentialData credential)
+        public void SaveCredential(CredentialData credential, int? runnerId)
         {
             Trace.Info("Saving {0} credential @ {1}", credential.Scheme, _credFilePath);
-            if (File.Exists(_credFilePath))
+            if (File.Exists(_credFilePath(runnerId)))
             {
                 // Delete existing credential file first, since the file is hidden and not able to overwrite.
                 Trace.Info("Delete exist runner credential file.");
-                IOUtil.DeleteFile(_credFilePath);
+                IOUtil.DeleteFile(_credFilePath(runnerId));
             }
 
-            IOUtil.SaveObject(credential, _credFilePath);
+            IOUtil.SaveObject(credential, _credFilePath(runnerId));
             Trace.Info("Credentials Saved.");
-            File.SetAttributes(_credFilePath, File.GetAttributes(_credFilePath) | FileAttributes.Hidden);
+            File.SetAttributes(_credFilePath(runnerId), File.GetAttributes(_credFilePath(runnerId)) | FileAttributes.Hidden);
         }
 
-        public void SaveSettings(RunnerSettings settings)
+        public void SaveSettings(RunnerSettings settings, int? runnerId)
         {
             Trace.Info("Saving runner settings.");
-            if (File.Exists(_configFilePath))
+            if (File.Exists(_configFilePath(runnerId)))
             {
                 // Delete existing runner settings file first, since the file is hidden and not able to overwrite.
                 Trace.Info("Delete exist runner settings file.");
-                IOUtil.DeleteFile(_configFilePath);
+                IOUtil.DeleteFile(_configFilePath(runnerId));
             }
 
-            IOUtil.SaveObject(settings, _configFilePath);
+            IOUtil.SaveObject(settings, _configFilePath(runnerId));
             Trace.Info("Settings Saved.");
-            File.SetAttributes(_configFilePath, File.GetAttributes(_configFilePath) | FileAttributes.Hidden);
+            File.SetAttributes(_configFilePath(runnerId), File.GetAttributes(_configFilePath(runnerId)) | FileAttributes.Hidden);
         }
 
-        public void DeleteCredential()
+        public void DeleteCredential(int? runnerId)
         {
-            IOUtil.Delete(_credFilePath, default(CancellationToken));
-            IOUtil.Delete(_migratedCredFilePath, default(CancellationToken));
+            IOUtil.Delete(_credFilePath(runnerId), default(CancellationToken));
+            IOUtil.Delete(_migratedCredFilePath(runnerId), default(CancellationToken));
         }
 
-        public void DeleteMigratedCredential()
+        public void DeleteMigratedCredential(int? runnerId)
         {
-            IOUtil.Delete(_migratedCredFilePath, default(CancellationToken));
+            IOUtil.Delete(_migratedCredFilePath(runnerId), default(CancellationToken));
         }
 
-        public void DeleteSettings()
+        public void DeleteSettings(int? runnerId)
         {
-            IOUtil.Delete(_configFilePath, default(CancellationToken));
+            IOUtil.Delete(_configFilePath(runnerId), default(CancellationToken));
         }
     }
 }

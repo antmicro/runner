@@ -26,7 +26,7 @@ namespace GitHub.Runner.Common
         List<ProductInfoHeaderValue> UserAgents { get; }
         RunnerWebProxy WebProxy { get; }
         string GetDirectory(WellKnownDirectory directory);
-        string GetConfigFile(WellKnownConfigFile configFile);
+        string GetConfigFile(WellKnownConfigFile configFile, int? instance = null);
         Tracing GetTrace(string name);
         Task Delay(TimeSpan delay, CancellationToken cancellationToken);
         T CreateService<T>(Type target = null) where T : class, IRunnerService;
@@ -331,10 +331,10 @@ namespace GitHub.Runner.Common
             return path;
         }
 
-        public string GetConfigFile(WellKnownConfigFile configFile)
+        public string GetConfigFile(WellKnownConfigFile configFile, int? instance = null)
         {
             string path;
-            string instanceNumber = Environment.GetEnvironmentVariable("GH_RUNNER_NUM");
+            string instanceNumber = (instance == null) ? Environment.GetEnvironmentVariable(Constants.InstanceNumberVariable) : $"{instance}";
             switch (configFile)
             {
                 case WellKnownConfigFile.Runner:
