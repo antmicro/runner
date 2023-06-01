@@ -19,8 +19,6 @@ namespace GitHub.Runner.Listener
     [ServiceLocator(Default = typeof(MessageListener))]
     public interface IMessageListener : IRunnerService
     {
-        int RunnerId { get; }
-        IRunnerServer RunnerServer { get; }
         Task<Boolean> CreateSessionAsync(int runnerId, CancellationToken token);
         Task DeleteSessionAsync();
         Task<TaskAgentMessage> GetNextMessageAsync(CancellationToken token);
@@ -33,29 +31,21 @@ namespace GitHub.Runner.Listener
         private int _runnerId;
         private long? _lastMessageId;
         private RunnerSettings _settings;
-        private ITerminal _term;
+        private static ITerminal _term;
         private IRunnerServer _runnerServer;
         private TaskAgentSession _session;
         private TimeSpan _getNextMessageRetryInterval;
-        private readonly TimeSpan _sessionCreationRetryInterval = TimeSpan.FromSeconds(30);
-        private readonly TimeSpan _sessionConflictRetryLimit = TimeSpan.FromMinutes(4);
-        private readonly TimeSpan _clockSkewRetryLimit = TimeSpan.FromMinutes(30);
+        private static readonly TimeSpan _sessionCreationRetryInterval = TimeSpan.FromSeconds(30);
+        private static readonly TimeSpan _sessionConflictRetryLimit = TimeSpan.FromMinutes(4);
+        private static readonly TimeSpan _clockSkewRetryLimit = TimeSpan.FromMinutes(30);
         private readonly Dictionary<string, int> _sessionCreationExceptionTracker = new Dictionary<string, int>();
-
-        public int RunnerId {
-            get => _runnerId;
-        }
-
-        public IRunnerServer RunnerServer {
-            get => _runnerServer;
-        }
 
         public override void Initialize(IHostContext hostContext)
         {
             base.Initialize(hostContext);
 
-            _term = HostContext.GetService<ITerminal>();
-            _runnerServer = HostContext.CreateService<IRunnerServer>();
+            if (_term == null)
+                _term = HostContext.GetService<ITerminal>();
         }
 
         public string GetInitRunnerVersion()
@@ -67,7 +57,9 @@ namespace GitHub.Runner.Listener
         {
             Trace.Entering();
             Trace.Info($"Creating session for {nameof(runnerId)}: {runnerId}...");
+            // Remember RunnerID and save RunnerServer to host
             _runnerId = runnerId;
+            _runnerServer = HostContext.GetServiceArray<IRunnerServer>()[_runnerId];
 
             // Settings
             var configManager = HostContext.GetService<IConfigurationManager>();
@@ -340,7 +332,7 @@ namespace GitHub.Runner.Listener
             {
                 // The agent session encryption key uses the AES symmetric algorithm
                 var keyManager = HostContext.GetService<IRSAKeyManager>();
-                using (var rsa = keyManager.GetKey(RunnerId))
+                using (var rsa = keyManager.GetKey(_runnerId))
                 {
                     var padding = _session.UseFipsEncryption ? RSAEncryptionPadding.OaepSHA256 : RSAEncryptionPadding.OaepSHA1;
                     return aes.CreateDecryptor(rsa.Decrypt(_session.EncryptionKey.Value, padding), message.IV);

@@ -52,12 +52,11 @@ namespace GitHub.Runner.Common
 
         static Constants()
         {
-            if (!string.IsNullOrEmpty(Environment.GetEnvironmentVariable("GH_RUNNER_SCALE")))
+            try {
                 AvailableRunnerInstances = int.Parse(Environment.GetEnvironmentVariable("GH_RUNNER_SCALE"));
-            else if (!string.IsNullOrEmpty(Environment.GetEnvironmentVariable(InstanceNumberVariable)))
-                AvailableRunnerInstances = int.Parse(Environment.GetEnvironmentVariable(InstanceNumberVariable)) + 1;
-            else
-                AvailableRunnerInstances = 1;
+            } catch {
+                throw new Exception("GH_RUNNER_SCALE should always be defined");
+            }
         }
 
         public static string LogDiskMountpoint = "/var/log/runner";

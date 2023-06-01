@@ -23,8 +23,8 @@ namespace GitHub.Runner.Listener
 
     public sealed class Runner : RunnerService, IRunner
     {
-        private IMultiMessageListener _multiMessageListener;
-        private IJobDispatcher[] _jobDispatchers;
+        private IMessageListener[] _messageListeners;
+        private IJobDispatcher _jobDispatcher;
         private ITerminal _term;
         private bool _inConfigStage;
         private ManualResetEvent _completedCommand = new ManualResetEvent(false);
@@ -32,14 +32,14 @@ namespace GitHub.Runner.Listener
         private int _returnCode = Constants.Runner.ReturnCode.Success;
         private CancellationTokenSource _messageQueueLoopTokenSource;
         private Task _deleteListenerSession;
+        private bool _runOnceJobReceived = false;
+        private object _selfUpdateLock = new Object();
+        private object _runOnceLock = new Object();
 
         public override void Initialize(IHostContext hostContext)
         {
             base.Initialize(hostContext);
             _term = HostContext.GetService<ITerminal>();
-
-            _multiMessageListener = HostContext.GetService<IMultiMessageListener>();
-            _jobDispatchers = new IJobDispatcher[Constants.AvailableRunnerInstances];
         }
 
         public bool NumberProvided()
@@ -174,8 +174,6 @@ namespace GitHub.Runner.Listener
                     return Constants.Runner.ReturnCode.Success;
                 }
 
-                RunnerSettings settings = configManager.LoadSettings();  // TODO: check if (default) null is ok
-
                 var store = HostContext.GetService<IConfigurationStore>();
                 bool configuredAsService = store.IsServiceConfigured();
 
@@ -222,7 +220,7 @@ namespace GitHub.Runner.Listener
                     HostContext.StartupType = startType;
 
                     // Run the runner interactively or as service
-                    return await RunAsync(settings, command.RunOnce);
+                    return await RunAsync(command.RunOnce);
                 }
                 else
                 {
@@ -261,227 +259,256 @@ namespace GitHub.Runner.Listener
                 _returnCode = Constants.Runner.ReturnCode.InterruptSignal;
                 if (_messageQueueLoopTokenSource != null)
                     _messageQueueLoopTokenSource.Cancel();
-                _deleteListenerSession = _multiMessageListener.DeleteSessionsAsync();
+                _deleteListenerSession = Task.WhenAll(from listener in _messageListeners select listener.DeleteSessionAsync());
             }
         }
 
-        //create worker manager, create message listener and start listening to the queue
-        private async Task<int> RunAsync(RunnerSettings settings, bool runOnce = false)
+        /// <summary>
+        /// create worker manager, create message listener and start listening to the queue for specific runner
+        /// </summary>
+        private async Task<int> ListenerLoop(IMessageListener messageListener, int runnerId, bool runOnce = false)
+        {
+            Task<TaskAgentMessage> getNextMessage;
+            TaskAgentMessage message;
+            bool skipMessageDeletion;
+            bool autoUpdateInProgress = false;
+
+            while (!HostContext.RunnerShutdownToken.IsCancellationRequested && !_messageQueueLoopTokenSource.IsCancellationRequested && !_exiting)
+            {
+                message = null;
+                skipMessageDeletion = false;
+                try
+                {
+                    getNextMessage = messageListener.GetNextMessageAsync(_messageQueueLoopTokenSource.Token);
+
+                    if (autoUpdateInProgress)
+                    {
+                        Trace.Verbose("Auto update task running at backend, waiting for getNextMessage or selfUpdateTask to finish.");
+
+                        autoUpdateInProgress = false;
+
+                        _messageQueueLoopTokenSource.Cancel();
+                        try
+                        {
+                            await getNextMessage;
+                        }
+                        catch (Exception ex)
+                        {
+                            Trace.Info($"Ignore any exception after cancel message loop. {ex}");
+                        }
+
+                        if (runOnce)
+                        {
+                            return Constants.Runner.ReturnCode.RunOnceRunnerUpdating;
+                        }
+                        else
+                        {
+                            return Constants.Runner.ReturnCode.RunnerUpdating;
+                        }
+                    }
+
+                    if (_runOnceJobReceived)
+                    {
+                        Trace.Verbose("One time used runner has start running its job, waiting for getNextMessage or the job to finish.");
+                        Task completeTask = await Task.WhenAny(
+                            getNextMessage,
+                            _jobDispatcher.RunOnceJobCompleted.Task
+                        );
+                        if (!Object.ReferenceEquals(completeTask, getNextMessage))
+                        {
+                            Trace.Info("Job has finished at backend, the runner will exit since it is running under onetime use mode.");
+                            Trace.Info("Stop message queue looping.");
+                            _messageQueueLoopTokenSource.Cancel();
+                            try
+                            {
+                                await getNextMessage;
+                            }
+                            catch (Exception ex)
+                            {
+                                Trace.Info($"Ignore any exception after cancel message loop. {ex}");
+                            }
+
+                            return Constants.Runner.ReturnCode.Success;
+                        }
+                    }
+
+                    try {
+                        message = await getNextMessage;
+                    } catch (OperationCanceledException) {
+                        // getNextMessage was cancelled
+                        continue;
+                    }
+
+                    HostContext.WritePerfCounter($"MessageReceived_{message.MessageType}");
+                    if (string.Equals(message.MessageType, AgentRefreshMessage.MessageType, StringComparison.OrdinalIgnoreCase))
+                    {
+                        var initRunnerVersion = messageListener.GetInitRunnerVersion();
+
+                        if (autoUpdateInProgress == false)
+                        {
+                            var runnerUpdateMessage = JsonUtility.FromString<AgentRefreshMessage>(message.Body);
+                            Trace.Info($"Init RV: {initRunnerVersion}, current RV: {runnerUpdateMessage.TargetVersion}");
+                            if (initRunnerVersion != runnerUpdateMessage.TargetVersion)
+                            {
+                                lock (_selfUpdateLock)
+                                {
+                                    autoUpdateInProgress = true;
+                                    try
+                                    {
+                                        FileStream fileStream = new FileStream("../src/current_runnerversion", FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.Read);
+                                        using (StreamWriter sr = new StreamWriter(fileStream))
+                                        {
+                                            sr.Write(runnerUpdateMessage.TargetVersion);
+                                        }
+                                    }
+                                    catch (Exception ex)
+                                    {
+                                        Trace.Info($"Ignore exception on version write: {ex}");
+                                    }
+                                    Trace.Info("Refresh message received, will restart the runner.");
+                                }
+                            }
+                            else
+                            {
+                                Trace.Info("Refresh message received but RV seems up-to-date.");
+                            }
+                        }
+                        else
+                        {
+                            Trace.Info("Refresh message received but variable had already been flipped.");
+                        }
+
+                    }
+                    else if (string.Equals(message.MessageType, JobRequestMessageTypes.PipelineAgentJobRequest, StringComparison.OrdinalIgnoreCase))
+                    {
+                        // With runOnce option we have to make sure only one job request is received and run,
+                        // otherwise JobDispatcher.RunOnceJobCompleted won't work properly
+                        if (runOnce)
+                            Monitor.Enter(_runOnceLock);
+                        try
+                        {
+                            if (autoUpdateInProgress || _runOnceJobReceived)
+                            {
+                                skipMessageDeletion = true;
+                                Trace.Info($"Skip message deletion for job request message '{message.MessageId}'.");
+                            }
+                            else
+                            {
+                                var jobMessage = StringUtil.ConvertFromJson<Pipelines.AgentJobRequestMessage>(message.Body);
+                                _jobDispatcher.Run(jobMessage, runnerId, runOnce);
+                                if (runOnce)
+                                {
+                                    Trace.Info("One time used runner received job message.");
+                                    _runOnceJobReceived = true;
+                                }
+                            }
+                        }
+                        finally {
+                            if (runOnce)
+                                Monitor.Exit(_runOnceLock);
+                        }
+                    }
+                    else if (string.Equals(message.MessageType, JobCancelMessage.MessageType, StringComparison.OrdinalIgnoreCase))
+                    {
+                        var cancelJobMessage = JsonUtility.FromString<JobCancelMessage>(message.Body);
+                        _jobDispatcher.Cancel(cancelJobMessage);
+                        bool jobCancelled = false;
+                        skipMessageDeletion = (autoUpdateInProgress || _runOnceJobReceived) && !jobCancelled;
+
+                        if (skipMessageDeletion)
+                        {
+                            Trace.Info($"Skip message deletion for cancellation message '{message.MessageId}'.");
+                        }
+                    }
+                    else
+                    {
+                        Trace.Error($"Received message {message.MessageType} with unsupported message type {message.MessageType}.");
+                    }
+                }
+                finally
+                {
+                    if (!skipMessageDeletion && message != null)
+                    {
+                        try
+                        {
+                            await messageListener.DeleteMessageAsync(message);
+                        }
+                        catch (Exception ex)
+                        {
+                            Trace.Error($"Catch exception during delete message from message queue. message id: {message.MessageId}");
+                            Trace.Error(ex);
+                        }
+                        finally
+                        {
+                            message = null;
+                        }
+                    }
+                }
+            }
+            return Constants.Runner.ReturnCode.Success;
+        }
+
+        /// <summary>
+        /// executes listener loops for runners in parallel
+        /// </summary>
+        private async Task<int> RunAsync(bool runOnce = false)
         {
             try
             {
                 Trace.Info(nameof(RunAsync));
 
-                int code = await _multiMessageListener.CreateSessionsAsync(HostContext);
-                if (code == Constants.Runner.ReturnCode.TerminatedError)
-                    return code;
+                _messageListeners= HostContext.GetServiceArray<IMessageListener>();
+                bool createSessionsError = false;
+                Parallel.For(0, _messageListeners.Length, i =>
+                {
+                    var task = _messageListeners[i].CreateSessionAsync(i, HostContext.RunnerShutdownToken);
+                    Task.WaitAll(task);
+                    if (!task.Result)
+                        createSessionsError = true;
+                });
+                if (createSessionsError)
+                    return Constants.Runner.ReturnCode.TerminatedError;
+
+                var configurationStore = HostContext.GetService<IConfigurationStore>();
+                var jobNotifications = HostContext.GetServiceArray<IJobNotification>();
+                for (int i = 0; i < jobNotifications.Length; ++i)
+                    jobNotifications[i].StartClient(configurationStore.GetSettings(i).MonitorSocketAddress);
 
                 HostContext.WritePerfCounter("SessionCreated");
                 _term.WriteLine($"{DateTime.UtcNow:u}: Listening for Jobs");
 
                 _messageQueueLoopTokenSource = CancellationTokenSource.CreateLinkedTokenSource(HostContext.RunnerShutdownToken);
 
-                Task<MessageForRunner?> getNextMessage;
-                MessageForRunner? receivedMessage;
-                TaskAgentMessage message;
-                bool skipMessageDeletion;
-                int runnerId;
-
                 try
                 {
-                    var notification = HostContext.GetService<IJobNotification>();
+                    _jobDispatcher = HostContext.GetService<IJobDispatcher>();
 
-                    notification.StartClient(settings.MonitorSocketAddress);
-
-                    bool autoUpdateInProgress = false;
-                    bool runOnceJobReceived = false;
-                    for (int i = 0; i < _jobDispatchers.Length; ++i)
-                    {
-                        _jobDispatchers[i] = HostContext.CreateService<IJobDispatcher>();
-                        _jobDispatchers[i].RunnerServer = _multiMessageListener.MessageListeners[i].RunnerServer;
-                    }
-
-                    _multiMessageListener.InitTasks(_messageQueueLoopTokenSource.Token);
-
-                    while (!HostContext.RunnerShutdownToken.IsCancellationRequested && !_exiting)
-                    {
-                        message = null;
-                        runnerId = -1;
-                        skipMessageDeletion = false;
-                        try
-                        {
-                            if (autoUpdateInProgress)
-                            {
-                                Trace.Verbose("Auto update task running at backend, waiting for getNextMessage or selfUpdateTask to finish.");
-
-                                autoUpdateInProgress = false;
-
-                                _messageQueueLoopTokenSource.Cancel();
-                                try
-                                {
-                                    await _multiMessageListener.WaitForAllMessages();
-                                }
-                                catch (Exception ex)
-                                {
-                                    Trace.Info($"Ignore any exception after cancel message loop. {ex}");
-                                }
-
-                                if (runOnce)
-                                {
-                                    return Constants.Runner.ReturnCode.RunOnceRunnerUpdating;
-                                }
-                                else
-                                {
-                                    return Constants.Runner.ReturnCode.RunnerUpdating;
-                                }
-                            }
-
-                            getNextMessage = _multiMessageListener.GetNextMessage(_messageQueueLoopTokenSource.Token);
-
-                            if (runOnceJobReceived)
-                            {
-                                Trace.Verbose("One time used runner has start running its job, waiting for getNextMessage or the job to finish.");
-                                Task completeTask = await Task.WhenAny(
-                                    getNextMessage,
-                                    Task.WhenAny(
-                                        from jobDispatcher in _jobDispatchers select jobDispatcher.RunOnceJobCompleted.Task
-                                    )
-                                );
-                                if (!Object.ReferenceEquals(completeTask, getNextMessage))
-                                {
-                                    Trace.Info("Job has finished at backend, the runner will exit since it is running under onetime use mode.");
-                                    Trace.Info("Stop message queue looping.");
-                                    _messageQueueLoopTokenSource.Cancel();
-                                    try
-                                    {
-                                        await _multiMessageListener.WaitForAllMessages();
-                                    }
-                                    catch (Exception ex)
-                                    {
-                                        Trace.Info($"Ignore any exception after cancel message loop. {ex}");
-                                    }
-
-                                    return Constants.Runner.ReturnCode.Success;
-                                }
-                            }
-
-                            receivedMessage = await getNextMessage;
-                            if (receivedMessage == null)
-                                continue; // getNextMessage was cancelled
-                            message = receivedMessage?.Message;
-                            runnerId = (int) receivedMessage?.RunnerId;
-
-                            HostContext.WritePerfCounter($"MessageReceived_{message.MessageType}");
-                            if (string.Equals(message.MessageType, AgentRefreshMessage.MessageType, StringComparison.OrdinalIgnoreCase))
-                            {
-                                var initRunnerVersion = _multiMessageListener.GetInitRunnerVersion();
-
-
-                                if (autoUpdateInProgress == false)
-                                {
-                                    var runnerUpdateMessage = JsonUtility.FromString<AgentRefreshMessage>(message.Body);
-                                    Trace.Info($"Init RV: {initRunnerVersion}, current RV: {runnerUpdateMessage.TargetVersion}");
-                                    if (initRunnerVersion != runnerUpdateMessage.TargetVersion)
-                                    {
-                                        autoUpdateInProgress = true;
-                                        try
-                                        {
-                                          FileStream fileStream = new FileStream("../src/current_runnerversion", FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.Read);
-                                          using (StreamWriter sr = new StreamWriter(fileStream))
-                                          {
-                                            sr.Write(runnerUpdateMessage.TargetVersion);
-                                          }
-                                        }
-                                        catch (Exception ex)
-                                        {
-                                          Trace.Info($"Ignore exception on version write: {ex}");
-                                        }
-                                        Trace.Info("Refresh message received, will restart the runner.");
-                                    }
-                                    else
-                                    {
-                                        Trace.Info("Refresh message received but RV seems up-to-date.");
-                                    }
-                                }
-                                else
-                                {
-                                    Trace.Info("Refresh message received but variable had already been flipped.");
-                                }
-
-                            }
-                            else if (string.Equals(message.MessageType, JobRequestMessageTypes.PipelineAgentJobRequest, StringComparison.OrdinalIgnoreCase))
-                            {
-                                if (autoUpdateInProgress || runOnceJobReceived)
-                                {
-                                    skipMessageDeletion = true;
-                                    Trace.Info($"Skip message deletion for job request message '{message.MessageId}'.");
-                                }
-                                else
-                                {
-                                    var jobMessage = StringUtil.ConvertFromJson<Pipelines.AgentJobRequestMessage>(message.Body);
-                                    _jobDispatchers[runnerId].Run(jobMessage, runOnce);
-                                    if (runOnce)
-                                    {
-                                        Trace.Info("One time used runner received job message.");
-                                        runOnceJobReceived = true;
-                                    }
-                                }
-                            }
-                            else if (string.Equals(message.MessageType, JobCancelMessage.MessageType, StringComparison.OrdinalIgnoreCase))
-                            {
-                                var cancelJobMessage = JsonUtility.FromString<JobCancelMessage>(message.Body);
-                                _jobDispatchers[runnerId].Cancel(cancelJobMessage);
-                                bool jobCancelled = false;
-                                skipMessageDeletion = (autoUpdateInProgress || runOnceJobReceived) && !jobCancelled;
-
-                                if (skipMessageDeletion)
-                                {
-                                    Trace.Info($"Skip message deletion for cancellation message '{message.MessageId}'.");
-                                }
-                            }
-                            else
-                            {
-                                Trace.Error($"Received message {message.MessageType} with unsupported message type {message.MessageType}.");
-                            }
+                    Parallel.For(0, _messageListeners.Length, i => {
+                        Trace.Info($"Start loop for runnerId={i}");
+                        var loop = ListenerLoop(_messageListeners[i], i);
+                        try {
+                            Task.WaitAll(loop);
+                        } finally {
+                            if (loop.IsCompleted && loop.Result != Constants.Runner.ReturnCode.Success)
+                                _returnCode = loop.Result;
                         }
-                        finally
-                        {
-                            if (!skipMessageDeletion && message != null)
-                            {
-                                try
-                                {
-                                    await _multiMessageListener.MessageListeners[runnerId].DeleteMessageAsync(message);
-                                }
-                                catch (Exception ex)
-                                {
-                                    Trace.Error($"Catch exception during delete message from message queue. message id: {message.MessageId}");
-                                    Trace.Error(ex);
-                                }
-                                finally
-                                {
-                                    message = null;
-                                }
-                            }
-                        }
-                    }
+                        Trace.Info($"Return code of loop for runnerId={i}: {loop.Result}");
+                    });
                 }
                 finally
                 {
                     //TODO: make sure we don't mask more important exception
                     try {
                         await (_deleteListenerSession != null ?
-                            _deleteListenerSession : _multiMessageListener.DeleteSessionsAsync()
-                        );
+                            _deleteListenerSession : Task.WhenAll(
+                                from listener in _messageListeners select listener.DeleteSessionAsync()
+                        ));
                     } catch (AccessDeniedException) {
                         Trace.Warning("Access Denied exception during closing listeners");
                     }
 
-                    foreach (var jobDispatcher in _jobDispatchers)
-                    {
-                        jobDispatcher.BusyEvent.WaitOne();
-                        await jobDispatcher.ShutdownAsync();
-                        jobDispatcher.BusyEvent.Dispose();
-                    }
+                    await _jobDispatcher.WaitForCompletion();
+                    _jobDispatcher.ShutdownAsync();
 
                     _messageQueueLoopTokenSource.Dispose();
                 }

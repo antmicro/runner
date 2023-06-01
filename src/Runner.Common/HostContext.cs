@@ -30,7 +30,9 @@ namespace GitHub.Runner.Common
         Tracing GetTrace(string name);
         Task Delay(TimeSpan delay, CancellationToken cancellationToken);
         T CreateService<T>(Type target = null) where T : class, IRunnerService;
+        T[] CreateServiceArray<T>(Type target = null) where T : class, IRunnerService;
         T GetService<T>() where T : class, IRunnerService;
+        T[] GetServiceArray<T>() where T : class, IRunnerService;
         void SetDefaultCulture(string name);
         event EventHandler Unloading;
         void ShutdownRunner(ShutdownReason reason);
@@ -415,10 +417,7 @@ namespace GitHub.Runner.Common
             await Task.Delay(delay, cancellationToken);
         }
 
-        /// <summary>
-        /// Creates a new instance of T.
-        /// </summary>
-        public T CreateService<T>(Type target = null) where T : class, IRunnerService
+        private Type ValidateType<T>(Type target = null) where T : class, IRunnerService
         {
             if (target != null && !target.IsAssignableTo(typeof(T)))
             {
@@ -450,11 +449,36 @@ namespace GitHub.Runner.Common
                 _serviceTypes.TryAdd(typeof(T), target);
                 target = _serviceTypes[typeof(T)];
             }
+            return target;
+        }
+
+        /// <summary>
+        /// Creates a new instance of T.
+        /// </summary>
+        public T CreateService<T>(Type target = null) where T : class, IRunnerService
+        {
+            target = ValidateType<T>(target);
 
             // Create a new instance.
             T svc = Activator.CreateInstance(target) as T;
             svc.Initialize(this);
             return svc;
+        }
+
+        /// <summary>
+        /// Creates a new array of instances of T.
+        /// </summary>
+        public T[] CreateServiceArray<T>(Type target = null) where T : class, IRunnerService
+        {
+            target = ValidateType<T>(target);
+
+            T[] table = new T[Constants.AvailableRunnerInstances];
+            for (int i = 0; i < table.Length; ++i)
+            {
+                table[i] = Activator.CreateInstance(target) as T;
+                table[i].Initialize(this);
+            }
+            return table;
         }
 
         /// <summary>
@@ -474,6 +498,28 @@ namespace GitHub.Runner.Common
 
             // Return the instance from the cache.
             return _serviceInstances[typeof(T)] as T;
+        }
+
+        /// <summary>
+        /// Gets or creates an array of instances of T.
+        /// </summary>
+        public T[] GetServiceArray<T>() where T : class, IRunnerService
+        {
+            lock(typeof(T))
+            {
+                // Return the cached instance if one already exists.
+                object instance;
+                if (_serviceInstances.TryGetValue(typeof(T[]), out instance))
+                {
+                    return instance as T[];
+                }
+
+                // Otherwise create a new instance and try to add it to the cache.
+                _serviceInstances.TryAdd(typeof(T[]), CreateServiceArray<T>());
+
+                // Return the instance from the cache.
+                return _serviceInstances[typeof(T[])] as T[];
+            }
         }
 
         public void SetDefaultCulture(string name)
