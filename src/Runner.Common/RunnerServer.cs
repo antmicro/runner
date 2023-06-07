@@ -1,4 +1,4 @@
-﻿using GitHub.DistributedTask.WebApi;
+using GitHub.DistributedTask.WebApi;
 using System;
 using System.Collections.Generic;
 using System.Threading;
@@ -30,6 +30,7 @@ namespace GitHub.Runner.Common
         Task<TaskAgent> AddAgentAsync(Int32 agentPoolId, TaskAgent agent);
         Task DeleteAgentAsync(int agentPoolId, int agentId);
         Task<List<TaskAgentPool>> GetAgentPoolsAsync(string agentPoolName = null, TaskAgentPoolType poolType = TaskAgentPoolType.Automation);
+        Task<TaskAgent> GetAgentAsync(int agentPoolId, int agentId, bool? includeCapabilities = null, bool? includeAssignedRequest = null, bool? includeLastCompletedRequest = null, IEnumerable<string> propertyFilters = null, Object userState = null);
         Task<List<TaskAgent>> GetAgentsAsync(int agentPoolId, string agentName = null);
         Task<TaskAgent> ReplaceAgentAsync(int agentPoolId, TaskAgent agent);
 
@@ -244,6 +245,19 @@ namespace GitHub.Runner.Common
         {
             CheckConnection(RunnerConnectionType.Generic);
             return _genericTaskAgentClient.AddAgentAsync(agentPoolId, agent);
+        }
+
+        public Task<TaskAgent> GetAgentAsync(
+            int agentPoolId,
+            int agentId,
+            bool? includeCapabilities = null,
+            bool? includeAssignedRequest = null,
+            bool? includeLastCompletedRequest = null,
+            IEnumerable<string> propertyFilters = null,
+            Object userState = null)
+        {
+            CheckConnection(RunnerConnectionType.Generic);
+            return _genericTaskAgentClient.GetAgentAsync(agentPoolId, agentId, includeCapabilities, includeAssignedRequest, includeLastCompletedRequest, propertyFilters, userState);
         }
 
         public Task<List<TaskAgent>> GetAgentsAsync(int agentPoolId, string agentName = null)

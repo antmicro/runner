@@ -2,7 +2,6 @@ using GitHub.DistributedTask.WebApi;
 using GitHub.Runner.Listener.Configuration;
 using GitHub.Runner.Common.Util;
 using System;
-using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using GitHub.Services.WebApi;
@@ -31,15 +30,23 @@ namespace GitHub.Runner.Listener
         private bool _exiting = false;
         private int _returnCode = Constants.Runner.ReturnCode.Success;
         private CancellationTokenSource _messageQueueLoopTokenSource;
-        private Task _deleteListenerSession;
+        private Task[] _deleteListenerSession;
         private bool _runOnceJobReceived = false;
-        private object _selfUpdateLock = new Object();
-        private object _runOnceLock = new Object();
+        private SemaphoreSlim _selfUpdateSemaphore = new SemaphoreSlim(1, 1);
+        private readonly SemaphoreSlim[] _ctrlCHandlerSemaphore = new SemaphoreSlim[Constants.AvailableRunnerInstances];
+        private readonly EventWaitHandle[] _waitForMainLoop = new ManualResetEvent[Constants.AvailableRunnerInstances];
 
         public override void Initialize(IHostContext hostContext)
         {
             base.Initialize(hostContext);
             _term = HostContext.GetService<ITerminal>();
+            _deleteListenerSession = new Task[Constants.AvailableRunnerInstances];
+            _messageListeners= HostContext.GetServiceArray<IMessageListener>();
+            _jobDispatcher = HostContext.GetService<IJobDispatcher>();
+            for (int i = 0; i < _ctrlCHandlerSemaphore.Length; ++i)
+                _ctrlCHandlerSemaphore[i] = new SemaphoreSlim(0, 1);
+            for (int i = 0; i < _waitForMainLoop.Length; ++i)
+                _waitForMainLoop[i] = new ManualResetEvent(false);
         }
 
         public bool NumberProvided()
@@ -247,77 +254,86 @@ namespace GitHub.Runner.Listener
 
         private void CtrlCHandler(object sender, EventArgs e)
         {
-            _exiting = true;
             _term.WriteLine("Exiting...");
             if (_inConfigStage)
             {
                 HostContext.Dispose();
                 Environment.Exit(Constants.Runner.ReturnCode.InterruptSignal);
             }
-            else
+            else if (!_exiting)
             {
+                _exiting = true;
                 _returnCode = Constants.Runner.ReturnCode.InterruptSignal;
-                if (_messageQueueLoopTokenSource != null)
-                    _messageQueueLoopTokenSource.Cancel();
-                _deleteListenerSession = Task.WhenAll(from listener in _messageListeners select listener.DeleteSessionAsync());
+                Parallel.For(0, _messageListeners.Length, runnerId => {
+                    Trace.Info($"Handler for Runner {runnerId}, waiting for main loop...");
+                    _waitForMainLoop[runnerId].WaitOne();
+                    try {
+                        if (_jobDispatcher.Busy[runnerId])
+                        {
+                            Trace.Info($"Job is running on Runner {runnerId}");
+                            _deleteListenerSession[runnerId] = _messageListeners[runnerId].DeleteSessionAsync();
+                            _deleteListenerSession[runnerId].GetAwaiter().GetResult();
+                        }
+                        else
+                        {
+                            _deleteListenerSession[runnerId] = _messageListeners[runnerId].DeleteSessionAsync();
+                            Trace.Info($"Runner {runnerId} is Idle, deleting session");
+                            _deleteListenerSession[runnerId].GetAwaiter().GetResult();
+
+                            var server = HostContext.GetServiceArray<IRunnerServer>()[runnerId];
+                            var setting = HostContext.GetService<IConfigurationStore>().GetSettings(runnerId);
+                            TaskAgent currentAgent;
+                            do {
+                                Trace.Info($"Checking if server knows Runner {runnerId} is offline...");
+                                currentAgent = server.GetAgentAsync(setting.PoolId, setting.AgentId).GetAwaiter().GetResult();
+                                Task.Delay(TimeSpan.FromSeconds(30)).GetAwaiter().GetResult();
+                            } while (currentAgent.Status == TaskAgentStatus.Online);
+
+                            currentAgent = server.GetAgentAsync(setting.PoolId, setting.AgentId, includeAssignedRequest: true).GetAwaiter().GetResult();
+                            Trace.Info($"Checking if Runner {runnerId} has some job assigned: {currentAgent.AssignedRequest}");
+
+                            if (currentAgent.AssignedRequest != null && !_jobDispatcher.Busy[runnerId])
+                            {
+                                Trace.Info($"Job is assigned, run Listener {runnerId} once more only for this job");
+                                ListenerLoopAsync(_messageListeners[runnerId], runnerId, false, true).GetAwaiter().GetResult();
+                            }
+                        }
+                    } finally {
+                        Trace.Info($"Releasing semaphore {runnerId}");
+                        _ctrlCHandlerSemaphore[runnerId].Release();
+                    }
+                });
             }
         }
 
-        /// <summary>
-        /// create worker manager, create message listener and start listening to the queue for specific runner
-        /// </summary>
-        private async Task<int> ListenerLoop(IMessageListener messageListener, int runnerId, bool runOnce = false)
+        private async Task<int> ListenerLoopAsync(IMessageListener messageListener, int runnerId, bool runOnce = false, bool deleteSessionAfterJobMessage = false)
         {
             Task<TaskAgentMessage> getNextMessage;
             TaskAgentMessage message;
             bool skipMessageDeletion;
             bool autoUpdateInProgress = false;
 
-            while (!HostContext.RunnerShutdownToken.IsCancellationRequested && !_messageQueueLoopTokenSource.IsCancellationRequested && !_exiting)
+            Trace.Entering(nameof(ListenerLoopAsync));
+            if (!await messageListener.CreateSessionAsync(runnerId, HostContext.RunnerShutdownToken))
             {
-                message = null;
-                skipMessageDeletion = false;
-                try
+                return Constants.Runner.ReturnCode.TerminatedError;
+            }
+
+            try {
+                _waitForMainLoop[runnerId].Set();
+                while (!HostContext.RunnerShutdownToken.IsCancellationRequested && !_messageQueueLoopTokenSource.IsCancellationRequested)
                 {
-                    getNextMessage = messageListener.GetNextMessageAsync(_messageQueueLoopTokenSource.Token);
-
-                    if (autoUpdateInProgress)
+                    message = null;
+                    skipMessageDeletion = false;
+                    try
                     {
-                        Trace.Verbose("Auto update task running at backend, waiting for getNextMessage or selfUpdateTask to finish.");
+                        getNextMessage = messageListener.GetNextMessageAsync(_messageQueueLoopTokenSource.Token);
+                        if (autoUpdateInProgress)
+                        {
+                            Trace.Verbose("Auto update task running at backend, waiting for getNextMessage or selfUpdateTask to finish.");
 
-                        autoUpdateInProgress = false;
+                            autoUpdateInProgress = false;
 
-                        _messageQueueLoopTokenSource.Cancel();
-                        try
-                        {
-                            await getNextMessage;
-                        }
-                        catch (Exception ex)
-                        {
-                            Trace.Info($"Ignore any exception after cancel message loop. {ex}");
-                        }
-
-                        if (runOnce)
-                        {
-                            return Constants.Runner.ReturnCode.RunOnceRunnerUpdating;
-                        }
-                        else
-                        {
-                            return Constants.Runner.ReturnCode.RunnerUpdating;
-                        }
-                    }
-
-                    if (_runOnceJobReceived)
-                    {
-                        Trace.Verbose("One time used runner has start running its job, waiting for getNextMessage or the job to finish.");
-                        Task completeTask = await Task.WhenAny(
-                            getNextMessage,
-                            _jobDispatcher.RunOnceJobCompleted.Task
-                        );
-                        if (!Object.ReferenceEquals(completeTask, getNextMessage))
-                        {
-                            Trace.Info("Job has finished at backend, the runner will exit since it is running under onetime use mode.");
-                            Trace.Info("Stop message queue looping.");
                             _messageQueueLoopTokenSource.Cancel();
                             try
                             {
@@ -328,30 +344,66 @@ namespace GitHub.Runner.Listener
                                 Trace.Info($"Ignore any exception after cancel message loop. {ex}");
                             }
 
-                            return Constants.Runner.ReturnCode.Success;
-                        }
-                    }
-
-                    try {
-                        message = await getNextMessage;
-                    } catch (OperationCanceledException) {
-                        // getNextMessage was cancelled
-                        continue;
-                    }
-
-                    HostContext.WritePerfCounter($"MessageReceived_{message.MessageType}");
-                    if (string.Equals(message.MessageType, AgentRefreshMessage.MessageType, StringComparison.OrdinalIgnoreCase))
-                    {
-                        var initRunnerVersion = messageListener.GetInitRunnerVersion();
-
-                        if (autoUpdateInProgress == false)
-                        {
-                            var runnerUpdateMessage = JsonUtility.FromString<AgentRefreshMessage>(message.Body);
-                            Trace.Info($"Init RV: {initRunnerVersion}, current RV: {runnerUpdateMessage.TargetVersion}");
-                            if (initRunnerVersion != runnerUpdateMessage.TargetVersion)
+                            if (!deleteSessionAfterJobMessage)
+                                _ctrlCHandlerSemaphore[runnerId].Release();
+                            if (runOnce)
                             {
-                                lock (_selfUpdateLock)
+                                return Constants.Runner.ReturnCode.RunOnceRunnerUpdating;
+                            }
+                            else
+                            {
+                                return Constants.Runner.ReturnCode.RunnerUpdating;
+                            }
+                        }
+
+                        if (_runOnceJobReceived)
+                        {
+                            Trace.Verbose("One time used runner has start running its job, waiting for getNextMessage or the job to finish.");
+                            Task completeTask = await Task.WhenAny(
+                                getNextMessage,
+                                _jobDispatcher.RunOnceJobCompleted.Task
+                            );
+                            if (!Object.ReferenceEquals(completeTask, getNextMessage))
+                            {
+                                Trace.Info("Job has finished at backend, the runner will exit since it is running under onetime use mode.");
+                                Trace.Info("Stop message queue looping.");
+                                _messageQueueLoopTokenSource.Cancel();
+                                try
                                 {
+                                    await getNextMessage;
+                                }
+                                catch (Exception ex)
+                                {
+                                    Trace.Info($"Ignore any exception after cancel message loop. {ex}");
+                                }
+
+                                if (!deleteSessionAfterJobMessage)
+                                    _ctrlCHandlerSemaphore[runnerId].Release();
+                                return Constants.Runner.ReturnCode.Success;
+                            }
+                        }
+
+                        try {
+                            message = await getNextMessage; //get next message
+                        } catch (Exception ex) when (
+                            ex is OperationCanceledException || ex is AccessDeniedException)
+                        {
+                            // getNextMessage was cancelled
+                            skipMessageDeletion = true;
+                            break;
+                        }
+                        HostContext.WritePerfCounter($"MessageReceived_{message.MessageType}");
+                        if (string.Equals(message.MessageType, AgentRefreshMessage.MessageType, StringComparison.OrdinalIgnoreCase))
+                        {
+                            var initRunnerVersion = messageListener.GetInitRunnerVersion();
+
+                            if (autoUpdateInProgress == false)
+                            {
+                                var runnerUpdateMessage = JsonUtility.FromString<AgentRefreshMessage>(message.Body);
+                                Trace.Info($"Init RV: {initRunnerVersion}, current RV: {runnerUpdateMessage.TargetVersion}");
+                                if (initRunnerVersion != runnerUpdateMessage.TargetVersion)
+                                {
+                                    await _selfUpdateSemaphore.WaitAsync();
                                     autoUpdateInProgress = true;
                                     try
                                     {
@@ -361,31 +413,26 @@ namespace GitHub.Runner.Listener
                                             sr.Write(runnerUpdateMessage.TargetVersion);
                                         }
                                     }
-                                    catch (Exception ex)
-                                    {
+                                    catch (Exception ex) {
                                         Trace.Info($"Ignore exception on version write: {ex}");
                                     }
+                                    finally {
+                                        _selfUpdateSemaphore.Release();
+                                    }
                                     Trace.Info("Refresh message received, will restart the runner.");
+                                }
+                                else
+                                {
+                                    Trace.Info("Refresh message received but RV seems up-to-date.");
                                 }
                             }
                             else
                             {
-                                Trace.Info("Refresh message received but RV seems up-to-date.");
+                                Trace.Info("Refresh message received but variable had already been flipped.");
                             }
-                        }
-                        else
-                        {
-                            Trace.Info("Refresh message received but variable had already been flipped.");
-                        }
 
-                    }
-                    else if (string.Equals(message.MessageType, JobRequestMessageTypes.PipelineAgentJobRequest, StringComparison.OrdinalIgnoreCase))
-                    {
-                        // With runOnce option we have to make sure only one job request is received and run,
-                        // otherwise JobDispatcher.RunOnceJobCompleted won't work properly
-                        if (runOnce)
-                            Monitor.Enter(_runOnceLock);
-                        try
+                        }
+                        else if (string.Equals(message.MessageType, JobRequestMessageTypes.PipelineAgentJobRequest, StringComparison.OrdinalIgnoreCase))
                         {
                             if (autoUpdateInProgress || _runOnceJobReceived)
                             {
@@ -401,51 +448,71 @@ namespace GitHub.Runner.Listener
                                     Trace.Info("One time used runner received job message.");
                                     _runOnceJobReceived = true;
                                 }
+                                if (deleteSessionAfterJobMessage)
+                                {
+                                    Trace.Info("Loop: deleting session");
+                                    _deleteListenerSession[runnerId] = null;
+                                    break;
+                                }
                             }
                         }
-                        finally {
-                            if (runOnce)
-                                Monitor.Exit(_runOnceLock);
-                        }
-                    }
-                    else if (string.Equals(message.MessageType, JobCancelMessage.MessageType, StringComparison.OrdinalIgnoreCase))
-                    {
-                        var cancelJobMessage = JsonUtility.FromString<JobCancelMessage>(message.Body);
-                        _jobDispatcher.Cancel(cancelJobMessage);
-                        bool jobCancelled = false;
-                        skipMessageDeletion = (autoUpdateInProgress || _runOnceJobReceived) && !jobCancelled;
-
-                        if (skipMessageDeletion)
+                        else if (string.Equals(message.MessageType, JobCancelMessage.MessageType, StringComparison.OrdinalIgnoreCase))
                         {
-                            Trace.Info($"Skip message deletion for cancellation message '{message.MessageId}'.");
+                            var cancelJobMessage = JsonUtility.FromString<JobCancelMessage>(message.Body);
+                            bool jobCancelled = _jobDispatcher.Cancel(cancelJobMessage);
+                            skipMessageDeletion = (autoUpdateInProgress || _runOnceJobReceived) && !jobCancelled;
+
+                            if (skipMessageDeletion)
+                            {
+                                Trace.Info($"Skip message deletion for cancellation message '{message.MessageId}'.");
+                            }
+                        }
+                        else
+                        {
+                            Trace.Error($"Received message {message.MessageId} with unsupported message type {message.MessageType}.");
                         }
                     }
-                    else
+                    finally
                     {
-                        Trace.Error($"Received message {message.MessageType} with unsupported message type {message.MessageType}.");
+                        if (!skipMessageDeletion && message != null)
+                        {
+                            try
+                            {
+                                await messageListener.DeleteMessageAsync(message);
+                            }
+                            catch (Exception ex)
+                            {
+                                Trace.Error($"Catch exception during delete message from message queue. message id: {message.MessageId}");
+                                Trace.Error(ex);
+                            }
+                            finally
+                            {
+                                message = null;
+                            }
+                        }
                     }
                 }
-                finally
-                {
-                    if (!skipMessageDeletion && message != null)
-                    {
-                        try
-                        {
-                            await messageListener.DeleteMessageAsync(message);
-                        }
-                        catch (Exception ex)
-                        {
-                            Trace.Error($"Catch exception during delete message from message queue. message id: {message.MessageId}");
-                            Trace.Error(ex);
-                        }
-                        finally
-                        {
-                            message = null;
-                        }
-                    }
+                return Constants.Runner.ReturnCode.Success;
+            }
+            catch (Exception) {
+                if (!deleteSessionAfterJobMessage)
+                    _ctrlCHandlerSemaphore[runnerId].Release();
+                throw;
+            }
+            finally {
+                try {
+                    await ((_deleteListenerSession[runnerId] == null) ? messageListener.DeleteSessionAsync() : _deleteListenerSession[runnerId]);
+                } catch (AccessDeniedException) {
+                    Trace.Warning($"Access Denied exception during closing listeners {runnerId}");
+                }
+
+                if (!deleteSessionAfterJobMessage)
+                {   // wait for end of handler only if method was call outside of this handler
+                    Trace.Info($"Waiting for CtrlC handler for Runner {runnerId}.");
+                    await _ctrlCHandlerSemaphore[runnerId].WaitAsync();
+                    Trace.Info($"CtrlC handler for Runner {runnerId} finished.");
                 }
             }
-            return Constants.Runner.ReturnCode.Success;
         }
 
         /// <summary>
@@ -455,19 +522,7 @@ namespace GitHub.Runner.Listener
         {
             try
             {
-                Trace.Info(nameof(RunAsync));
-
-                _messageListeners= HostContext.GetServiceArray<IMessageListener>();
-                bool createSessionsError = false;
-                Parallel.For(0, _messageListeners.Length, i =>
-                {
-                    var task = _messageListeners[i].CreateSessionAsync(i, HostContext.RunnerShutdownToken);
-                    Task.WaitAll(task);
-                    if (!task.Result)
-                        createSessionsError = true;
-                });
-                if (createSessionsError)
-                    return Constants.Runner.ReturnCode.TerminatedError;
+                Trace.Entering(nameof(RunAsync));
 
                 var configurationStore = HostContext.GetService<IConfigurationStore>();
                 var jobNotifications = HostContext.GetServiceArray<IJobNotification>();
@@ -481,33 +536,24 @@ namespace GitHub.Runner.Listener
 
                 try
                 {
-                    _jobDispatcher = HostContext.GetService<IJobDispatcher>();
-
                     Parallel.For(0, _messageListeners.Length, i => {
                         Trace.Info($"Start loop for runnerId={i}");
-                        var loop = ListenerLoop(_messageListeners[i], i);
+                        var loop = ListenerLoopAsync(_messageListeners[i], i, runOnce);
                         try {
                             Task.WaitAll(loop);
                         } finally {
                             if (loop.IsCompleted && loop.Result != Constants.Runner.ReturnCode.Success)
                                 _returnCode = loop.Result;
                         }
-                        Trace.Info($"Return code of loop for runnerId={i}: {loop.Result}");
+                        Trace.Info($"Return code of loop for Runner {i}: {loop.Result}");
                     });
+                    Trace.Info("End Loop");
                 }
                 finally
                 {
                     //TODO: make sure we don't mask more important exception
-                    try {
-                        await (_deleteListenerSession != null ?
-                            _deleteListenerSession : Task.WhenAll(
-                                from listener in _messageListeners select listener.DeleteSessionAsync()
-                        ));
-                    } catch (AccessDeniedException) {
-                        Trace.Warning("Access Denied exception during closing listeners");
-                    }
-
-                    await _jobDispatcher.WaitForCompletion();
+                    Trace.Info("Waiting for jobs to end");
+                    await (await _jobDispatcher.WaitForCompletion());
                     _jobDispatcher.ShutdownAsync();
 
                     _messageQueueLoopTokenSource.Dispose();
@@ -518,6 +564,8 @@ namespace GitHub.Runner.Listener
                 Trace.Info("Runner OAuth token has been revoked. Shutting down.");
             }
 
+            // Make sure Runner won't exit before the right return code is set
+            // Trace.Info($"Exiting Listener RunAsync {result}, {_returnCode}");
             return _returnCode;
         }
 

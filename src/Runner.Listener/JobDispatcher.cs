@@ -24,7 +24,7 @@ namespace GitHub.Runner.Listener
         TaskCompletionSource<bool> RunOnceJobCompleted { get; }
         void Run(Pipelines.AgentJobRequestMessage message, int runnerId, bool runOnce = false);
         bool Cancel(JobCancelMessage message);
-        Task WaitForCompletion();
+        Task<Task> WaitForCompletion();
         void WaitAsync(CancellationToken token);
         void ShutdownAsync();
     }
@@ -50,7 +50,7 @@ namespace GitHub.Runner.Listener
 
         private TaskCompletionSource<bool> _allJobCompleted = null;
         private TaskCompletionSource<bool> _runOnceJobCompleted = new TaskCompletionSource<bool>();
-        private object _checkCompletedLock = new Object();
+        private SemaphoreSlim _checkCompletedSemaphore = new SemaphoreSlim(1, 1);
 
         public override void Initialize(IHostContext hostContext)
         {
@@ -84,6 +84,7 @@ namespace GitHub.Runner.Listener
 
         public void Run(Pipelines.AgentJobRequestMessage jobRequestMessage, int runnerId, bool runOnce = false)
         {
+            Busy[runnerId] = true;
             Trace.Info($"Job request {jobRequestMessage.RequestId} for plan {jobRequestMessage.Plan.PlanId} job {jobRequestMessage.JobId} received.");
 
             WorkerDispatcher currentDispatch = null;
@@ -147,9 +148,10 @@ namespace GitHub.Runner.Listener
             }
         }
 
-        public Task WaitForCompletion()
+        public async Task<Task> WaitForCompletion()
         {
-            lock (_checkCompletedLock)
+            await _checkCompletedSemaphore.WaitAsync();
+            try
             {
                 if (Busy.Any(busy => busy))
                 {
@@ -158,6 +160,10 @@ namespace GitHub.Runner.Listener
                 }
                 else
                     return Task.CompletedTask;
+            }
+            finally
+            {
+                _checkCompletedSemaphore.Release();
             }
         }
 
@@ -342,8 +348,6 @@ namespace GitHub.Runner.Listener
 
         private async Task RunAsync(Pipelines.AgentJobRequestMessage message, string orchestrationId, int runnerId, WorkerDispatcher previousJobDispatch, CancellationToken jobRequestCancellationToken, CancellationToken workerCancelTimeoutKillToken)
         {
-            Busy[runnerId] = true;
-
             try
             {
                 if (previousJobDispatch != null)
@@ -655,11 +659,14 @@ namespace GitHub.Runner.Listener
             }
             finally
             {
-                lock (_checkCompletedLock)
+                await _checkCompletedSemaphore.WaitAsync();
+                try
                 {
                     Busy[runnerId] = false;
                     if (_allJobCompleted != null && !Busy.Any(busy => busy))
                         _allJobCompleted.TrySetResult(true);
+                } finally {
+                    _checkCompletedSemaphore.Release();
                 }
             }
         }
