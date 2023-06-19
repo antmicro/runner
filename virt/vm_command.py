@@ -27,14 +27,19 @@ print = functools.partial(print, flush=True)
 
 libs = ["google-auth-library-python", "cachetools/src", "paramiko"]
 
-for lib in libs:
-    sys.path.insert(
-        0, os.path.dirname(os.path.realpath(__file__)) +
-        f"/../extra_python_deps/{lib}"
-    )
-import paramiko  # noqa: E402
-import google.auth  # noqa: E402
-from google.auth.transport.requests import AuthorizedSession  # noqa: E402
+try:
+    import paramiko  # noqa: E402
+    import google.auth  # noqa: E402
+    from google.auth.transport.requests import AuthorizedSession  # noqa: E402
+except ModuleNotFoundError:
+    for lib in libs:
+        sys.path.insert(
+            0, os.path.abspath(os.path.dirname(os.path.realpath(__file__)) +
+            f"/../extra_python_deps/{lib}")
+        )
+    import paramiko  # noqa: E402
+    import google.auth  # noqa: E402
+    from google.auth.transport.requests import AuthorizedSession  # noqa: E402
 
 
 # Configure syslog-backed logging for Paramiko.
@@ -54,9 +59,12 @@ paramiko_logger.addHandler(paramiko_syslog_handler)
 
 
 class METADATA(str, enum.Enum):
+    SCALE = "SCALE"
     WORKER_IMAGE = "WORKER_IMAGE"
     WORKER_IMAGE_ARM64 = "WORKER_IMAGE_ARM64"
     LOG_BUCKET_NAME = "LOG_BUCKET_NAME"
+    BRV_URL = "BRV_URL"
+    BRV_PUBLIC_URL = "BRV_PUBLIC_URL"
 
 
 USER = "scalerunner"
@@ -111,25 +119,22 @@ PROJECT, PROJECT_ID = get_project_id(), get_project_id(True)
 AUTHED_SESSION = AuthorizedSession(google.auth.default()[0])
 
 
-def get_worker_image_name(architecture="X86_64"):
-    metadata_key = METADATA.WORKER_IMAGE_ARM64 if architecture == "ARM64" else METADATA.WORKER_IMAGE
+def get_metadata(name: METADATA) -> str:
     with requests.get(
-        f"http://metadata.google.internal/computeMetadata/v1/instance/attributes/{metadata_key}",
+        f"http://metadata.google.internal/computeMetadata/v1/instance/attributes/{name}",
         headers={"Metadata-Flavor": "Google"},
     ) as r:
-        if r.status_code != 200 or r.text.strip() == "":
-            return f"projects/{PROJECT_ID}/global/images/{CONFIG.gcp.image}"
-        return r.text.strip()
-
-
-def get_bucket_name():
-    with requests.get(
-        f"http://metadata.google.internal/computeMetadata/v1/instance/attributes/{METADATA.LOG_BUCKET_NAME}",
-        headers={"Metadata-Flavor": "Google"},
-    ) as r:
-        if r.status_code != 200 or r.text is None:
+        if r.status_code != 200 or r.text is None or r.text.strip() == "":
             return ""
         return r.text.strip()
+
+
+def get_worker_image_name(architecture="X86_64"):
+    metadata_key = METADATA.WORKER_IMAGE_ARM64 if architecture == "ARM64" else METADATA.WORKER_IMAGE
+    image_name = get_metadata(metadata_key)
+    if image_name == "":
+        return f"projects/{PROJECT_ID}/global/images/{CONFIG.gcp.image}"
+    return image_name
 
 
 def get_current_network():
@@ -946,8 +951,8 @@ def upload_multiple_object_to_bucket(
         *[glob.glob(f"{folder}/*") for folder in folders_paths])
 
     if bucket_name is None:
-        bucket_name = get_bucket_name()
-        if bucket_name is None:
+        bucket_name = get_metadata(METADATA.LOG_BUCKET_NAME)
+        if bucket_name == "":
             return sum(1 for _ in all_files)
 
     print("Trying to upload logs to bucket")
@@ -989,6 +994,7 @@ def upload_multiple_object_to_bucket(
             "print_ascii_graph",
             "upload_logs",
             "get_bucket_name",
+            "get_brv_url",
         ]
     ),
     required=True,
@@ -1132,7 +1138,9 @@ def main(
         )
         sys.exit(missing)
     elif mode == "get_bucket_name":
-        print(get_bucket_name())
+        print(get_metadata(METADATA.LOG_BUCKET_NAME))
+    elif mode == "get_brv_url":
+        print(get_metadata(METADATA.BRV_URL))
     else:
         print(f"Unknown mode: {mode}! Exiting!")
         sys.exit(1)
