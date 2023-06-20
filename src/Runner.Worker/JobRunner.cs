@@ -3,6 +3,7 @@ using Pipelines = GitHub.DistributedTask.Pipelines;
 using GitHub.Runner.Common.Util;
 using GitHub.Services.Common;
 using GitHub.Services.WebApi;
+using GitHub.Actions.Pipelines.WebApi;
 using System;
 using System.Diagnostics;
 using System.Globalization;
@@ -33,6 +34,7 @@ namespace GitHub.Runner.Worker
         private IJobServerQueue _jobServerQueue;
         private ITempDirectoryManager _tempDirectoryManager;
         private const string RestrictedServiceAccountWarning = "Attachment of SA is restricted to non-fork PRs";
+        private PipelinesHttpClient _pipelinesHttpClient;
 
         public async Task<TaskResult> RunAsync(Pipelines.AgentJobRequestMessage message, CancellationToken jobRequestCancellationToken)
         {
@@ -76,6 +78,25 @@ namespace GitHub.Runner.Worker
             _jobServerQueue = HostContext.GetService<IJobServerQueue>();
             VssConnection jobConnection = VssUtil.CreateConnection(jobServerUrl, jobServerCredential, new DelegatingHandler[] { new ThrottlingReportHandler(_jobServerQueue) });
             await jobServer.ConnectAsync(jobConnection);
+
+            Trace.Info("Creating pipeline server");
+            _pipelinesHttpClient = jobConnection.GetClient<PipelinesHttpClient>();
+            int jobsInRun = -1;
+            try
+            {
+                Trace.Info("Asking for number of jobs in plan");
+                JObject response;
+                using (var canToken = new CancellationTokenSource(TimeSpan.FromMinutes(1))) {
+                    response = await _pipelinesHttpClient.GetJobsAsync(message.Plan.PlanId, canToken.Token);
+                }
+                Trace.Info(response.ToString());
+                jobsInRun = response.GetValue("jobs").AsEnumerable().Count();
+                Trace.Info($"Found {jobsInRun} jobs in current run");
+            }
+            catch (Exception e)
+            {
+                Trace.Error($"Pipelines: {e}");
+            }
 
             _jobServerQueue.Start(message);
             HostContext.WritePerfCounter($"WorkerJobServerQueueStarted_{message.RequestId.ToString()}");

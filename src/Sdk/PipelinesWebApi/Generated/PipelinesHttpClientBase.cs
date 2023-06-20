@@ -27,6 +27,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using GitHub.Services.Common;
 using GitHub.Services.WebApi;
+using Newtonsoft.Json.Linq;
 
 namespace GitHub.Actions.Pipelines.WebApi
 {
