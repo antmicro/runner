@@ -46,6 +46,12 @@ namespace GitHub.Runner.Worker
             "workflow_sha",
             "workspace"
         };
+        // Additional fields
+        // "author_email",
+        // "author_name",
+        // "commit_message",
+        // "repository_url",
+        // "token"
 
         private readonly Dictionary<string, string> _staticEnvVars = new Dictionary<string, string>()
         {
