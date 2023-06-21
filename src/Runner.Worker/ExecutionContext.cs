@@ -158,6 +158,9 @@ namespace GitHub.Runner.Worker
         private TaskCompletionSource<int> _forceCompleted = new TaskCompletionSource<int>();
         private bool _throttlingReported = false;
         private string _customPrefix = "";
+        private bool _enableBucketLogs;
+        private bool _enableBesLogs;
+        private IBesServerHttpClient _besServerClient;
 
         // only job level ExecutionContext will track throttling delay.
         private long _totalThrottlingDelayInMilliseconds = 0;
@@ -376,8 +379,9 @@ namespace GitHub.Runner.Worker
             else
             {
                 child._logger = HostContext.CreateService<IPagingLogger>();
-                child._logger.Setup(_mainTimelineId, recordId, child.UploadLogToBucket);
-                child._logger.EnabledBucketLogs = false;
+                child._logger.Setup(_mainTimelineId, recordId, child.UploadLog);
+                child._enableBucketLogs = false;
+                child._enableBesLogs = false;
             }
 
             child.IsEmbedded = isEmbedded;
@@ -711,17 +715,52 @@ namespace GitHub.Runner.Worker
             var base64EncodedToken = Convert.ToBase64String(Encoding.UTF8.GetBytes($"x-access-token:{githubAccessToken}"));
             HostContext.SecretMasker.AddValue(base64EncodedToken);
             var githubJob = Global.Variables.Get("system.github.job");
+            var githubJobDisplayName = Global.Variables.Get("system.jobDisplayName");
             var githubContext = new GitHubContext();
             githubContext["token"] = githubAccessToken;
             if (!string.IsNullOrEmpty(githubJob))
             {
                 githubContext["job"] = new StringContextData(githubJob);
             }
+            if (!string.IsNullOrEmpty(githubJobDisplayName))
+                githubContext["job_display_name"] = new StringContextData(githubJobDisplayName);
             var githubDictionary = ExpressionValues["github"].AssertDictionary("github");
             foreach (var pair in githubDictionary)
             {
                 githubContext[pair.Key] = pair.Value;
             }
+
+            var githubEvent = githubContext["event"].ToJToken()["head_commit"];
+            try {
+                var authorName = githubEvent["author"]["name"].ToString();
+                if (!string.IsNullOrEmpty(authorName))
+                    githubContext["author_name"] = new StringContextData(authorName);
+            } catch (NullReferenceException) {
+                Trace.Warning($"There is no author name in job request message");
+            }
+            try {
+                var authorEmail = githubEvent["author"]["email"].ToString();
+                if (!string.IsNullOrEmpty(authorEmail))
+                    githubContext["author_email"] = new StringContextData(authorEmail);
+            } catch (NullReferenceException) {
+                Trace.Warning($"There is no author email in job request message");
+            }
+            try {
+                var commitMessage = githubEvent["message"].ToString();
+                if (!string.IsNullOrEmpty(commitMessage))
+                    githubContext["commit_message"] = new StringContextData(commitMessage);
+            } catch (NullReferenceException) {
+                Trace.Warning($"There is no commit message in job request message");
+            }
+            try {
+                var repositoryUrl = githubContext["event"].ToJToken()["repository"]["url"].ToString();
+                Trace.Info($"repository url: {repositoryUrl}");
+                if (!string.IsNullOrEmpty(repositoryUrl))
+                    githubContext["repository_url"] = new StringContextData(repositoryUrl);
+            } catch (NullReferenceException) {
+                Trace.Warning($"There is no repository ulr in job request message");
+            }
+
             ExpressionValues["github"] = githubContext;
 
             Trace.Info("Initialize Env context");
@@ -762,8 +801,9 @@ namespace GitHub.Runner.Worker
 
             // Logger (must be initialized before writing warnings).
             _logger = HostContext.CreateService<IPagingLogger>();
-            _logger.Setup(_mainTimelineId, _record.Id, UploadLogToBucket);
-            _logger.EnabledBucketLogs = Root == this;
+            _logger.Setup(_mainTimelineId, _record.Id, UploadLog);
+            _enableBucketLogs = Root == this;
+            _enableBesLogs = _enableBucketLogs;
 
             // Initialize 'echo on action command success' property, default to false, unless Step_Debug is set
             EchoOnActionCommand = Global.Variables.Step_Debug ?? false;
@@ -932,7 +972,7 @@ namespace GitHub.Runner.Worker
             if (secret && _secretLogger is null)
             {
                 _secretLogger = HostContext.CreateService<IPagingLogger>(typeof(SecretLogger));
-                _secretLogger.Setup(_mainTimelineId, _record.Id, UploadLogToBucket);
+                _secretLogger.Setup(_mainTimelineId, _record.Id, UploadLog);
             }
             if (stepName != null)
                 _stepName = _whiteSymbols.Replace(stepName.Trim(), "_") + "_";
@@ -1007,6 +1047,22 @@ namespace GitHub.Runner.Worker
         public string GetLogsURLOnBucket()
         {
             return $"https://storage.cloud.google.com/{HostContext.BucketName}/{GetBucketDestinationFolder()}/{GetBucketDestinationFileName()}";
+        }
+
+        private async Task UploadLog(string pathToLog, bool removeUploaded = false, bool secret = false)
+        {
+            if (!secret && _enableBesLogs)
+                await UploadLogToBes(pathToLog);
+
+            if (secret || _enableBucketLogs)
+                UploadLogToBucket(pathToLog, removeUploaded);
+        }
+
+        private async Task UploadLogToBes(string pathToLog)
+        {
+            if (_besServerClient == null)
+                _besServerClient = HostContext.GetService<IBesServerHttpClient>();
+            await _besServerClient.AddTargetLog(ExpressionValues["github"] as GitHubContext, pathToLog);
         }
 
         private void UploadLogToBucket(string pathToLog, bool removeUploaded = false)

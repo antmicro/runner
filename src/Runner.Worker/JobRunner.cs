@@ -35,6 +35,7 @@ namespace GitHub.Runner.Worker
         private ITempDirectoryManager _tempDirectoryManager;
         private const string RestrictedServiceAccountWarning = "Attachment of SA is restricted to non-fork PRs";
         private PipelinesHttpClient _pipelinesHttpClient;
+        private IBesServerHttpClient _besServerClient;
 
         public async Task<TaskResult> RunAsync(Pipelines.AgentJobRequestMessage message, CancellationToken jobRequestCancellationToken)
         {
@@ -81,22 +82,6 @@ namespace GitHub.Runner.Worker
 
             Trace.Info("Creating pipeline server");
             _pipelinesHttpClient = jobConnection.GetClient<PipelinesHttpClient>();
-            int jobsInRun = -1;
-            try
-            {
-                Trace.Info("Asking for number of jobs in plan");
-                JObject response;
-                using (var canToken = new CancellationTokenSource(TimeSpan.FromMinutes(1))) {
-                    response = await _pipelinesHttpClient.GetJobsAsync(message.Plan.PlanId, canToken.Token);
-                }
-                Trace.Info(response.ToString());
-                jobsInRun = response.GetValue("jobs").AsEnumerable().Count();
-                Trace.Info($"Found {jobsInRun} jobs in current run");
-            }
-            catch (Exception e)
-            {
-                Trace.Error($"Pipelines: {e}");
-            }
 
             _jobServerQueue.Start(message);
             HostContext.WritePerfCounter($"WorkerJobServerQueueStarted_{message.RequestId.ToString()}");
@@ -121,7 +106,7 @@ namespace GitHub.Runner.Worker
                 {
                     Trace.Error(ex);
                     jobContext.Error(ex);
-                    return await CompleteJobAsync(jobServer, jobContext, message, TaskResult.Failed);
+                    return await CompleteJobAsync(jobServer, jobContext, message, jobStartTimeUtc, TaskResult.Failed);
                 }
 
                 Trace.Info($"PipelineDirectory: {PipelineDirectory}");
@@ -135,6 +120,12 @@ namespace GitHub.Runner.Worker
                 Trace.Info("Starting the job execution context.");
                 jobContext.Start();
                 var githubContext = jobContext.ExpressionValues["github"] as GitHubContext;
+
+                _besServerClient = HostContext.GetService<IBesServerHttpClient>();
+                Trace.Info("BES: Creating invocation");
+                await _besServerClient.CreateInvocation(githubContext);
+                await _besServerClient.AddRunInformation(githubContext);
+                await _besServerClient.AddTarget(githubContext, message.Variables["system.github.token"].Value);
 
                 var templateEval = jobContext.ToPipelineTemplateEvaluator();
                 var container = templateEval.EvaluateJobContainer(message.JobContainer, jobContext.ExpressionValues, jobContext.ExpressionFunctions);
@@ -226,11 +217,13 @@ namespace GitHub.Runner.Worker
                 if (!JobPassesSecurityRestrictions(jobContext))
                 {
                     jobContext.Error("Running job on this worker disallowed by security policy");
-                    return await CompleteJobAsync(jobServer, jobContext, message, TaskResult.Failed);
+                    return await CompleteJobAsync(jobServer, jobContext, message, jobStartTimeUtc, TaskResult.Failed);
                 }
 
                 IExecutionContext vmCtx = jobContext.CreateChild(Guid.NewGuid(), "Set up VM", "VM_Init", null, null, ActionRunStage.Main);
                 vmCtx.Start();
+                if (_besServerClient.LastInvocationId != null)
+                    vmCtx.Output($"build-results-viewer invocation ID of this run: {_besServerClient.LastInvocationId}");
 
                 Trace.Info($"Container: ${container.Image}");
 
@@ -279,7 +272,7 @@ namespace GitHub.Runner.Worker
                         Trace.Error("Exception when checking if PR is from fork!");
                         Trace.Error(e.Message);
                         jobContext.Error("Exception when starting job!");
-                        return await CompleteJobAsync(jobServer, jobContext, message, TaskResult.Failed);
+                        return await CompleteJobAsync(jobServer, jobContext, message, jobStartTimeUtc, TaskResult.Failed);
                     }
                 }
 
@@ -318,7 +311,7 @@ namespace GitHub.Runner.Worker
                 if (vmExitCode > 0) {
                     jobContext.Error($"VM starter exited with non-zero exit code: {vmExitCode}");
                     vmCtx.Complete();
-                    return await CompleteJobAsync(jobServer, jobContext, message, TaskResult.Failed);
+                    return await CompleteJobAsync(jobServer, jobContext, message, jobStartTimeUtc, TaskResult.Failed);
                 }
 
                 // get and set bucket name for logs
@@ -364,7 +357,7 @@ namespace GitHub.Runner.Worker
                 {
                     Trace.Error(ex);
                     jobContext.Error(ex);
-                    return await CompleteJobAsync(jobServer, jobContext, message, TaskResult.Failed);
+                    return await CompleteJobAsync(jobServer, jobContext, message, jobStartTimeUtc, TaskResult.Failed);
                 }
 
                 if (jobContext.Global.WriteDebug)
@@ -396,7 +389,7 @@ namespace GitHub.Runner.Worker
 
                     FinalizeGcp(jobContext, message, vmSpecs);
 
-                    return await CompleteJobAsync(jobServer, jobContext, message, TaskResult.Canceled);
+                    return await CompleteJobAsync(jobServer, jobContext, message, jobStartTimeUtc, TaskResult.Canceled);
                 }
                 catch (Exception ex)
                 {
@@ -407,7 +400,7 @@ namespace GitHub.Runner.Worker
 
                     FinalizeGcp(jobContext, message, vmSpecs);
 
-                    return await CompleteJobAsync(jobServer, jobContext, message, TaskResult.Failed);
+                    return await CompleteJobAsync(jobServer, jobContext, message, jobStartTimeUtc, TaskResult.Failed);
                 }
 
                 // trace out all steps
@@ -434,7 +427,7 @@ namespace GitHub.Runner.Worker
                     // Log the error and fail the job.
                     Trace.Error($"Caught exception from job steps {nameof(StepsRunner)}: {ex}");
                     jobContext.Error(ex);
-                    return await CompleteJobAsync(jobServer, jobContext, message, TaskResult.Failed);
+                    return await CompleteJobAsync(jobServer, jobContext, message, jobStartTimeUtc, TaskResult.Failed);
                 }
                 finally
                 {
@@ -456,7 +449,7 @@ namespace GitHub.Runner.Worker
                 Trace.Info($"Job result after all job steps finish: {jobContext.Result ?? TaskResult.Succeeded}");
 
                 Trace.Info("Completing the job execution context.");
-                return await CompleteJobAsync(jobServer, jobContext, message);
+                return await CompleteJobAsync(jobServer, jobContext, message, jobStartTimeUtc);
             }
             finally
             {
@@ -688,10 +681,14 @@ namespace GitHub.Runner.Worker
             }
         }
 
-        private async Task<TaskResult> CompleteJobAsync(IJobServer jobServer, IExecutionContext jobContext, Pipelines.AgentJobRequestMessage message, TaskResult? taskResult = null)
+        private async Task<TaskResult> CompleteJobAsync(IJobServer jobServer, IExecutionContext jobContext, Pipelines.AgentJobRequestMessage message, DateTime jobStartTime, TaskResult? taskResult = null)
         {
             jobContext.Debug($"Finishing: {message.JobDisplayName}");
             TaskResult result = jobContext.Complete(taskResult);
+
+            var totalTimeMs = (long) (DateTime.UtcNow - jobStartTime).TotalMilliseconds;
+            Trace.Info($"Total time of current job: {totalTimeMs} ms");
+            await _besServerClient.DeleteTarget(jobContext.ExpressionValues["github"] as GitHubContext, (int) result, totalTimeMs);
 
             try
             {

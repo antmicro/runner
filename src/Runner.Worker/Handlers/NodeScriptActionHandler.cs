@@ -153,6 +153,21 @@ namespace GitHub.Runner.Worker.Handlers
 
                 var initCmd = $"### START ###\n";
                 if (actionName.StartsWith("actions/upload-artifact")) {
+                    // Upload artifact to BES result store
+                    var besServerClient = HostContext.GetService<IBesServerHttpClient>();
+                    if (besServerClient.ServerExists) {
+                        foreach (var path in Environment["INPUT_PATH"].Split('\n'))
+                        {
+                            if (!string.IsNullOrEmpty(path))
+                                GCPCoordinator.SynchronizeWorkerArtifact(HostContext, path, workspaceDir);
+                        }
+                        var coordinatorPath = Path.Combine(HostContext.GetDirectory(WellKnownDirectory.TempArtifacts), "**/*");
+                        await besServerClient.AddTargetArtifact(githubContext, coordinatorPath);
+                        // Cleanup for next artifacts
+                        Directory.Delete(HostContext.GetDirectory(WellKnownDirectory.TempArtifacts), true);
+                        
+                    }
+                
                     var virtDir = HostContext.GetDirectory(WellKnownDirectory.Virt);
                     var plotWorkspacePath = $"{workspaceDir}/plot_{jobName}.svg";
                     var sargraphSshArguments = new List<string>(Constants.CommonSshArgs);

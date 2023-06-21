@@ -11,6 +11,7 @@ namespace GitHub.Runner.Common
         Root,
         Actions,
         Temp,
+        TempArtifacts,
         Tools,
         Update,
         Work,
@@ -48,6 +49,7 @@ namespace GitHub.Runner.Common
         public static readonly int RunnerDownloadRetryMaxAttempts = 3;
         public static string CommonCustomLabel = "gcp-custom-runners";
         public static readonly string SecretScriptPrefix = "_secret_";
+        public static readonly string DistantBesSocket = "/tmp/bes.socket";
         public static readonly int AvailableRunnerInstances;
 
         static Constants()
@@ -230,6 +232,7 @@ namespace GitHub.Runner.Common
             public static readonly string ExternalsDirectory = "externals";
             public static readonly string RunnerDiagnosticLogPrefix = "Runner_";
             public static readonly string TempDirectory = "_temp";
+            public static readonly string TempArtifacsDirectory = "_artifacts";
             public static readonly string ToolDirectory = "_tool";
             public static readonly string UpdateDirectory = "_update";
             public static readonly string WorkDirectory = "_work";

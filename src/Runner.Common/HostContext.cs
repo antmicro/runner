@@ -273,6 +273,12 @@ namespace GitHub.Runner.Common
                         Constants.Path.TempDirectory);
                     break;
 
+                case WellKnownDirectory.TempArtifacts:
+                    path = Path.Combine(
+                        GetDirectory(WellKnownDirectory.Work),
+                        Constants.Path.TempArtifacsDirectory);
+                    break;
+
                 case WellKnownDirectory.Actions:
                     path = Path.Combine(
                         GetDirectory(WellKnownDirectory.Work),

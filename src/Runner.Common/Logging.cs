@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Threading.Tasks;
 
 namespace GitHub.Runner.Common
 {
@@ -7,13 +8,12 @@ namespace GitHub.Runner.Common
     public interface IPagingLogger : IRunnerService
     {
         long TotalLines { get; }
-        void Setup(Guid timelineId, Guid timelineRecordId, Action<string, bool> uploadToBucket = null);
+        void Setup(Guid timelineId, Guid timelineRecordId, Func<string, bool, bool, Task> uploadLogs = null);
 
         void Write(string message);
 
         void End();
 
-        bool EnabledBucketLogs { set; }
         int PageCount { get; }
     }
 
@@ -33,16 +33,10 @@ namespace GitHub.Runner.Common
         protected string _dataFileName;
         protected string _pagesFolder;
 
-        protected bool _enabledUploadToBucket = true;
-        protected Action<string, bool> _uploadToBucket;
+        protected Func<string, bool, bool, Task> _uploadLogs;
 
         public long TotalLines => _totalLines;
         public int PageCount => _pageCount;
-
-        public bool EnabledBucketLogs
-        {
-            set => _enabledUploadToBucket = value;
-        }
 
         public override void Initialize(IHostContext hostContext)
         {
@@ -52,11 +46,11 @@ namespace GitHub.Runner.Common
             Directory.CreateDirectory(_pagesFolder);
         }
 
-        public void Setup(Guid timelineId, Guid timelineRecordId, Action<string, bool> uploatToBucket = null)
+        public void Setup(Guid timelineId, Guid timelineRecordId, Func<string, bool, bool, Task> uploadLogs = null)
         {
             _timelineId = timelineId;
             _timelineRecordId = timelineRecordId;
-            _uploadToBucket = uploatToBucket;
+            _uploadLogs = uploadLogs;
         }
 
         //
@@ -120,7 +114,7 @@ namespace GitHub.Runner.Common
             _pageWriter = new StreamWriter(_pageData, System.Text.Encoding.UTF8);
         }
 
-        protected virtual void EndPage()
+        protected virtual void EndPage(bool secret = true)
         {
             if (_pageWriter != null)
             {
@@ -131,8 +125,7 @@ namespace GitHub.Runner.Common
                 _pageWriter = null;
                 _pageData = null;
 
-                if (_enabledUploadToBucket)
-                    _uploadToBucket(_dataFileName, _removeLogsAfterUploadBucket);
+                _uploadLogs(_dataFileName, _removeLogsAfterUploadBucket, secret).GetAwaiter().GetResult();
             }
         }
     }
@@ -148,11 +141,11 @@ namespace GitHub.Runner.Common
             _removeLogsAfterUploadBucket = false;
         }
 
-        protected override void EndPage()
+        protected override void EndPage(bool secret = false)
         {
             if (_pageWriter != null)
             {
-                base.EndPage();
+                base.EndPage(false);
                 _jobServerQueue.QueueFileUpload(_timelineId, _timelineRecordId, "DistributedTask.Core.Log", "CustomToolLog", _dataFileName, true);
             }
         }

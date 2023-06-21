@@ -64,8 +64,30 @@ namespace GitHub.Runner.GCP
                     exceptionReturnCode: 255);
         }
 
+        public static int SynchronizeWorkerArtifact(IHostContext hostContext, string artifactPath, string worksapceDir) {
+            var trace = hostContext.GetTrace(nameof(SynchronizeWorkerArtifact));
+            var sshIp = System.Environment.GetEnvironmentVariable(Constants.RunnerIPVariable);
+            var syncPath = hostContext.GetDirectory(WellKnownDirectory.TempArtifacts);
+            var rsyncArguments = new List<string>(Constants.CommonRsyncArgs);
+            rsyncArguments.Add($"-m --include=\"**/\"");
+            rsyncArguments.Add($"--include=\"{artifactPath}\"");
+            rsyncArguments.Add("--exclude=\"*\"");
+            rsyncArguments.Add($"scalerunner@{sshIp}:{worksapceDir.Replace("/root", "/mnt/2")}/ {syncPath}");
+            trace.Entering();
+            trace.Info(rsyncArguments);
+            return GCPCoordinator.RunProcess(
+                    fileName: "rsync",
+                    arguments: string.Join(" ", rsyncArguments.ToArray()),
+                    workDirectory: "",
+                    outputDataReceivedFunc: (_, args) => trace.Info(args.Data ?? ""),
+                    errorDataReceivedFunc: (_, args) => trace.Info(args.Data ?? ""),
+                    exceptionFunc: (e) => { trace.Info("Exception when syncing artifacts!"); trace.Info(e.Message); },
+                    trace: trace,
+                    exceptionReturnCode: 255);
+        }
+
         public static int SynchronizeWorkerFiles(IHostContext hostContext) {
-            var trace = hostContext.GetTrace(nameof(HostContext));
+            var trace = hostContext.GetTrace(nameof(SynchronizeWorkerFiles));
             var sshIp = System.Environment.GetEnvironmentVariable(Constants.RunnerIPVariable);
             var syncPath = hostContext.GetDirectory(WellKnownDirectory.Work);
             var rsyncArguments = new List<string>(Constants.CommonRsyncArgs);
@@ -135,8 +157,18 @@ namespace GitHub.Runner.GCP
                 trace: trace,
                 exceptionReturnCode: 255);
         }
-        
+
         public static string GetGcpBucketName(IHostContext hostContext)
+        {
+            return _getGcpMetadata(hostContext, "get_bucket_name");
+        }
+
+        public static string GetGcpBuildResultViewerUrl(IHostContext hostContext)
+        {
+            return _getGcpMetadata(hostContext, "get_brv_url");
+        }
+
+        private static string _getGcpMetadata(IHostContext hostContext, string metadataScriptName)
         {
             var trace = hostContext.GetTrace(nameof(GCPCoordinator));
             var output = new StringBuilder();
@@ -144,11 +176,11 @@ namespace GitHub.Runner.GCP
 
             GCPCoordinator.RunProcess(
                     fileName: "python3",
-                    arguments: "vm_command.py --mode get_bucket_name",
+                    arguments: $"vm_command.py --mode {metadataScriptName}",
                     workDirectory: virtDir,
                     outputDataReceivedFunc: (_, args) => { output.Append(args.Data ?? ""); },
                     errorDataReceivedFunc: (_, args) => trace.Error(args.Data ?? ""),
-                    exceptionFunc: (e) => { trace.Info("Exception when trying to get bucket name"); trace.Info(e.Message); },
+                    exceptionFunc: (e) => { trace.Info($"Exception when trying to get metadata ({metadataScriptName})"); trace.Info(e.Message); },
                     trace: trace,
                     exceptionReturnCode: 255);
                     
