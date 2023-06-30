@@ -1,0 +1,7 @@
+distant-bes @ git+https://github.com/antmicro/distant-bes@b8e3e40
+fastapi~=0.98.0
+fastapi-utils~=0.2.1
+uvicorn
+paramiko
+google-auth
+cachetools
