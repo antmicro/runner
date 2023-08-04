@@ -27,7 +27,8 @@ namespace GitHub.Runner.Common
 
         // Configuration
         Task<TaskAgent> AddAgentAsync(Int32 agentPoolId, TaskAgent agent);
-        Task DeleteAgentAsync(int agentPoolId, int agentId);
+        Task DeleteAgentAsync(int agentPoolId, ulong agentId);
+        Task DeleteAgentAsync(ulong agentId);
         Task<List<TaskAgentPool>> GetAgentPoolsAsync(string agentPoolName = null, TaskAgentPoolType poolType = TaskAgentPoolType.Automation);
         Task<List<TaskAgent>> GetAgentsAsync(int agentPoolId, string agentName = null);
         Task<TaskAgent> ReplaceAgentAsync(int agentPoolId, TaskAgent agent);
@@ -48,7 +49,7 @@ namespace GitHub.Runner.Common
         Task<PackageMetadata> GetPackageAsync(string packageType, string platform, string version, CancellationToken cancellationToken);
 
         // agent update
-        Task<TaskAgent> UpdateAgentUpdateStateAsync(int agentPoolId, int agentId, string currentState);
+        Task<TaskAgent> UpdateAgentUpdateStateAsync(int agentPoolId, ulong agentId, string currentState);
     }
 
     public sealed class RunnerServer : RunnerService, IRunnerServer
@@ -232,10 +233,15 @@ namespace GitHub.Runner.Common
             return _genericTaskAgentClient.ReplaceAgentAsync(agentPoolId, agent);
         }
 
-        public Task DeleteAgentAsync(int agentPoolId, int agentId)
+        public Task DeleteAgentAsync(int agentPoolId, ulong agentId)
         {
             CheckConnection(RunnerConnectionType.Generic);
             return _genericTaskAgentClient.DeleteAgentAsync(agentPoolId, agentId);
+        }
+
+        public Task DeleteAgentAsync(ulong agentId)
+        {
+            return DeleteAgentAsync(0, agentId); // agentPool is ignored server side
         }
 
         //-----------------------------------------------------------------
@@ -303,7 +309,7 @@ namespace GitHub.Runner.Common
             return _genericTaskAgentClient.GetPackageAsync(packageType, platform, version, cancellationToken: cancellationToken);
         }
 
-        public Task<TaskAgent> UpdateAgentUpdateStateAsync(int agentPoolId, int agentId, string currentState)
+        public Task<TaskAgent> UpdateAgentUpdateStateAsync(int agentPoolId, ulong agentId, string currentState)
         {
             CheckConnection(RunnerConnectionType.Generic);
             return _genericTaskAgentClient.UpdateAgentUpdateStateAsync(agentPoolId, agentId, currentState);

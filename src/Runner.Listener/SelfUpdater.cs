@@ -30,7 +30,7 @@ namespace GitHub.Runner.Listener
         private ITerminal _terminal;
         private IRunnerServer _runnerServer;
         private int _poolId;
-        private int _agentId;
+        private ulong _agentId;
 
         public bool Busy { get; private set; }
 
