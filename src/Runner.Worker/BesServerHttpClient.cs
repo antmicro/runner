@@ -8,6 +8,7 @@ using System.Net.Sockets;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using GitHub.Runner.Common;
+using GitHub.DistributedTask.Pipelines.ContextData;
 
 namespace GitHub.Runner.Worker {
 
@@ -83,7 +84,13 @@ namespace GitHub.Runner.Worker {
 
 		public async Task AddRunInformation(GitHubContext context)
 		{
-			var info = string.Format(RUN_INFORMATION_TEMPLATE, context["repository"], context["sha"], context["author_name"], context["author_email"], context["commit_message"], $"{context["repository_url"]}/actions/runs/{context["run_id"]}/attempts/{context["run_attempt"]}");
+                        // These fields are optional and won't appear in e.g. scheduled runs
+			PipelineContextData authorName, authorEmail, commitMessage;
+			context.TryGetValue("author_name", out authorName);
+			context.TryGetValue("author_email", out authorEmail);
+			context.TryGetValue("commit_message", out commitMessage);
+
+			var info = string.Format(RUN_INFORMATION_TEMPLATE, context["repository"], context["sha"], authorName, authorEmail, commitMessage, $"{context["repository_url"]}/actions/runs/{context["run_id"]}/attempts/{context["run_attempt"]}");
 			await AddInvocationLog(context, info);
 		}
 
