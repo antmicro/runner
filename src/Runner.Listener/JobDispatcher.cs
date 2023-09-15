@@ -20,13 +20,13 @@ namespace GitHub.Runner.Listener
     [ServiceLocator(Default = typeof(JobDispatcher))]
     public interface IJobDispatcher : IRunnerService
     {
-        bool[] Busy { get; }
+        bool Busy { get; }
+        EventWaitHandle BusyEvent { get; }
         TaskCompletionSource<bool> RunOnceJobCompleted { get; }
-        void Run(Pipelines.AgentJobRequestMessage message, int runnerId, bool runOnce = false);
+        void Run(Pipelines.AgentJobRequestMessage message, bool runOnce = false);
         bool Cancel(JobCancelMessage message);
-        Task<Task> WaitForCompletion();
-        void WaitAsync(CancellationToken token);
-        void ShutdownAsync();
+        Task WaitAsync(CancellationToken token);
+        Task ShutdownAsync();
     }
 
     // This implementation of IDobDispatcher is not thread safe.
@@ -37,28 +37,28 @@ namespace GitHub.Runner.Listener
     public sealed class JobDispatcher : RunnerService, IJobDispatcher
     {
         private readonly Lazy<Dictionary<long, TaskResult>> _localRunJobResult = new Lazy<Dictionary<long, TaskResult>>();
-        private IConfigurationStore _configurationStore;
+        private int _poolId;
+        RunnerSettings _runnerSetting;
         private static readonly string _workerProcessName = $"Runner.Worker{IOUtil.ExeExtension}";
 
         // this is not thread-safe
-        private readonly Queue<Guid>[] _jobDispatchedQueue = new Queue<Guid>[Constants.AvailableRunnerInstances];
+        private readonly Queue<Guid> _jobDispatchedQueue = new Queue<Guid>();
         private readonly ConcurrentDictionary<Guid, WorkerDispatcher> _jobInfos = new ConcurrentDictionary<Guid, WorkerDispatcher>();
 
         //allow up to 30sec for any data to be transmitted over the process channel
         //timeout limit can be overwrite by environment GITHUB_ACTIONS_RUNNER_CHANNEL_TIMEOUT
         private TimeSpan _channelTimeout;
 
-        private TaskCompletionSource<bool> _allJobCompleted = null;
         private TaskCompletionSource<bool> _runOnceJobCompleted = new TaskCompletionSource<bool>();
-        private SemaphoreSlim _checkCompletedSemaphore = new SemaphoreSlim(1, 1);
 
         public override void Initialize(IHostContext hostContext)
         {
             base.Initialize(hostContext);
 
-            _configurationStore = hostContext.GetService<IConfigurationStore>();
-            for (int i = 0; i < _jobDispatchedQueue.Length; ++i)
-                _jobDispatchedQueue[i] = new Queue<Guid>();
+            // get pool id from config
+            var configurationStore = hostContext.GetService<IConfigurationStore>();
+            _runnerSetting = configurationStore.GetSettings();
+            _poolId = _runnerSetting.PoolId;
 
             int channelTimeoutSeconds;
             if (!int.TryParse(Environment.GetEnvironmentVariable("GITHUB_ACTIONS_RUNNER_CHANNEL_TIMEOUT") ?? string.Empty, out channelTimeoutSeconds))
@@ -70,27 +70,22 @@ namespace GitHub.Runner.Listener
             _channelTimeout = TimeSpan.FromSeconds(Math.Min(Math.Max(channelTimeoutSeconds, 30), 300));
             Trace.Info($"Set runner/worker IPC timeout to {_channelTimeout.TotalSeconds} seconds.");
 
-            Busy = new bool[Constants.AvailableRunnerInstances];
-            for (int i = 0; i < Busy.Length; ++i)
-                Busy[i] = false;
+            BusyEvent = new EventWaitHandle(true, EventResetMode.ManualReset);
         }
 
         public TaskCompletionSource<bool> RunOnceJobCompleted => _runOnceJobCompleted;
 
-        public bool[] Busy { get; private set; }
-        private int _poolId(int? runnerId) {
-            return _configurationStore.GetSettings(runnerId).PoolId;
-        }
+        public bool Busy { get; private set; }
+        public EventWaitHandle BusyEvent { get; private set; }
 
-        public void Run(Pipelines.AgentJobRequestMessage jobRequestMessage, int runnerId, bool runOnce = false)
+        public void Run(Pipelines.AgentJobRequestMessage jobRequestMessage, bool runOnce = false)
         {
-            Busy[runnerId] = true;
             Trace.Info($"Job request {jobRequestMessage.RequestId} for plan {jobRequestMessage.Plan.PlanId} job {jobRequestMessage.JobId} received.");
 
             WorkerDispatcher currentDispatch = null;
-            if (_jobDispatchedQueue[runnerId].Count > 0)
+            if (_jobDispatchedQueue.Count > 0)
             {
-                Guid dispatchedJobId = _jobDispatchedQueue[runnerId].Dequeue();
+                Guid dispatchedJobId = _jobDispatchedQueue.Dequeue();
                 if (_jobInfos.TryGetValue(dispatchedJobId, out currentDispatch))
                 {
                     Trace.Verbose($"Retrive previous WorkerDispather for job {currentDispatch.JobId}.");
@@ -116,15 +111,15 @@ namespace GitHub.Runner.Listener
             if (runOnce)
             {
                 Trace.Info("Start dispatcher for one time used runner.");
-                newDispatch.WorkerDispatch = RunOnceAsync(jobRequestMessage, orchestrationId, runnerId, currentDispatch, newDispatch.WorkerCancellationTokenSource.Token, newDispatch.WorkerCancelTimeoutKillTokenSource.Token);
+                newDispatch.WorkerDispatch = RunOnceAsync(jobRequestMessage, orchestrationId, currentDispatch, newDispatch.WorkerCancellationTokenSource.Token, newDispatch.WorkerCancelTimeoutKillTokenSource.Token);
             }
             else
             {
-                newDispatch.WorkerDispatch = RunAsync(jobRequestMessage, orchestrationId, runnerId, currentDispatch, newDispatch.WorkerCancellationTokenSource.Token, newDispatch.WorkerCancelTimeoutKillTokenSource.Token);
+                newDispatch.WorkerDispatch = RunAsync(jobRequestMessage, orchestrationId, currentDispatch, newDispatch.WorkerCancellationTokenSource.Token, newDispatch.WorkerCancelTimeoutKillTokenSource.Token);
             }
 
             _jobInfos.TryAdd(newDispatch.JobId, newDispatch);
-            _jobDispatchedQueue[runnerId].Enqueue(newDispatch.JobId);
+            _jobDispatchedQueue.Enqueue(newDispatch.JobId);
         }
 
         public bool Cancel(JobCancelMessage jobCancelMessage)
@@ -148,107 +143,84 @@ namespace GitHub.Runner.Listener
             }
         }
 
-        public async Task<Task> WaitForCompletion()
+        public async Task WaitAsync(CancellationToken token)
         {
-            await _checkCompletedSemaphore.WaitAsync();
-            try
+            WorkerDispatcher currentDispatch = null;
+            Guid dispatchedJobId;
+            if (_jobDispatchedQueue.Count > 0)
             {
-                if (Busy.Any(busy => busy))
+                dispatchedJobId = _jobDispatchedQueue.Dequeue();
+                if (_jobInfos.TryGetValue(dispatchedJobId, out currentDispatch))
                 {
-                    _allJobCompleted = new TaskCompletionSource<bool>();
-                    return _allJobCompleted.Task;
+                    Trace.Verbose($"Retrive previous WorkerDispather for job {currentDispatch.JobId}.");
                 }
-                else
-                    return Task.CompletedTask;
             }
-            finally
+            else
             {
-                _checkCompletedSemaphore.Release();
+                Trace.Verbose($"There is no running WorkerDispather needs to await.");
             }
-        }
 
-        public void WaitAsync(CancellationToken token)
-        {
-            Parallel.For(0, _jobDispatchedQueue.Length, async runnerId => {
-                WorkerDispatcher currentDispatch = null;
-                Guid dispatchedJobId;
-                if (_jobDispatchedQueue[runnerId].Count > 0)
+            if (currentDispatch != null)
+            {
+                using (var registration = token.Register(() => { if (currentDispatch.Cancel(TimeSpan.FromSeconds(60))) { Trace.Verbose($"Fired cancellation token for job request {currentDispatch.JobId}."); } }))
                 {
-                    dispatchedJobId = _jobDispatchedQueue[runnerId].Dequeue();
-                    if (_jobInfos.TryGetValue(dispatchedJobId, out currentDispatch))
+                    try
                     {
-                        Trace.Verbose($"Retrive previous WorkerDispather for job {currentDispatch.JobId}.");
+                        Trace.Info($"Waiting WorkerDispather for job {currentDispatch.JobId} run to finish.");
+                        await currentDispatch.WorkerDispatch;
+                        Trace.Info($"Job request {currentDispatch.JobId} processed succeed.");
                     }
-                }
-                else
-                {
-                    Trace.Verbose($"There is no running WorkerDispather needs to await.");
-                }
-
-                if (currentDispatch != null)
-                {
-                    using (var registration = token.Register(() => { if (currentDispatch.Cancel(TimeSpan.FromSeconds(60))) { Trace.Verbose($"Fired cancellation token for job request {currentDispatch.JobId}."); } }))
+                    catch (Exception ex)
                     {
-                        try
+                        Trace.Error($"Worker Dispatch failed with an exception for job request {currentDispatch.JobId}.");
+                        Trace.Error(ex);
+                    }
+                    finally
+                    {
+                        WorkerDispatcher workerDispatcher;
+                        if (_jobInfos.TryRemove(currentDispatch.JobId, out workerDispatcher))
                         {
-                            Trace.Info($"Waiting WorkerDispather for job {currentDispatch.JobId} run to finish.");
-                            await currentDispatch.WorkerDispatch;
-                            Trace.Info($"Job request {currentDispatch.JobId} processed succeed.");
-                        }
-                        catch (Exception ex)
-                        {
-                            Trace.Error($"Worker Dispatch failed with an exception for job request {currentDispatch.JobId}.");
-                            Trace.Error(ex);
-                        }
-                        finally
-                        {
-                            WorkerDispatcher workerDispatcher;
-                            if (_jobInfos.TryRemove(currentDispatch.JobId, out workerDispatcher))
-                            {
-                                Trace.Verbose($"Remove WorkerDispather from {nameof(_jobInfos)} dictionary for job {currentDispatch.JobId}.");
-                                workerDispatcher.Dispose();
-                            }
+                            Trace.Verbose($"Remove WorkerDispather from {nameof(_jobInfos)} dictionary for job {currentDispatch.JobId}.");
+                            workerDispatcher.Dispose();
                         }
                     }
                 }
-            });
+            }
         }
 
-        public void ShutdownAsync()
+        public async Task ShutdownAsync()
         {
             Trace.Info($"Shutting down JobDispatcher. Make sure all WorkerDispatcher has finished.");
-            Parallel.For(0, _jobDispatchedQueue.Length, async runnerId => {
-                WorkerDispatcher currentDispatch = null;
-                if (_jobDispatchedQueue[runnerId].Count > 0)
+            WorkerDispatcher currentDispatch = null;
+            if (_jobDispatchedQueue.Count > 0)
+            {
+                Guid dispatchedJobId = _jobDispatchedQueue.Dequeue();
+                if (_jobInfos.TryGetValue(dispatchedJobId, out currentDispatch))
                 {
-                    Guid dispatchedJobId = _jobDispatchedQueue[runnerId].Dequeue();
-                    if (_jobInfos.TryGetValue(dispatchedJobId, out currentDispatch))
+                    try
                     {
-                        try
+                        Trace.Info($"Ensure WorkerDispather for job {currentDispatch.JobId} run to finish, cancel any running job.");
+                        await EnsureDispatchFinished(currentDispatch, cancelRunningJob: true);
+                    }
+                    catch (Exception ex)
+                    {
+                        Trace.Error($"Catching worker dispatch exception for job request {currentDispatch.JobId} durning job dispatcher shut down.");
+                        Trace.Error(ex);
+                    }
+                    finally
+                    {
+                        WorkerDispatcher workerDispatcher;
+                        if (_jobInfos.TryRemove(currentDispatch.JobId, out workerDispatcher))
                         {
-                            Trace.Info($"Ensure WorkerDispather for job {currentDispatch.JobId} run to finish, cancel any running job.");
-                            await EnsureDispatchFinished(currentDispatch, runnerId, cancelRunningJob: true);
-                        }
-                        catch (Exception ex)
-                        {
-                            Trace.Error($"Catching worker dispatch exception for job request {currentDispatch.JobId} durning job dispatcher shut down.");
-                            Trace.Error(ex);
-                        }
-                        finally
-                        {
-                            WorkerDispatcher workerDispatcher;
-                            if (_jobInfos.TryRemove(currentDispatch.JobId, out workerDispatcher))
-                            {
-                                Trace.Verbose($"Remove WorkerDispather from {nameof(_jobInfos)} dictionary for job {currentDispatch.JobId}.");
-                                workerDispatcher.Dispose();
-                            }
+                            Trace.Verbose($"Remove WorkerDispather from {nameof(_jobInfos)} dictionary for job {currentDispatch.JobId}.");
+                            workerDispatcher.Dispose();
                         }
                     }
                 }
-            });
+            }
         }
 
-        private async Task EnsureDispatchFinished(WorkerDispatcher jobDispatch, int runnerId, bool cancelRunningJob = false)
+        private async Task EnsureDispatchFinished(WorkerDispatcher jobDispatch, bool cancelRunningJob = false)
         {
             if (!jobDispatch.WorkerDispatch.IsCompleted)
             {
@@ -267,11 +239,11 @@ namespace GitHub.Runner.Listener
                 // if the runner received a new job request while a previous job request is still running, this typically indicate two situations
                 // 1. an runner bug cause server and runner mismatch on the state of the job request, ex. runner not renew jobrequest properly but think it still own the job reqest, however server already abandon the jobrequest.
                 // 2. a server bug or design change that allow server send more than one job request to an given runner that haven't finish previous job request.
+                var runnerServer = HostContext.GetService<IRunnerServer>();
                 TaskAgentJobRequest request = null;
                 try
                 {
-                    var runnerServer = HostContext.GetServiceArray<IRunnerServer>()[runnerId];
-                    request = await runnerServer.GetAgentRequestAsync(_poolId(runnerId), jobDispatch.RequestId, CancellationToken.None);
+                    request = await runnerServer.GetAgentRequestAsync(_poolId, jobDispatch.RequestId, CancellationToken.None);
                 }
                 catch (Exception ex)
                 {
@@ -333,11 +305,11 @@ namespace GitHub.Runner.Listener
             }
         }
 
-        private async Task RunOnceAsync(Pipelines.AgentJobRequestMessage message, string orchestrationId, int runnerId, WorkerDispatcher previousJobDispatch, CancellationToken jobRequestCancellationToken, CancellationToken workerCancelTimeoutKillToken)
+        private async Task RunOnceAsync(Pipelines.AgentJobRequestMessage message, string orchestrationId, WorkerDispatcher previousJobDispatch, CancellationToken jobRequestCancellationToken, CancellationToken workerCancelTimeoutKillToken)
         {
             try
             {
-                await RunAsync(message, orchestrationId, runnerId, previousJobDispatch, jobRequestCancellationToken, workerCancelTimeoutKillToken);
+                await RunAsync(message, orchestrationId, previousJobDispatch, jobRequestCancellationToken, workerCancelTimeoutKillToken);
             }
             finally
             {
@@ -346,14 +318,16 @@ namespace GitHub.Runner.Listener
             }
         }
 
-        private async Task RunAsync(Pipelines.AgentJobRequestMessage message, string orchestrationId, int runnerId, WorkerDispatcher previousJobDispatch, CancellationToken jobRequestCancellationToken, CancellationToken workerCancelTimeoutKillToken)
+        private async Task RunAsync(Pipelines.AgentJobRequestMessage message, string orchestrationId, WorkerDispatcher previousJobDispatch, CancellationToken jobRequestCancellationToken, CancellationToken workerCancelTimeoutKillToken)
         {
+            BusyEvent.Reset();
+            Busy = true;
             try
             {
                 if (previousJobDispatch != null)
                 {
                     Trace.Verbose($"Make sure the previous job request {previousJobDispatch.JobId} has successfully finished on worker.");
-                    await EnsureDispatchFinished(previousJobDispatch, runnerId);
+                    await EnsureDispatchFinished(previousJobDispatch);
                 }
                 else
                 {
@@ -367,7 +341,7 @@ namespace GitHub.Runner.Listener
 
                 // first job request renew succeed.
                 TaskCompletionSource<int> firstJobRequestRenewed = new TaskCompletionSource<int>();
-                var notification = HostContext.GetServiceArray<IJobNotification>()[runnerId];
+                var notification = HostContext.GetService<IJobNotification>();
 
                 // lock renew cancellation token.
                 using (var lockRenewalTokenSource = new CancellationTokenSource())
@@ -378,7 +352,7 @@ namespace GitHub.Runner.Listener
 
                     // start renew job request
                     Trace.Info($"Start renew job request {requestId} for job {message.JobId}.");
-                    Task renewJobRequest = RenewJobRequestAsync(_poolId(runnerId), requestId, lockToken, orchestrationId, runnerId, firstJobRequestRenewed, lockRenewalTokenSource.Token);
+                    Task renewJobRequest = RenewJobRequestAsync(_poolId, requestId, lockToken, orchestrationId, firstJobRequestRenewed, lockRenewalTokenSource.Token);
 
                     // wait till first renew succeed or job request is canceled
                     // not even start worker if the first renew fail
@@ -400,7 +374,7 @@ namespace GitHub.Runner.Listener
                         await renewJobRequest;
 
                         // complete job request with result Cancelled
-                        await CompleteJobRequestAsync(_poolId(runnerId), message, lockToken, runnerId, TaskResult.Canceled);
+                        await CompleteJobRequestAsync(_poolId, message, lockToken, TaskResult.Canceled);
                         return;
                     }
 
@@ -452,7 +426,7 @@ namespace GitHub.Runner.Listener
                                 var assemblyDirectory = HostContext.GetDirectory(WellKnownDirectory.Bin);
                                 string workerFileName = Path.Combine(assemblyDirectory, _workerProcessName);
                                 var workerEnv = new Dictionary<string, string>(){
-                                    {Constants.InstanceNumberVariable, $"{runnerId}"},
+                                    {Constants.InstanceNumberVariable, Environment.GetEnvironmentVariable(Constants.InstanceNumberVariable)},
                                     {"GITHUB_JOB_FULL", jobNameSanitized},
                                     {"GITHUB_SHA", $"{message.ContextData["github"].ToJToken()["sha"]}"},
                                     {"GITHUB_RUN_ID", $"{message.ContextData["github"].ToJToken()["run_id"]}"},
@@ -550,7 +524,7 @@ namespace GitHub.Runner.Listener
                                 await renewJobRequest;
 
                                 // complete job request
-                                await CompleteJobRequestAsync(_poolId(runnerId), message, lockToken, runnerId, result, detailInfo);
+                                await CompleteJobRequestAsync(_poolId, message, lockToken, result, detailInfo);
 
                                 // print out unhandled exception happened in worker after we complete job request.
                                 // when we run out of disk space, report back to server has higher priority.
@@ -647,7 +621,7 @@ namespace GitHub.Runner.Listener
                             await renewJobRequest;
 
                             // complete job request
-                            await CompleteJobRequestAsync(_poolId(runnerId), message, lockToken, runnerId, resultOnAbandonOrCancel);
+                            await CompleteJobRequestAsync(_poolId, message, lockToken, resultOnAbandonOrCancel);
                         }
                         finally
                         {
@@ -659,24 +633,17 @@ namespace GitHub.Runner.Listener
             }
             finally
             {
-                await _checkCompletedSemaphore.WaitAsync();
-                try
-                {
-                    Busy[runnerId] = false;
-                    if (_allJobCompleted != null && !Busy.Any(busy => busy))
-                        _allJobCompleted.TrySetResult(true);
-                } finally {
-                    _checkCompletedSemaphore.Release();
-                }
+                Busy = false;
+                BusyEvent.Set();
             }
         }
 
-        public async Task RenewJobRequestAsync(int poolId, long requestId, Guid lockToken, string orchestrationId, int runnerId, TaskCompletionSource<int> firstJobRequestRenewed, CancellationToken token)
+        public async Task RenewJobRequestAsync(int poolId, long requestId, Guid lockToken, string orchestrationId, TaskCompletionSource<int> firstJobRequestRenewed, CancellationToken token)
         {
+            var runnerServer = HostContext.GetService<IRunnerServer>();
             TaskAgentJobRequest request = null;
             int firstRenewRetryLimit = 5;
             int encounteringError = 0;
-            var runnerServer = HostContext.GetServiceArray<IRunnerServer>()[runnerId];
 
             // renew lock during job running.
             // stop renew only if cancellation token for lock renew task been signal or exception still happen after retry.
@@ -906,7 +873,7 @@ namespace GitHub.Runner.Listener
             }
         }
 
-        private async Task CompleteJobRequestAsync(int poolId, Pipelines.AgentJobRequestMessage message, Guid lockToken, int runnerId, TaskResult result, string detailInfo = null)
+        private async Task CompleteJobRequestAsync(int poolId, Pipelines.AgentJobRequestMessage message, Guid lockToken, TaskResult result, string detailInfo = null)
         {
             Trace.Entering();
 
@@ -916,9 +883,9 @@ namespace GitHub.Runner.Listener
                 return;
             }
 
+            var runnerServer = HostContext.GetService<IRunnerServer>();
             int completeJobRequestRetryLimit = 5;
             List<Exception> exceptions = new List<Exception>();
-            var runnerServer = HostContext.GetServiceArray<IRunnerServer>()[runnerId];
             while (completeJobRequestRetryLimit-- > 0)
             {
                 try

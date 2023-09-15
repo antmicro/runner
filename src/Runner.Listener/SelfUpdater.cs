@@ -69,7 +69,7 @@ namespace GitHub.Runner.Listener
                 // wait till all running job finish
                 await UpdateRunnerUpdateStateAsync("Waiting for current job finish running.");
 
-                jobDispatcher.WaitAsync(token);
+                await jobDispatcher.WaitAsync(token);
                 Trace.Info($"All running job has exited.");
 
                 // delete runner backup

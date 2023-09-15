@@ -26,13 +26,11 @@ namespace GitHub.Runner.Common
         List<ProductInfoHeaderValue> UserAgents { get; }
         RunnerWebProxy WebProxy { get; }
         string GetDirectory(WellKnownDirectory directory);
-        string GetConfigFile(WellKnownConfigFile configFile, int? instance = null);
+        string GetConfigFile(WellKnownConfigFile configFile);
         Tracing GetTrace(string name);
         Task Delay(TimeSpan delay, CancellationToken cancellationToken);
         T CreateService<T>(Type target = null) where T : class, IRunnerService;
-        T[] CreateServiceArray<T>(Type target = null) where T : class, IRunnerService;
         T GetService<T>() where T : class, IRunnerService;
-        T[] GetServiceArray<T>() where T : class, IRunnerService;
         void SetDefaultCulture(string name);
         event EventHandler Unloading;
         void ShutdownRunner(ShutdownReason reason);
@@ -339,10 +337,10 @@ namespace GitHub.Runner.Common
             return path;
         }
 
-        public string GetConfigFile(WellKnownConfigFile configFile, int? instance = null)
+        public string GetConfigFile(WellKnownConfigFile configFile)
         {
             string path;
-            string instanceNumber = (instance == null) ? Environment.GetEnvironmentVariable(Constants.InstanceNumberVariable) : $"{instance}";
+            string instanceNumber = Environment.GetEnvironmentVariable("GH_RUNNER_NUM");
             switch (configFile)
             {
                 case WellKnownConfigFile.Runner:
@@ -423,7 +421,10 @@ namespace GitHub.Runner.Common
             await Task.Delay(delay, cancellationToken);
         }
 
-        private Type ValidateType<T>(Type target = null) where T : class, IRunnerService
+        /// <summary>
+        /// Creates a new instance of T.
+        /// </summary>
+        public T CreateService<T>(Type target = null) where T : class, IRunnerService
         {
             if (target != null && !target.IsAssignableTo(typeof(T)))
             {
@@ -455,36 +456,11 @@ namespace GitHub.Runner.Common
                 _serviceTypes.TryAdd(typeof(T), target);
                 target = _serviceTypes[typeof(T)];
             }
-            return target;
-        }
-
-        /// <summary>
-        /// Creates a new instance of T.
-        /// </summary>
-        public T CreateService<T>(Type target = null) where T : class, IRunnerService
-        {
-            target = ValidateType<T>(target);
 
             // Create a new instance.
             T svc = Activator.CreateInstance(target) as T;
             svc.Initialize(this);
             return svc;
-        }
-
-        /// <summary>
-        /// Creates a new array of instances of T.
-        /// </summary>
-        public T[] CreateServiceArray<T>(Type target = null) where T : class, IRunnerService
-        {
-            target = ValidateType<T>(target);
-
-            T[] table = new T[Constants.AvailableRunnerInstances];
-            for (int i = 0; i < table.Length; ++i)
-            {
-                table[i] = Activator.CreateInstance(target) as T;
-                table[i].Initialize(this);
-            }
-            return table;
         }
 
         /// <summary>
@@ -504,28 +480,6 @@ namespace GitHub.Runner.Common
 
             // Return the instance from the cache.
             return _serviceInstances[typeof(T)] as T;
-        }
-
-        /// <summary>
-        /// Gets or creates an array of instances of T.
-        /// </summary>
-        public T[] GetServiceArray<T>() where T : class, IRunnerService
-        {
-            lock(typeof(T))
-            {
-                // Return the cached instance if one already exists.
-                object instance;
-                if (_serviceInstances.TryGetValue(typeof(T[]), out instance))
-                {
-                    return instance as T[];
-                }
-
-                // Otherwise create a new instance and try to add it to the cache.
-                _serviceInstances.TryAdd(typeof(T[]), CreateServiceArray<T>());
-
-                // Return the instance from the cache.
-                return _serviceInstances[typeof(T[])] as T[];
-            }
         }
 
         public void SetDefaultCulture(string name)

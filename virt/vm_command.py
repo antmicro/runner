@@ -825,7 +825,7 @@ def create_vm(
         f"sudo singularity instance start -C -e --dns {infer_dns_cmd} --writable-tmpfs {util_sif_location} util",
         ssh_tunnel_cmd,
         f'echo "::group::Starting {container_file}..."',
-        f"sudo singularity --debug instance start -C -e --dns {infer_dns_cmd} --no-mount /etc/localtime --overlay /mnt/1 --bind /mnt/2:/root,/mnt/aux,/dev,/mnt/shared-tmp:/tmp {container_sif_location} i",
+        f"sudo singularity --debug instance start -C -e --dns {infer_dns_cmd} --no-mount /etc/localtime --overlay /mnt/1 --bind /mnt/2:/root,/mnt/aux,/dev/fuse,/mnt/shared-tmp:/tmp {container_sif_location} i",
         'echo "::endgroup::"',
         'echo "::group::Checking container disks..."',
         "sudo singularity exec -e instance://i df -h /",

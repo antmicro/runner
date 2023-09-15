@@ -50,16 +50,6 @@ namespace GitHub.Runner.Common
         public static string CommonCustomLabel = "gcp-custom-runners";
         public static readonly string SecretScriptPrefix = "_secret_";
         public static readonly string DistantBesSocket = "/tmp/bes.socket";
-        public static readonly int AvailableRunnerInstances;
-
-        static Constants()
-        {
-            try {
-                AvailableRunnerInstances = int.Parse(Environment.GetEnvironmentVariable("GH_RUNNER_SCALE"));
-            } catch {
-                throw new Exception("GH_RUNNER_SCALE should always be defined");
-            }
-        }
 
         public static string LogDiskMountpoint = "/var/log/runner";
 

@@ -14,10 +14,9 @@ namespace GitHub.Runner.Listener.Configuration
         private string _keyFile;
         private IHostContext _context;
 
-        public RSA CreateKey(int? runnerId)
+        public RSA CreateKey()
         {
             RSA rsa = null;
-            _keyFile = _context.GetConfigFile(WellKnownConfigFile.RSACredentials, runnerId);
             if (!File.Exists(_keyFile))
             {
                 Trace.Info("Creating new RSA key using 2048-bit key length");
@@ -62,9 +61,8 @@ namespace GitHub.Runner.Listener.Configuration
             return rsa;
         }
 
-        public void DeleteKey(int? runnerId)
+        public void DeleteKey()
         {
-            _keyFile = _context.GetConfigFile(WellKnownConfigFile.RSACredentials, runnerId);
             if (File.Exists(_keyFile))
             {
                 Trace.Info("Deleting RSA key parameters file {0}", _keyFile);
@@ -72,17 +70,16 @@ namespace GitHub.Runner.Listener.Configuration
             }
         }
 
-        public RSA GetKey(int? runnerId)
+        public RSA GetKey()
         {
-            var keyFile = _context.GetConfigFile(WellKnownConfigFile.RSACredentials, runnerId);
-            if (!File.Exists(keyFile))
+            if (!File.Exists(_keyFile))
             {
-                throw new CryptographicException($"RSA key file {keyFile} was not found");
+                throw new CryptographicException($"RSA key file {_keyFile} was not found");
             }
 
-            Trace.Info("Loading RSA key parameters from file {0}", keyFile);
+            Trace.Info("Loading RSA key parameters from file {0}", _keyFile);
 
-            var parameters = IOUtil.LoadObject<RSAParametersSerializable>(keyFile).RSAParameters;
+            var parameters = IOUtil.LoadObject<RSAParametersSerializable>(_keyFile).RSAParameters;
             var rsa = RSA.Create();
             rsa.ImportParameters(parameters);
             return rsa;
@@ -93,6 +90,7 @@ namespace GitHub.Runner.Listener.Configuration
             base.Initialize(context);
 
             _context = context;
+            _keyFile = context.GetConfigFile(WellKnownConfigFile.RSACredentials);
         }
     }
 }

@@ -22,7 +22,7 @@ namespace GitHub.Runner.Listener.Configuration
         bool IsConfigured();
         Task ConfigureAsync(CommandSettings command);
         Task UnconfigureAsync(CommandSettings command);
-        RunnerSettings LoadSettings(int? runnerId = null);
+        RunnerSettings LoadSettings();
     }
 
     public sealed class ConfigurationManager : RunnerService, IConfigurationManager
@@ -48,16 +48,15 @@ namespace GitHub.Runner.Listener.Configuration
             return result;
         }
 
-        public RunnerSettings LoadSettings(int? runnerId)
+        public RunnerSettings LoadSettings()
         {
             Trace.Info(nameof(LoadSettings));
-            Trace.Info($"{nameof(runnerId)}: {runnerId}");
             if (!IsConfigured())
             {
                 throw new InvalidOperationException("Not configured");
             }
 
-            RunnerSettings settings = _store.GetSettings(runnerId);
+            RunnerSettings settings = _store.GetSettings();
             Trace.Info("Settings Loaded");
 
             return settings;
@@ -353,7 +352,7 @@ namespace GitHub.Runner.Listener.Configuration
 
                 //delete agent from the server
                 currentAction = "Removing runner from the server";
-                bool isConfigured = _store.IsConfigured(null);
+                bool isConfigured = _store.IsConfigured();
                 bool hasCredentials = _store.HasCredentials();
                 if (isConfigured && hasCredentials)
                 {
@@ -518,7 +517,6 @@ namespace GitHub.Runner.Listener.Configuration
 
         private async Task<string> GetRunnerTokenAsync(CommandSettings command, string githubUrl, string tokenType)
         {
-            Trace.Entering(nameof(GetRunnerTokenAsync));
             var githubPAT = command.GetGitHubPersonalAccessToken();
             var runnerToken = string.Empty;
             if (!string.IsNullOrEmpty(githubPAT))

@@ -25,13 +25,12 @@ done
 
 cd _layout
 
-all=$num
 num=`expr $num - 1`
 
 for i in $(seq 0 $num); do
     if [ "$remove" -eq 1 ]; then
-        GH_RUNNER_SCALE=$all GH_RUNNER_NUM=$i ./config.sh remove --token $token --unattended
+        GH_RUNNER_NUM=$i ./config.sh remove --token $token --unattended
     else
-        GH_RUNNER_SCALE=$all GH_RUNNER_NUM=$i ./config.sh --url $url --token $token --unattended
+        GH_RUNNER_NUM=$i ./config.sh --url $url --token $token --unattended
     fi
 done

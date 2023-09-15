@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Runtime.Serialization;
 using GitHub.Runner.Common;
@@ -13,7 +13,7 @@ namespace GitHub.Runner.Listener.Configuration
     public interface ICredentialManager : IRunnerService
     {
         ICredentialProvider GetCredentialProvider(string credType);
-        VssCredentials LoadCredentials(int? runnerId = null);
+        VssCredentials LoadCredentials();
     }
 
     public class CredentialManager : RunnerService, ICredentialManager
@@ -40,32 +40,32 @@ namespace GitHub.Runner.Listener.Configuration
             return creds;
         }
 
-        public VssCredentials LoadCredentials(int? runnerId)
+        public VssCredentials LoadCredentials()
         {
             IConfigurationStore store = HostContext.GetService<IConfigurationStore>();
 
-            if (!store.HasCredentials(runnerId))
+            if (!store.HasCredentials())
             {
                 throw new InvalidOperationException("Credentials not stored.  Must reconfigure.");
             }
 
-            CredentialData credData = store.GetCredentials(runnerId);
-            var migratedCred = store.GetMigratedCredentials(runnerId);
+            CredentialData credData = store.GetCredentials();
+            var migratedCred = store.GetMigratedCredentials();
             if (migratedCred != null)
             {
                 credData = migratedCred;
 
                 // Re-write .credentials with Token URL
-                store.SaveCredential(credData, runnerId);
+                store.SaveCredential(credData);
 
                 // Delete .credentials_migrated
-                store.DeleteMigratedCredential(runnerId);
+                store.DeleteMigratedCredential();
             }
 
             ICredentialProvider credProv = GetCredentialProvider(credData.Scheme);
             credProv.CredentialData = credData;
 
-            VssCredentials creds = credProv.GetVssCredentials(HostContext, runnerId);
+            VssCredentials creds = credProv.GetVssCredentials(HostContext);
 
             return creds;
         }
