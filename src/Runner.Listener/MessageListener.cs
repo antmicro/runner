@@ -13,6 +13,7 @@ using System.Diagnostics;
 using System.Runtime.InteropServices;
 using GitHub.Runner.Common;
 using GitHub.Runner.Sdk;
+using GitHub.Runner.Common.Util;
 
 namespace GitHub.Runner.Listener
 {
@@ -220,6 +221,8 @@ namespace GitHub.Runner.Listener
                                                                 _lastMessageId,
                                                                 runnerStatus,
                                                                 BuildConstants.RunnerPackage.Version,
+                                                                VarUtil.OS,
+                                                                VarUtil.OSArchitecture,
                                                                 _getMessagesTokenSource.Token);
 
                     // Decrypt the message body if the session is using encryption
