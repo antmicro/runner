@@ -14,6 +14,7 @@ using GitHub.Runner.Sdk;
 using GitHub.Runner.Common.Util;
 using GitHub.Services.OAuth;
 using GitHub.Services.Common;
+using GitHub.Services.WebApi;
 
 namespace GitHub.Runner.Listener
 {
@@ -34,6 +35,7 @@ namespace GitHub.Runner.Listener
         private RunnerSettings _settings;
         private ITerminal _term;
         private IRunnerServer _runnerServer;
+        private IBrokerServer _brokerServer;
         private TaskAgentSession _session;
         private TimeSpan _getNextMessageRetryInterval;
         private bool _accessTokenRevoked = false;
@@ -43,6 +45,9 @@ namespace GitHub.Runner.Listener
         private readonly Dictionary<string, int> _sessionCreationExceptionTracker = new Dictionary<string, int>();
         private TaskAgentStatus runnerStatus = TaskAgentStatus.Online;
         private CancellationTokenSource _getMessagesTokenSource;
+        private VssCredentials _creds;
+
+        private bool _isBrokerSession = false;
 
         public override void Initialize(IHostContext hostContext)
         {
@@ -50,6 +55,7 @@ namespace GitHub.Runner.Listener
 
             _term = HostContext.GetService<ITerminal>();
             _runnerServer = HostContext.GetService<IRunnerServer>();
+            _brokerServer = hostContext.GetService<IBrokerServer>();
         }
 
         public string GetInitRunnerVersion()
@@ -70,7 +76,7 @@ namespace GitHub.Runner.Listener
             // Create connection.
             Trace.Info("Loading Credentials");
             var credMgr = HostContext.GetService<ICredentialManager>();
-            VssCredentials creds = credMgr.LoadCredentials();
+            _creds = credMgr.LoadCredentials();
 
             var agent = new TaskAgentReference
             {
@@ -95,7 +101,7 @@ namespace GitHub.Runner.Listener
                 try
                 {
                     Trace.Info("Connecting to the Runner Server...");
-                    await _runnerServer.ConnectAsync(new Uri(serverUrl), creds);
+                    await _runnerServer.ConnectAsync(new Uri(serverUrl), _creds);
                     Trace.Info("VssConnection created");
 
                     _term.WriteLine();
@@ -107,6 +113,14 @@ namespace GitHub.Runner.Listener
                                                         _settings.PoolId,
                                                         taskAgentSession,
                                                         token);
+
+                    if (_session.BrokerMigrationMessage != null)
+                    {
+                        Trace.Info("Runner session is in migration mode: Creating Broker session with BrokerBaseUrl: {0}", _session.BrokerMigrationMessage.BrokerBaseUrl);
+                        await _brokerServer.ConnectAsync(_session.BrokerMigrationMessage.BrokerBaseUrl, _creds);
+                        _session = await _brokerServer.CreateSessionAsync(taskAgentSession, token);
+                        _isBrokerSession = true;
+                    }
 
                     Trace.Info($"Session created.");
                     if (encounteringError)
@@ -134,7 +148,7 @@ namespace GitHub.Runner.Listener
                     Trace.Error("Catch exception during create session.");
                     Trace.Error(ex);
 
-                    if (ex is VssOAuthTokenRequestException vssOAuthEx && creds.Federated is VssOAuthCredential vssOAuthCred)
+                    if (ex is VssOAuthTokenRequestException vssOAuthEx && _creds.Federated is VssOAuthCredential vssOAuthCred)
                     {
                         // "invalid_client" means the runner registration has been deleted from the server.
                         if (string.Equals(vssOAuthEx.Error, "invalid_client", StringComparison.OrdinalIgnoreCase))
@@ -181,6 +195,11 @@ namespace GitHub.Runner.Listener
                 {
                     using (var ts = new CancellationTokenSource(TimeSpan.FromSeconds(30)))
                     {
+                        if (_isBrokerSession)
+                        {
+                            await _brokerServer.DeleteSessionAsync(ts.Token);
+                            return;
+                        }
                         await _runnerServer.DeleteAgentSessionAsync(_settings.PoolId, _session.SessionId, ts.Token);
                     }
                 }
@@ -237,6 +256,23 @@ namespace GitHub.Runner.Listener
 
                     // Decrypt the message body if the session is using encryption
                     message = DecryptMessage(message);
+
+
+                    if (message != null && message.MessageType == BrokerMigrationMessage.MessageType)
+                    {
+                        Trace.Info("BrokerMigration message received. Polling Broker for messages...");
+
+                        var migrationMessage = JsonUtility.FromString<BrokerMigrationMessage>(message.Body);
+
+                        await _brokerServer.ConnectAsync(migrationMessage.BrokerBaseUrl, _creds);
+                        message = await _brokerServer.GetRunnerMessageAsync(_session.SessionId,
+                                                                        runnerStatus,
+                                                                        BuildConstants.RunnerPackage.Version,
+                                                                        VarUtil.OS,
+                                                                        VarUtil.OSArchitecture,
+                                                                        _settings.DisableUpdate,
+                                                                        token);
+                    }
 
                     if (message != null)
                     {
