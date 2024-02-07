@@ -486,6 +486,10 @@ namespace GitHub.Runner.Listener
                                     Trace.Info($"Skip message deletion for cancellation message '{message.MessageId}'.");
                                 }
                             }
+                            else if (string.Equals(message.MessageType, TaskAgentMessageTypes.ForceTokenRefresh))
+                            {
+                                await _listener.RefreshListenerTokenAsync(_messageQueueLoopTokenSource.Token);
+                            }
                             else
                             {
                                 Trace.Error($"Received message {message.MessageId} with unsupported message type {message.MessageType}.");

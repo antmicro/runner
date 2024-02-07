@@ -26,6 +26,8 @@ namespace GitHub.Runner.Listener
         Task<TaskAgentMessage> GetNextMessageAsync(CancellationToken token);
         Task DeleteMessageAsync(TaskAgentMessage message);
         string GetInitRunnerVersion();
+
+        Task RefreshListenerTokenAsync(CancellationToken token);
         void OnJobStatus(object sender, JobStatusEventArgs e);
     }
 
@@ -392,6 +394,11 @@ namespace GitHub.Runner.Listener
                     await _runnerServer.DeleteAgentMessageAsync(_settings.PoolId, message.MessageId, _session.SessionId, cs.Token);
                 }
             }
+        }
+
+        public async Task RefreshListenerTokenAsync(CancellationToken cancellationToken)
+        {
+            await _runnerServer.RefreshConnectionAsync(RunnerConnectionType.MessageQueue, TimeSpan.FromSeconds(60));
         }
 
         private TaskAgentMessage DecryptMessage(TaskAgentMessage message)
