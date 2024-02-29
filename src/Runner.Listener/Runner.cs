@@ -465,6 +465,11 @@ namespace GitHub.Runner.Listener
                                             Trace.Info("Job is already acquired, skip this message.");
                                             continue;
                                         }
+                                        catch (Exception ex)
+                                        {
+                                            Trace.Error($"Caught exception from acquiring job message: {ex}");
+                                            continue;
+                                        }
                                     }
 
                                     _jobDispatcher.Run(jobRequestMessage, runOnce);
