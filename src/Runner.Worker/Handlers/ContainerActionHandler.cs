@@ -201,6 +201,20 @@ namespace GitHub.Runner.Worker.Handlers
                 Environment["ACTIONS_CACHE_URL"] = cacheUrl;
             }
 
+            if (systemConnection.Data.TryGetValue("PipelinesServiceUrl", out var pipelinesServiceUrl) && !string.IsNullOrEmpty(pipelinesServiceUrl))
+            {
+                Environment["ACTIONS_RUNTIME_URL"] = pipelinesServiceUrl;
+            }
+            if (systemConnection.Data.TryGetValue("GenerateIdTokenUrl", out var generateIdTokenUrl) && !string.IsNullOrEmpty(generateIdTokenUrl))
+            {
+                Environment["ACTIONS_ID_TOKEN_REQUEST_URL"] = generateIdTokenUrl;
+                Environment["ACTIONS_ID_TOKEN_REQUEST_TOKEN"] = systemConnection.Authorization.Parameters[EndpointAuthorizationParameters.AccessToken];
+            }
+            if (systemConnection.Data.TryGetValue("ResultsServiceUrl", out var resultsUrl) && !string.IsNullOrEmpty(resultsUrl))
+            {
+                Environment["ACTIONS_RESULTS_URL"] = resultsUrl;
+            }
+
             foreach (var variable in this.Environment)
             {
                 container.ContainerEnvironmentVariables[variable.Key] = container.TranslateToContainerPath(variable.Value);
