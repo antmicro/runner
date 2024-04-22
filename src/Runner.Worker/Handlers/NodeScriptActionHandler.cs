@@ -59,6 +59,8 @@ namespace GitHub.Runner.Worker.Handlers
             {
                 Environment["ACTIONS_CACHE_URL"] = cacheUrl;
             }
+            // TODO: this is a hard-coded value which seems to be static but we should probably backport the ResultsService code.
+            Environment["ACTIONS_RESULTS_URL"] = "https://results-receiver.actions.githubusercontent.com/";
 
             // Resolve the target script.
             string target = null;
