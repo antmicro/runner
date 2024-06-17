@@ -42,12 +42,12 @@ namespace GitHub.Runner.Common
 
         protected Func<string, bool, bool, Task> _uploadLogs;
 
-        private string _resultsDataFileName;
-        private FileStream _resultsBlockData;
-        private StreamWriter _resultsBlockWriter;
-        private string _resultsBlockFolder;
-        private int _blockByteCount;
-        private int _blockCount;
+        protected string _resultsDataFileName;
+        protected FileStream _resultsBlockData;
+        protected StreamWriter _resultsBlockWriter;
+        protected string _resultsBlockFolder;
+        protected int _blockByteCount;
+        protected int _blockCount;
 
         public long TotalLines => _totalLines;
         public int PageCount => _pageCount;
@@ -130,7 +130,12 @@ namespace GitHub.Runner.Common
         {
             return $"{_timelineId}_{_timelineRecordId}_secret_{_pageCount}.log";
         }
-
+        
+        protected virtual string BlockFileName()
+        {
+            return $"{_timelineId}_{_timelineRecordId}_secret.{++_blockCount}";
+        }
+        
         private void NewPage()
         {
             EndPage();
@@ -160,7 +165,7 @@ namespace GitHub.Runner.Common
         {
             EndBlock(false);
             _blockByteCount = 0;
-            _resultsDataFileName = Path.Combine(_resultsBlockFolder, $"{_timelineId}_{_timelineRecordId}.{++_blockCount}");
+            _resultsDataFileName = Path.Combine(_resultsBlockFolder, BlockFileName());
             _resultsBlockData = new FileStream(_resultsDataFileName, FileMode.CreateNew, FileAccess.ReadWrite, FileShare.ReadWrite);
             _resultsBlockWriter = new StreamWriter(_resultsBlockData, System.Text.Encoding.UTF8);
         }
@@ -196,10 +201,15 @@ namespace GitHub.Runner.Common
                 _jobServerQueue.QueueFileUpload(_timelineId, _timelineRecordId, "DistributedTask.Core.Log", "CustomToolLog", _dataFileName, true);
             }
         }
-
+        
         protected override string LogFileName()
         {
             return $"{_timelineId}_{_timelineRecordId}_{_pageCount}.log";
+        }
+        
+        protected override string BlockFileName()
+        {
+            return $"{_timelineId}_{_timelineRecordId}.{++_blockCount}";
         }
     }
 }
