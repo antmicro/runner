@@ -4,6 +4,12 @@ namespace GitHub.Runner.Sdk
 {
     public static class UrlUtil
     {
+        // A dummy method to avoid pulling https://github.com/actions/runner/commit/7ee333b5cd75edaeafa2cd57089be2d5a67d6f04
+        public static bool IsHostedServer(UriBuilder gitHubUrl)
+        {
+            return true;
+        }
+
         public static Uri GetCredentialEmbeddedUrl(Uri baseUrl, string username, string password)
         {
             ArgUtil.NotNull(baseUrl, nameof(baseUrl));

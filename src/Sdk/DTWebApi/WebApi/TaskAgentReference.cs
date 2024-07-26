@@ -93,6 +93,17 @@ namespace GitHub.DistributedTask.WebApi
         }
 
         /// <summary>
+        /// Whether or not this agent should auto-update to latest version.
+        /// WARNING: this is a dummy variable to avoid pulling https://github.com/actions/runner/commit/8eacbdc79f60f8998fe45d43397bea6785f5604f
+        /// </summary>
+        [DataMember(EmitDefaultValue = false)]
+        public bool? DisableUpdate
+        {
+            get;
+            set;
+        }
+
+        /// <summary>
         /// Whether or not the agent is online.
         /// </summary>
         [DataMember]
