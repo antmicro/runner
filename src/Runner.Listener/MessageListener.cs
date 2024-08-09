@@ -198,6 +198,11 @@ namespace GitHub.Runner.Listener
                     if (message != null)
                     {
                         _lastMessageId = message.MessageId;
+                        Trace.Info($"Received message of type: {message.MessageType} with body {message.Body}");
+                    }
+                    else
+                    {
+                        Trace.Info("Received null message");
                     }
 
                     if (encounteringError) //print the message once only if there was an error
