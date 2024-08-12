@@ -14,7 +14,6 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Net.Http;
-using GitHub.DistributedTask.WebApi;
 using GitHub.Runner.Common;
 using GitHub.Runner.Sdk;
 using GitHub.Runner.GCP;
@@ -35,7 +34,6 @@ namespace GitHub.Runner.Worker
         private IJobServerQueue _jobServerQueue;
         private ITempDirectoryManager _tempDirectoryManager;
         private const string RestrictedServiceAccountWarning = "Attachment of SA is restricted to non-fork PRs";
-        private PipelinesHttpClient _pipelinesHttpClient;
         private IBesServerHttpClient _besServerClient;
 
         public async Task<TaskResult> RunAsync(Pipelines.AgentJobRequestMessage message, CancellationToken jobRequestCancellationToken)
@@ -95,8 +93,8 @@ namespace GitHub.Runner.Worker
 
             dynamic vmSpecs = JObject.Parse(File.ReadAllText(Path.Combine(rootDir, ".vm_specs.json")));
 
-            Trace.Info("Creating pipeline server");
-            _pipelinesHttpClient = jobConnection.GetClient<PipelinesHttpClient>();
+            //Trace.Info("Creating pipeline server");
+            //_pipelinesHttpClient = jobConnection.GetClient<PipelinesHttpClient>();
 
             HostContext.WritePerfCounter($"WorkerJobServerQueueStarted_{message.RequestId.ToString()}");
 
@@ -120,7 +118,7 @@ namespace GitHub.Runner.Worker
                 {
                     Trace.Error(ex);
                     jobContext.Error(ex);
-                    return await CompleteJobAsync(jobServer, jobContext, message, jobStartTimeUtc, TaskResult.Failed);
+                    return await CompleteJobAsync(server, jobContext, message, TaskResult.Failed);
                 }
 
                 Trace.Info($"PipelineDirectory: {PipelineDirectory}");
@@ -231,7 +229,7 @@ namespace GitHub.Runner.Worker
                 if (!JobPassesSecurityRestrictions(jobContext))
                 {
                     jobContext.Error("Running job on this worker disallowed by security policy");
-                    return await CompleteJobAsync(jobServer, jobContext, message, jobStartTimeUtc, TaskResult.Failed);
+                    return await CompleteJobAsync(server, jobContext, message, TaskResult.Failed);
                 }
 
                 IExecutionContext vmCtx = jobContext.CreateChild(Guid.NewGuid(), "Set up VM", "VM_Init", null, null, ActionRunStage.Main);
@@ -286,7 +284,7 @@ namespace GitHub.Runner.Worker
                         Trace.Error("Exception when checking if PR is from fork!");
                         Trace.Error(e.Message);
                         jobContext.Error("Exception when starting job!");
-                        return await CompleteJobAsync(jobServer, jobContext, message, jobStartTimeUtc, TaskResult.Failed);
+                        return await CompleteJobAsync(server, jobContext, message, TaskResult.Failed);
                     }
                 }
 
@@ -325,7 +323,7 @@ namespace GitHub.Runner.Worker
                 if (vmExitCode > 0) {
                     jobContext.Error($"VM starter exited with non-zero exit code: {vmExitCode}");
                     vmCtx.Complete();
-                    return await CompleteJobAsync(jobServer, jobContext, message, jobStartTimeUtc, TaskResult.Failed);
+                    return await CompleteJobAsync(server, jobContext, message, TaskResult.Failed);
                 }
 
                 // get and set bucket name for logs
@@ -499,20 +497,15 @@ namespace GitHub.Runner.Worker
         {
             jobContext.Debug($"Finishing: {message.JobDisplayName}");
             TaskResult result = jobContext.Complete(taskResult);
-            if (jobContext.Global.Variables.TryGetValue("Node12ActionsWarnings", out var node12Warnings))
-            {
-                var actions = string.Join(", ", StringUtil.ConvertFromJson<HashSet<string>>(node12Warnings));
-                jobContext.Warning(string.Format(Constants.Runner.Node12DetectedAfterEndOfLife, actions));
-            }
 
             // Make sure to clean temp after file upload since they may be pending fileupload still use the TEMP dir.
             _tempDirectoryManager?.CleanupTempDirectory();
 
             // Load any upgrade telemetry
-            LoadFromTelemetryFile(jobContext.Global.JobTelemetry);
+            //LoadFromTelemetryFile(jobContext.Global.JobTelemetry);
 
-            // Make sure we don't submit secrets as telemetry
-            MaskTelemetrySecrets(jobContext.Global.JobTelemetry);
+            //// Make sure we don't submit secrets as telemetry
+            //MaskTelemetrySecrets(jobContext.Global.JobTelemetry);
 
             Trace.Info($"Raising job completed against run service");
             var completeJobRetryLimit = 5;
