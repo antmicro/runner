@@ -129,13 +129,6 @@ namespace GitHub.Services.OAuth
         {
             return new VssOAuthTokenProvider(this, serverUrl);
         }
-        
-        public VssOAuthTokenProvider GetTokenProvider(
-            Uri serviceUrl)
-        {
-            return new VssOAuthTokenProvider(this, serviceUrl);
-        }
-
 
         private VssOAuthTokenParameters m_tokenParameters;
 
