@@ -200,5 +200,10 @@ namespace GitHub.Runner.Listener
             VssCredentials creds = credMgr.LoadCredentials();
             await _brokerServer.ConnectAsync(new Uri(_settings.ServerUrlV2), creds);
         }
+
+        public string GetInitRunnerVersion()
+        {
+            return "";
+        }
     }
 }
