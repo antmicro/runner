@@ -35,6 +35,9 @@ namespace GitHub.Runner.Common
         public string PoolName { get; set; }
 
         [DataMember(EmitDefaultValue = false)]
+        public bool DisableUpdate { get; set; }
+
+        [DataMember(EmitDefaultValue = false)]
         public string ServerUrl { get; set; }
 
         [DataMember(EmitDefaultValue = false)]
