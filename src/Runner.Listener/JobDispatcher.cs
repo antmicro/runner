@@ -39,6 +39,7 @@ namespace GitHub.Runner.Listener
     // and server will not send another job while this one is still running.
     public sealed class JobDispatcher : RunnerService, IJobDispatcher
     {
+        private static Regex _invalidJsonRegex = new Regex(@"invalid\ Json\ at\ position\ '(\d+)':", RegexOptions.Compiled | RegexOptions.IgnoreCase);
         private readonly Lazy<Dictionary<long, TaskResult>> _localRunJobResult = new Lazy<Dictionary<long, TaskResult>>();
         private int _poolId;
         RunnerSettings _runnerSetting;
