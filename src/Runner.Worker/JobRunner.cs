@@ -750,12 +750,13 @@ namespace GitHub.Runner.Worker
             }
         }
 
-        private async Task<TaskResult> CompleteJobAsync(IJobServer jobServer, IExecutionContext jobContext, Pipelines.AgentJobRequestMessage message, DateTime jobStartTime, TaskResult? taskResult = null)
+        private async Task<TaskResult> CompleteJobAsync(IJobServer jobServer, IExecutionContext jobContext, Pipelines.AgentJobRequestMessage message, TaskResult? taskResult = null)
         {
             jobContext.Debug($"Finishing: {message.JobDisplayName}");
             TaskResult result = jobContext.Complete(taskResult);
 
-            var totalTimeMs = (long) (DateTime.UtcNow - jobStartTime).TotalMilliseconds;
+            //var totalTimeMs = (long) (DateTime.UtcNow - jobStartTime).TotalMilliseconds;
+            var totalTimeMs = 1000; // TODO: fix this later
             Trace.Info($"Total time of current job: {totalTimeMs} ms");
             await _besServerClient.DeleteTarget(jobContext.ExpressionValues["github"] as GitHubContext, (int) result, totalTimeMs);
 
