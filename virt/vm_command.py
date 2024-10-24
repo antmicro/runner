@@ -66,6 +66,15 @@ class METADATA(str, enum.Enum):
     BRV_URL = "BRV_URL"
     BRV_PUBLIC_URL = "BRV_PUBLIC_URL"
 
+def load_boot_id():
+    with open("/proc/sys/kernel/random/boot_id", "r") as f:
+        line = f.readline().split('\n')[0]
+        return line
+    
+def load_coordinator_pid():
+    with open("./work/supervisord.pid", "r") as f:
+        line = f.readline().split('\n')[0]
+        return line
 
 USER = "scalerunner"
 PUBKEY = (
@@ -78,6 +87,9 @@ SARGRAPH_RAMDISK_SIZE_MB = 50
 
 LABELS = [{e.lower(): (os.environ.get(e) or "null")[:63].lower()
            for e in GH_ENV_LIST}]
+
+LABELS[0]["coordinator_pid"] = load_coordinator_pid()
+LABELS[0]["coordinator_boot_id"] = load_boot_id()
 
 GCP_RESOURCE_EXHAUSTION_ERR = "ZONE_RESOURCE_POOL_EXHAUSTED"
 GCP_RESOURCE_EXHAUSTION_EXAMPLE_ERR = [
@@ -96,7 +108,6 @@ def load_config():
             f, object_hook=lambda d: namedtuple(
                 "vm_specs", d.keys())(*d.values())
         )
-
 
 CONFIG = load_config()
 
