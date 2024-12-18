@@ -149,6 +149,11 @@ def get_worker_image_name(architecture="X86_64"):
 
 
 def get_current_network():
+    try:
+        return CONFIG.gcp.network_override
+    except AttributeError:
+        pass
+
     with requests.get(
         "http://metadata.google.internal/computeMetadata/v1/instance/network-interfaces/0/network",
         headers={"Metadata-Flavor": "Google"},
