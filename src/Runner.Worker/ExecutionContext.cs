@@ -1105,7 +1105,7 @@ namespace GitHub.Runner.Worker
 
         public string GetLogsURLOnBucket()
         {
-            return $"https://storage.cloud.google.com/{HostContext.BucketName}/{GetBucketDestinationFolder()}/{GetBucketDestinationFileName()}";
+            return $"https://storage.cloud.google.com/{HostContext.BucketName}/{GetBucketDestinationFolder()}/{GetBucketDestinationFileName()}".Replace(" ", "%20").Replace(",", "%2C");
         }
 
         private async Task UploadLog(string pathToLog, bool removeUploaded = false, bool secret = false)
