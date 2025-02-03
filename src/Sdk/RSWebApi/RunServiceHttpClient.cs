@@ -69,12 +69,15 @@ namespace GitHub.Actions.RunService.WebApi
         public async Task<AgentJobRequestMessage> GetJobMessageAsync(
             Uri requestUri,
             string messageId,
+            string billingOwnerId,
             CancellationToken cancellationToken = default)
         {
             HttpMethod httpMethod = new HttpMethod("POST");
             var payload = new AcquireJobRequest
             {
-                StreamID = messageId
+                StreamID = messageId,
+                JobMessageId = messageId,
+                BillingOwnerId = billingOwnerId,
             };
 
             requestUri = new Uri(requestUri, "acquirejob");
@@ -131,6 +134,7 @@ namespace GitHub.Actions.RunService.WebApi
             TaskResult conclusion,
             Dictionary<String, VariableValue> outputs,
             IList<StepResult> stepResults,
+            string billingOwnerId,
             CancellationToken cancellationToken = default)
         {
             HttpMethod httpMethod = new HttpMethod("POST");
@@ -140,7 +144,8 @@ namespace GitHub.Actions.RunService.WebApi
                 JobID = jobId,
                 Conclusion = conclusion,
                 Outputs = outputs,
-                StepResults = stepResults
+                StepResults = stepResults,
+                BillingOwnerId = billingOwnerId,
             };
 
             requestUri = new Uri(requestUri, "completejob");

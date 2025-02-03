@@ -22,5 +22,8 @@ namespace GitHub.Actions.RunService.WebApi
         
         [DataMember(Name = "stepResults", EmitDefaultValue = false)]
         public IList<StepResult> StepResults { get; set; }
+
+        [DataMember(Name = "billingOwnerId", EmitDefaultValue = false)]
+        public string BillingOwnerId { get; set; }
     }
 }

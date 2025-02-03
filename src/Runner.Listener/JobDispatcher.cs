@@ -1163,7 +1163,7 @@ namespace GitHub.Runner.Listener
             {
                 try
                 {
-                    await runServer.CompleteJobAsync(message.Plan.PlanId, message.JobId, TaskResult.Failed, outputs: null, stepResults: null, CancellationToken.None);
+                    await runServer.CompleteJobAsync(message.Plan.PlanId, message.JobId, TaskResult.Failed, outputs: null, stepResults: null, billingOwnerId: message.BillingOwnerId, CancellationToken.None);
                 }
                 catch (Exception ex)
                 {

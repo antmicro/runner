@@ -237,6 +237,20 @@ namespace GitHub.DistributedTask.Pipelines
             set;
         }
 
+        [DataMember(EmitDefaultValue = false)]
+        public TemplateToken Snapshot
+        {
+            get;
+            set;
+        }
+
+        [DataMember(EmitDefaultValue = false)]
+        public String BillingOwnerId
+        {
+            get;
+            set;
+        }
+
         /// <summary>
         /// Gets the collection of variables associated with the current context.
         /// </summary>
