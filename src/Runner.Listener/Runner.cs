@@ -268,7 +268,7 @@ namespace GitHub.Runner.Listener
             }
         }
 
-        private IMessageListener GetMesageListener(RunnerSettings settings)
+        private IMessageListener GetMessageListener(RunnerSettings settings)
         {
             if (settings.UseV2Flow)
             {
@@ -287,8 +287,13 @@ namespace GitHub.Runner.Listener
             try
             {
                 Trace.Info(nameof(RunAsync));
-                _listener = GetMesageListener(settings);
-                if (!await _listener.CreateSessionAsync(HostContext.RunnerShutdownToken))
+                _listener = GetMessageListener(settings);
+                CreateSessionResult createSessionResult = await _listener.CreateSessionAsync(HostContext.RunnerShutdownToken);
+                if (createSessionResult == CreateSessionResult.SessionConflict)
+                {
+                    return Constants.Runner.ReturnCode.SessionConflict;
+                }
+                else if (createSessionResult == CreateSessionResult.Failure)
                 {
                     return Constants.Runner.ReturnCode.TerminatedError;
                 }
