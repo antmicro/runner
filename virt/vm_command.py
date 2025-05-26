@@ -349,6 +349,7 @@ def create_instance_call(
     zone,
     subnetwork,
     uuid,
+    timeout_h
 ):
     URL = f"https://compute.googleapis.com/compute/v1/projects/{PROJECT_ID}/zones/{zone}/instances?requestId={uuid}"
     architecture = "ARM64" if machine_type.startswith("t2a") else "X86_64"
@@ -396,6 +397,10 @@ def create_instance_call(
         "labels": LABELS,
         "serviceAccounts": service_account,
     }
+    if timeout_h:
+        data["scheduling"]["instanceTerminationAction"] = "DELETE"
+        data["scheduling"]["maxRunDuration"] = {"seconds": str(timeout_h*60*60)}
+
     return AUTHED_SESSION.post(url=URL, json=data)
 
 
@@ -409,6 +414,7 @@ def create_instance(
     service_account,
     zone,
     subnetwork,
+    timeout_h
 ):
     # Same UUID makes sure that we won't create multiple VMs
     request_uuid = str(uuid.uuid4())
@@ -434,6 +440,7 @@ def create_instance(
         zone,
         subnetwork,
         request_uuid,
+        timeout_h,
     )
     r.raise_for_status()
 
@@ -649,6 +656,7 @@ def create_vm(
     service_account=None,
     ssh_tunnel_config=None,
     ssh_tunnel_key=None,
+    timeout_in_hours=0,
 ):
     print("Attempting to spawn a machine... (PID: {})".format(os.getpid()))
 
@@ -749,6 +757,7 @@ def create_vm(
                 service_account_info,
                 zone,
                 subnet,
+                timeout_in_hours,
             )
         except requests.exceptions.HTTPError as e:
             print(e.response.text)
@@ -1049,6 +1058,13 @@ def upload_multiple_object_to_bucket(
     default=None,
 )
 @click.option(
+    "--timeout-in-hours",
+    help="Timeout (i.e. max runtime duration) of the VM specified in hours",
+    type=int,
+    required=False,
+    default=0
+)
+@click.option(
     "--secret-namespace",
     help="GCP Secret Manager secret name",
     required=False,
@@ -1104,6 +1120,7 @@ def main(
     service_account=None,
     ssh_tunnel_config=None,
     ssh_tunnel_key=None,
+    timeout_in_hours=0,
     secret_name=None,
     secret_namespace=None,
     zone=None,
@@ -1125,6 +1142,7 @@ def main(
             service_account,
             ssh_tunnel_config,
             ssh_tunnel_key,
+            timeout_in_hours
         )
     elif mode == "delete_vm":
         delete_vm(instance_number)
