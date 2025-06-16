@@ -13,7 +13,6 @@ using GitHub.Runner.Common.Util;
 using GitHub.Runner.Listener.Configuration;
 using GitHub.Runner.Sdk;
 using GitHub.Services.Common;
-using GitHub.Runner.Common.Util;
 using GitHub.Services.OAuth;
 
 namespace GitHub.Runner.Listener
