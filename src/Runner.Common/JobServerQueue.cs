@@ -122,7 +122,7 @@ namespace GitHub.Runner.Common
                     liveConsoleFeedUrl = feedStreamUrl;
                 }
 
-                _resultsServer.InitializeResultsClient(new Uri(resultsReceiverEndpoint), liveConsoleFeedUrl, accessToken);
+                _resultsServer.InitializeResultsClient(new Uri(resultsReceiverEndpoint), liveConsoleFeedUrl, accessToken, false);
                 _resultsClientInitiated = true;
             }
 
@@ -199,9 +199,6 @@ namespace GitHub.Runner.Common
             Trace.Verbose("Draining timeline update queue.");
             await ProcessTimelinesUpdateQueueAsync(runOnce: true);
             Trace.Info("Timeline update queue drained.");
-
-            Trace.Info($"Disposing job server ...");
-            await _jobServer.DisposeAsync();
 
             Trace.Info($"Disposing results server ...");
             await _resultsServer.DisposeAsync();
@@ -642,8 +639,6 @@ namespace GitHub.Runner.Common
                                 Trace.Info("Catch exception during update steps, skip update Results.");
                                 Trace.Error(e);
                                 _resultsClientInitiated = false;
-
-                                SendResultsTelemetry(e);
                             }
 
                             if (_bufferedRetryRecords.Remove(update.TimelineId))
