@@ -104,7 +104,15 @@ namespace GitHub.Runner.Worker {
 		public async Task AddTarget(GitHubContext context, string token)
 		{
 			dynamic json = new ExpandoObject();
-			json.target_name = context["job_display_name"].ToString();
+                        json.target_name = "Unknown target name";
+                        try
+                        {
+			    json.target_name = context["job_display_name"].ToString();
+                        }
+                        catch (KeyNotFoundException ex)
+                        {
+                            Trace.Error($"Could not extract target name for {token}: {ex}");
+                        }
 			json.token = token;
 			await SendAsync(TARGET, HttpMethod.Post, json, context);
 		}
@@ -112,7 +120,15 @@ namespace GitHub.Runner.Worker {
 		public async Task AddTargetLog(GitHubContext context, string logFile)
 		{
 			dynamic json = new ExpandoObject();
-			json.target_name = context["job_display_name"].ToString();
+                        json.target_name = "Unknown target name";
+                        try
+                        {
+			    json.target_name = context["job_display_name"].ToString();
+                        }
+                        catch (KeyNotFoundException ex)
+                        {
+                            Trace.Error($"Could not extract target name for {logFile}: {ex}");
+                        }
 			json.log_file = Path.GetFullPath(logFile);
 			await SendAsync(TARGET_LOG, HttpMethod.Post, json, context);
 		}
@@ -120,7 +136,15 @@ namespace GitHub.Runner.Worker {
 		public async Task AddTargetArtifact(GitHubContext context, string artifactFile)
 		{
 			dynamic json = new ExpandoObject();
-			json.target_name = context["job_display_name"].ToString();
+                        json.target_name = "Unknown target name";
+                        try
+                        {
+			    json.target_name = context["job_display_name"].ToString();
+                        }
+                        catch (KeyNotFoundException ex)
+                        {
+                            Trace.Error($"Could not extract target name for {artifactFile}: {ex}");
+                        }
 			json.artifact = Path.GetFullPath(artifactFile);
 			await SendAsync(ARTIFACT, HttpMethod.Post, json, context);
 		}
@@ -128,7 +152,15 @@ namespace GitHub.Runner.Worker {
 		public async Task DeleteTarget(GitHubContext context, int status = 1, long duration = 1000)
 		{
 			dynamic json = new ExpandoObject();
-			json.target_name = context["job_display_name"].ToString();
+                        json.target_name = "Unknown target name";
+                        try
+                        {
+			    json.target_name = context["job_display_name"].ToString();
+                        }
+                        catch (KeyNotFoundException ex)
+                        {
+                            Trace.Error($"Could not extract target name: {ex}");
+                        }
 			json.status = status;
 			json.duration = duration;
 			await SendAsync(TARGET, HttpMethod.Delete, json, context);
