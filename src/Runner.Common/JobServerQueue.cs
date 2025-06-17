@@ -843,7 +843,7 @@ namespace GitHub.Runner.Common
             Trace.Info($"Starting to upload summary file to results service {file.Name}, {file.Path}");
             ResultsFileUploadHandler summaryHandler = async (file) =>
             {
-                await _jobServer.CreateStepSummaryAsync(file.PlanId, file.JobId, file.RecordId, file.Path, CancellationToken.None);
+                await _resultsServer.CreateResultsStepSummaryAsync(file.PlanId, file.JobId, file.RecordId, file.Path, CancellationToken.None);
             };
 
             await UploadResultsFile(file, summaryHandler);
@@ -854,7 +854,7 @@ namespace GitHub.Runner.Common
             Trace.Info($"Starting upload of step log file to results service {file.Name}, {file.Path}");
             ResultsFileUploadHandler stepLogHandler = async (file) =>
             {
-                await _jobServer.CreateResultsStepLogAsync(file.PlanId, file.JobId, file.RecordId, file.Path, file.Finalize, file.FirstBlock, file.TotalLines, CancellationToken.None);
+                await _resultsServer.CreateResultsStepLogAsync(file.PlanId, file.JobId, file.RecordId, file.Path, file.Finalize, file.FirstBlock, file.TotalLines, CancellationToken.None);
             };
 
             await UploadResultsFile(file, stepLogHandler);
@@ -865,7 +865,7 @@ namespace GitHub.Runner.Common
             Trace.Info($"Starting upload of job log file to results service {file.Name}, {file.Path}");
             ResultsFileUploadHandler jobLogHandler = async (file) =>
             {
-                await _jobServer.CreateResultsJobLogAsync(file.PlanId, file.JobId, file.Path, file.Finalize, file.FirstBlock, file.TotalLines, CancellationToken.None);
+                await _resultsServer.CreateResultsJobLogAsync(file.PlanId, file.JobId, file.Path, file.Finalize, file.FirstBlock, file.TotalLines, CancellationToken.None);
             };
 
             await UploadResultsFile(file, jobLogHandler);
@@ -873,6 +873,11 @@ namespace GitHub.Runner.Common
 
         private async Task UploadResultsFile(ResultsUploadFileInfo file, ResultsFileUploadHandler uploadHandler)
         {
+            if (!_resultsClientInitiated)
+            {
+                return;
+            }
+
             bool uploadSucceed = false;
             try
             {
