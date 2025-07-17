@@ -253,6 +253,7 @@ namespace GitHub.Runner.Common
             public static class Agent
             {
                 public static readonly string ToolsDirectory = "agent.ToolsDirectory";
+                public static readonly string ForcedInternalNodeVersion = "ACTIONS_RUNNER_FORCED_INTERNAL_NODE_VERSION";
             }
 
             public static class System

@@ -25,7 +25,7 @@ namespace GitHub.Runner.Worker.Handlers
 
         string ResolvePathForStepHost(string path);
 
-        Task<string> DetermineNodeRuntimeVersion(IExecutionContext executionContext);
+        Task<string> DetermineNodeRuntimeVersion(IExecutionContext executionContext, string preferredVersion);
 
         Task<int> ExecuteAsync(string workingDirectory,
                                string fileName,
@@ -62,9 +62,16 @@ namespace GitHub.Runner.Worker.Handlers
             return path;
         }
 
-        public Task<string> DetermineNodeRuntimeVersion(IExecutionContext executionContext)
+        public Task<string> DetermineNodeRuntimeVersion(IExecutionContext executionContext, string preferredVersion)
         {
-            return Task.FromResult<string>("node12");
+            // Use NodeUtil to check if Node24 is requested but we're on ARM32 Linux
+            var (nodeVersion, warningMessage) = Common.Util.NodeUtil.CheckNodeVersionForLinuxArm32(preferredVersion);
+            if (!string.IsNullOrEmpty(warningMessage))
+            {
+                executionContext.Warning(warningMessage);
+            }
+            
+            return Task.FromResult(nodeVersion);
         }
 
         public async Task<int> ExecuteAsync(string workingDirectory,
@@ -129,8 +136,15 @@ namespace GitHub.Runner.Worker.Handlers
             }
         }
 
-        public async Task<string> DetermineNodeRuntimeVersion(IExecutionContext executionContext)
+        public async Task<string> DetermineNodeRuntimeVersion(IExecutionContext executionContext, string preferredVersion)
         {
+            // Use NodeUtil to check if Node24 is requested but we're on ARM32 Linux
+            var (nodeExternal, warningMessage) = Common.Util.NodeUtil.CheckNodeVersionForLinuxArm32(preferredVersion);
+            if (!string.IsNullOrEmpty(warningMessage))
+            {
+                executionContext.Warning(warningMessage);
+            }
+
             // Best effort to determine a compatible node runtime
             // There may be more variation in which libraries are linked than just musl/glibc,
             // so determine based on known distribtutions instead
@@ -139,7 +153,6 @@ namespace GitHub.Runner.Worker.Handlers
 
             var output = new List<string>();
             var execExitCode = await dockerManager.DockerExec(executionContext, Container.ContainerId, string.Empty, osReleaseIdCmd, output);
-            string nodeExternal;
             if (execExitCode == 0)
             {
                 foreach (var line in output)
@@ -243,6 +256,36 @@ namespace GitHub.Runner.Worker.Handlers
                                                          redirectStandardIn: null,
                                                          inheritConsoleHandler: inheritConsoleHandler,
                                                          cancellationToken: cancellationToken);
+            }
+        }
+
+        private string CheckPlatformForAlpineContainer(IExecutionContext executionContext, string preferredVersion)
+        {
+            // Use NodeUtil to check if Node24 is requested but we're on ARM32 Linux
+            var (nodeExternal, warningMessage) = Common.Util.NodeUtil.CheckNodeVersionForLinuxArm32(preferredVersion);
+            if (!string.IsNullOrEmpty(warningMessage))
+            {
+                executionContext.Warning(warningMessage);
+            }
+
+            // Check for Alpine container compatibility
+            if (!Constants.Runner.PlatformArchitecture.Equals(Constants.Architecture.X64))
+            {
+                var os = Constants.Runner.Platform.ToString();
+                var arch = Constants.Runner.PlatformArchitecture.ToString();
+                var msg = $"JavaScript Actions in Alpine containers are only supported on x64 Linux runners. Detected {os} {arch}";
+                throw new NotSupportedException(msg);
+            }
+            nodeExternal = $"{preferredVersion}_alpine";
+            executionContext.Debug($"Container distribution is alpine. Running JavaScript Action with external tool: {nodeExternal}");
+            return nodeExternal;
+        }
+
+        private void TranslateToContainerPath(IDictionary<string, string> environment)
+        {
+            foreach (var envKey in environment.Keys.ToList())
+            {
+                environment[envKey] = this.Container.TranslateToContainerPath(environment[envKey]);
             }
         }
     }
