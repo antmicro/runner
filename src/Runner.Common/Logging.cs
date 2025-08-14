@@ -170,17 +170,22 @@ namespace GitHub.Runner.Common
             _resultsBlockWriter = new StreamWriter(_resultsBlockData, System.Text.Encoding.UTF8);
         }
 
-        private void EndBlock(bool finalize)
+        protected void _endBlock()
+        {
+            _resultsBlockWriter.Flush();
+            _resultsBlockData.Flush();
+            _resultsBlockWriter.Dispose();
+            _resultsBlockWriter = null;
+            _resultsBlockData = null;
+        }
+
+        protected virtual void EndBlock(bool finalize)
         {
             if (_resultsBlockWriter != null)
             {
-                _resultsBlockWriter.Flush();
-                _resultsBlockData.Flush();
-                _resultsBlockWriter.Dispose();
-                _resultsBlockWriter = null;
-                _resultsBlockData = null;
-                _jobServerQueue.QueueResultsUpload(_timelineRecordId, "ResultsLog", _resultsDataFileName, "Results.Core.Log", deleteSource: true, finalize, firstBlock: _resultsDataFileName.EndsWith(".1"), totalLines: _totalLines);
+                _endBlock();
             }
+
         }
     }
 
@@ -199,6 +204,15 @@ namespace GitHub.Runner.Common
             {
                 base.EndPage(false);
                 _jobServerQueue.QueueFileUpload(_timelineId, _timelineRecordId, "DistributedTask.Core.Log", "CustomToolLog", _dataFileName, true);
+            }
+        }
+
+        protected override void EndBlock(bool finalize)
+        {
+            if (_resultsBlockWriter != null)
+            {
+                _endBlock();
+                _jobServerQueue.QueueResultsUpload(_timelineRecordId, "ResultsLog", _resultsDataFileName, "Results.Core.Log", deleteSource: true, finalize, firstBlock: _resultsDataFileName.EndsWith(".1"), totalLines: _totalLines);
             }
         }
         
