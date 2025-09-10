@@ -382,13 +382,13 @@ def create_instance_call(
         },
         "disks": [
             {
-                "type": f"{CONFIG.gcp.disk_type}",
                 "boot": True,
                 "autoDelete": True,
                 "deviceName": f"{boot_disk_name}",
                 "initializeParams": {
                     "diskSizeGb": f"{CONFIG.machine.disk}",
                     "sourceImage": get_worker_image_name(architecture),
+                    "diskType": f"zones/{zone}/diskTypes/{CONFIG.gcp.disk_type}",
                 },
             },
             external_disk_info,
