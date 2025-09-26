@@ -594,8 +594,8 @@ def execute_ssh_commands(ssh, commands):
             sys.exit(1)
 
 
-def get_instance_name(instance_number):
-    return f"{platform.node()}-auto-spawned{instance_number}"
+def get_instance_name(instance_number, prefix=None):
+    return f"{prefix or platform.node()}-auto-spawned{instance_number}"
 
 
 def delete_instance_call(instance_name, uuid):
@@ -657,13 +657,14 @@ def create_vm(
     ssh_tunnel_config=None,
     ssh_tunnel_key=None,
     timeout_in_hours=0,
+    instance_name_prefix=None,
 ):
     print("Attempting to spawn a machine... (PID: {})".format(os.getpid()))
 
     machine_type = machine_type or CONFIG.gcp.type
     check_machine_type(machine_type)
 
-    instance_name = get_instance_name(instance_number)
+    instance_name = get_instance_name(instance_number, prefix=instance_name_prefix)
 
     print(f"Instance name:\t {instance_name}")
     print(f"Instance type:\t {machine_type}")
@@ -860,8 +861,8 @@ def create_vm(
     execute_ssh_commands(ssh, commands)
 
 
-def delete_vm(instance_number):
-    instance_name = get_instance_name(instance_number)
+def delete_vm(instance_number, instance_name_prefix):
+    instance_name = get_instance_name(instance_number, prefix=instance_name_prefix)
     print(f"Attempting to delete a machine ({instance_name})..")
     delete_instance(instance_name)
     print(f"Machine deleted ({instance_name})")
@@ -1110,6 +1111,13 @@ def upload_multiple_object_to_bucket(
     help="Remove file after successfull upload",
     is_flag=True,
 )
+@click.option(
+    "--instance-prefix",
+    help="Virtual machine instance name prefix",
+    required=False,
+    default=None,
+    multiple=False,
+)
 def main(
     mode,
     instance_number,
@@ -1130,6 +1138,7 @@ def main(
     destination_folder=None,
     destination_file_name=None,
     remove_uploaded=False,
+    instance_prefix=None,
 ):
     check_mode_parameters(mode, instance_number, container_file)
     if mode == "create_vm":
@@ -1142,10 +1151,11 @@ def main(
             service_account,
             ssh_tunnel_config,
             ssh_tunnel_key,
-            timeout_in_hours
+            timeout_in_hours,
+            instance_prefix
         )
     elif mode == "delete_vm":
-        delete_vm(instance_number)
+        delete_vm(instance_number, instance_prefix)
     elif mode == "check_dmesg":
         check_dmesg(instance_number)
     elif mode == "delete_stale_instances":
