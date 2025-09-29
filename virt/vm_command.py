@@ -266,8 +266,14 @@ def get_secret(secret_name, namespace):
 
 
 def wait_for_gcp(link):
-    for _ in range(0, 150):
-        r = AUTHED_SESSION.get(link)
+    for _ in range(0, 3):
+        # This uses the `wait` methon on a long-running operation
+        # https://cloud.google.com/compute/docs/reference/rest/v1/globalOperations/wait
+        # This method issues an http request that takes up to 2 minutes to respond and
+        # responds with the operation object representation. The 2 minutes time is not
+        # configurable. This operation should be less likely to trigger gcp's rate limit
+        # https://cloud.google.com/compute/docs/api/compute-api-quota-metrics
+        r = AUTHED_SESSION.post(f'{link}/wait')
 
         print("Operation resource: {}, status code: {}, content: {}".format(
             link, r.status_code, r.text), file=sys.stderr)
