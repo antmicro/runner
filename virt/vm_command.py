@@ -780,6 +780,10 @@ def create_vm(
                 else:
                     print(f"Error occured while spawning the instance: {create_error}")  # noqa: E501
                     sys.exit(1)
+        else:
+            # There is no need to wait until the deletion is complete, we must only ensure
+            # that the instance is eventually deleted
+            delete_instance_call(instance_name, str(uuid.uuid4()), zone)
 
     if not successful_creation:
         print("No defined zone is able to serve the request at the moment.")
