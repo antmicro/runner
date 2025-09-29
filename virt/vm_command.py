@@ -335,7 +335,7 @@ def list_instances(instance_name=None):
 def describe_instance(instance_name):
     for instance in list_instances(instance_name):
         if instance["name"] == instance_name:
-            return instance
+            yield instance
 
 
 def create_instance_call(
@@ -598,32 +598,34 @@ def get_instance_name(instance_number, prefix=None):
     return f"{prefix or platform.node()}-auto-spawned{instance_number}"
 
 
-def delete_instance_call(instance_name, uuid):
-    instance_zone = describe_instance(instance_name)["zone"].split("/")[-1]
-
+def delete_instance_call(instance_name, uuid, instance_zone):
     URL = f"https://compute.googleapis.com/compute/v1/projects/{PROJECT_ID}/zones/{instance_zone}/instances/{instance_name}?requestID={uuid}"
     r = AUTHED_SESSION.delete(URL)
     return json.loads(r.text)
 
 
 def delete_instance(instance_name):
-    success = False
-    retries = 5
-    request_uuid = str(uuid.uuid4())
-    while retries > 0:
-        retries = retries - 1
-        # Same UUID makes sure that we won't delete multiple VMs
-        result = delete_instance_call(instance_name, request_uuid)
-        if "selfLink" not in result:
-            print("Unexpected output while processing response!")
-            continue
-        wait_for_gcp(result["selfLink"])
-        success = True
-        break
-    if success is False:
-        print(f"Couldn't delete instance: {instance_name}! Exiting!")
-        sys.exit(1)
+    selflinks = []
+    for zone in map(lambda x: x["zone"].split("/")[-1], describe_instance(instance_name)):
+        request_uuid = str(uuid.uuid4())
+        success = False
+        retries = 5
+        while retries > 0:
+            retries = retries - 1
+            # Same UUID makes sure that we won't delete multiple VMs
+            result = delete_instance_call(instance_name, request_uuid, zone)
+            if "selfLink" not in result:
+                print("Unexpected output while processing response!")
+                continue
+            selflinks.append(result["selfLink"])
+            success = True
+            break
 
+        if success is False:
+            print(f"Couldn't delete instance: {instance_name} in zone {zone}!")
+
+    for link in selflinks:
+        wait_for_gcp(link)
 
 def relative_self_link(self_link):
     return self_link.replace("https://www.googleapis.com/compute/v1/", "")
@@ -631,7 +633,7 @@ def relative_self_link(self_link):
 
 def stop_and_print_ascii_graph(instance_number):
     instance_name = get_instance_name(instance_number)
-    instance_ip = describe_instance(instance_name)["networkInterfaces"][0]["networkIP"]  # noqa: E501
+    instance_ip = next(describe_instance(instance_name)["networkInterfaces"][0]["networkIP"])  # noqa: E501
     ssh = create_ssh_connection(instance_ip)
 
     ansi_escape = re.compile(r"(?:\x1B[@-_]|[\x80-\x9F])[0-?]*[ -/]*[@-~]")
@@ -785,7 +787,8 @@ def create_vm(
 
     target = export_gcp_ip(create_result["targetLink"])
     ssh = create_ssh_connection(target)
-    print("Machine ready")
+    print("Machine spawned")
+    print(f"export GCP_WORKER_ZONE={zone}")
 
     _, stdout, stderr = ssh.exec_command(
         "sudo chown -R {0}:{0} /home/{0}".format(USER))
@@ -1167,7 +1170,8 @@ def main(
     elif mode == "get_zones":
         print(get_available_zones())
     elif mode == "get_vm":
-        print(describe_instance(instance_number))
+        for instance in describe_instance(instance_number):
+            print(instance)
     elif mode == "get_vms":
         print(list_auto_spawned_instances())
     elif mode == "get_disks":
