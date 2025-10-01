@@ -20,6 +20,7 @@ import enum
 from typing import List, Dict, Tuple, Optional
 from collections import namedtuple, OrderedDict
 from cryptography.utils import CryptographyDeprecationWarning
+from datetime import datetime
 
 warnings.filterwarnings("ignore", category=CryptographyDeprecationWarning)
 
@@ -332,11 +333,20 @@ def list_instances(instance_name=None):
                 yield instance
 
 
-def describe_instance(instance_name):
+def describe_instances(instance_name):
     for instance in list_instances(instance_name):
         if instance["name"] == instance_name:
             yield instance
 
+def describe_valid_instance(instance_name):
+    instances = list(describe_instances(instance_name))
+    if len(instances) == 0:
+        return None
+
+    instances.sort(
+        key=lambda inst: datetime.strptime(inst["creationTimestamp"], "%Y-%m-%dT%H:%M:%S.%f%z"))
+
+    return instances[-1]
 
 def create_instance_call(
     instance_number,
@@ -606,7 +616,7 @@ def delete_instance_call(instance_name, uuid, instance_zone):
 
 def delete_instance(instance_name):
     selflinks = []
-    for zone in map(lambda x: x["zone"].split("/")[-1], describe_instance(instance_name)):
+    for zone in map(lambda x: x["zone"].split("/")[-1], describe_instances(instance_name)):
         request_uuid = str(uuid.uuid4())
         success = False
         retries = 5
@@ -633,7 +643,7 @@ def relative_self_link(self_link):
 
 def stop_and_print_ascii_graph(instance_number):
     instance_name = get_instance_name(instance_number)
-    instance_ip = next(describe_instance(instance_name)["networkInterfaces"][0]["networkIP"])  # noqa: E501
+    instance_ip = describe_valid_instance(instance_name)["networkInterfaces"][0]["networkIP"]  # noqa: E501
     ssh = create_ssh_connection(instance_ip)
 
     ansi_escape = re.compile(r"(?:\x1B[@-_]|[\x80-\x9F])[0-?]*[ -/]*[@-~]")
@@ -1174,8 +1184,7 @@ def main(
     elif mode == "get_zones":
         print(get_available_zones())
     elif mode == "get_vm":
-        for instance in describe_instance(instance_number):
-            print(instance)
+        print(describe_valid_instance(get_instance_name(instance_number, instance_prefix)))
     elif mode == "get_vms":
         print(list_auto_spawned_instances())
     elif mode == "get_disks":
