@@ -17,6 +17,7 @@ import re
 import glob
 import itertools
 import enum
+import fcntl
 from typing import List, Dict, Tuple, Optional
 from collections import namedtuple, OrderedDict
 from cryptography.utils import CryptographyDeprecationWarning
@@ -173,6 +174,29 @@ def get_available_subnetworks(network_name=None):
         r.raise_for_status()
         return r.json()["items"]
 
+def cache_zones():
+    # The operation of listing available regions in GCP is quite costly when it comes to quotas
+    # Since this information does not change very often in the upstream, we cache it to avoid
+    # hitting rate limits
+    # https://cloud.google.com/compute/docs/api/compute-api-quota-metrics
+    LOCK_FILE = "/tmp/zones_cache.lock"
+    CACHE_FILE = "/tmp/available_zones_cache.json"
+    CACHE_RETENTION_SECS = 900
+
+    try:
+        with open(LOCK_FILE, "w") as lock:
+            fcntl.flock(lock.fileno(), fcntl.LOCK_EX) # The lock is released when the lock file is closed
+            if not os.path.isfile(CACHE_FILE) or time.time() - os.path.getmtime(CACHE_FILE) > CACHE_RETENTION_SECS:
+                # Recreate cache if it does not exist or is older than CACHE_RETENTION_DAYS
+                zones = get_available_zones()
+                with open(CACHE_FILE, "w") as f:
+                    json.dump(zones, f)
+                return zones
+
+            with open(CACHE_FILE) as f:
+                return json.load(f)
+    except Exception:
+        sys.exit(1)
 
 def get_available_zones():
     current_network = get_current_network()
@@ -705,7 +729,7 @@ def create_vm(
     print(f"Preemptible: {preemptible_machine}")
 
     # First element is guaranteed to be the home zone (i.e. coordinator machine zone).
-    zones_and_subnets = get_available_zones()
+    zones_and_subnets = cache_zones()
     # available_zones = list(zones_and_subnets.keys())
 
     # Create and start the virtual machine.
@@ -1188,7 +1212,7 @@ def main(
     elif mode == "get_project_id":
         print(PROJECT, PROJECT_ID)
     elif mode == "get_zones":
-        print(get_available_zones())
+        print(cache_zones())
     elif mode == "get_vm":
         print(describe_valid_instance(get_instance_name(instance_number, instance_prefix)))
     elif mode == "get_vms":
