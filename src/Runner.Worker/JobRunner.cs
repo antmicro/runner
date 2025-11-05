@@ -108,6 +108,7 @@ namespace GitHub.Runner.Worker
             Trace.Info($"Repo name: {repoName}");
 
             dynamic vmSpecs = JObject.Parse(File.ReadAllText(Path.Combine(rootDir, ".vm_specs.json")));
+            HostContext.HardenedRunner = (bool?)vmSpecs["hardened"] ?? false;
 
             //Trace.Info("Creating pipeline server");
             //_pipelinesHttpClient = jobConnection.GetClient<PipelinesHttpClient>();

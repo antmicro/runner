@@ -37,6 +37,7 @@ namespace GitHub.Runner.Common
         void WritePerfCounter(string counter);
 
         string BucketName { get; set; }
+        bool HardenedRunner { get; set; }
     }
 
     public enum StartupType
@@ -73,6 +74,7 @@ namespace GitHub.Runner.Common
         public CancellationToken RunnerShutdownToken => _runnerShutdownTokenSource.Token;
         public ShutdownReason RunnerShutdownReason { get; private set; }
         public string BucketName { get; set; }
+        public bool HardenedRunner { get; set; }
         public ISecretMasker SecretMasker => _secretMasker;
         public List<ProductInfoHeaderValue> UserAgents => _userAgents;
         public RunnerWebProxy WebProxy => _webProxy;

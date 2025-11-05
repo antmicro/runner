@@ -10,5 +10,6 @@
   "machine": {
     "disk": 30,
     "preemptible": false
-  }
+  },
+  "hardened": true
 }

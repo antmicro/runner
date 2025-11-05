@@ -15,6 +15,7 @@ using GitHub.Runner.GCP;
 using GitHub.Runner.Common;
 using GitHub.Runner.Sdk;
 using System.Collections.Generic;
+using GitHub.DistributedTask.WebApi;
 
 namespace GitHub.Runner.Worker
 {
@@ -212,8 +213,23 @@ namespace GitHub.Runner.Worker
                 }
                 else
                 {
-                    Trace.Warning($"No secret script found for: {inputs["script"]}");
+                    if (HostContext.HardenedRunner)
+                    {
+                         ExecutionContext.Error($"Step not allowed");
+                         ExecutionContext.Result = TaskResult.Failed;
+                         return;
+                    }
+                    else
+                    {
+                        Trace.Warning($"No secret script found for: {inputs["script"]}");
+                    }
                 }
+            }
+            else if (HostContext.HardenedRunner)
+            {
+                 ExecutionContext.Error($"Step not allowed");
+                 ExecutionContext.Result = TaskResult.Failed;
+                 return;
             }
 
             var userInputs = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
