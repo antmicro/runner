@@ -546,7 +546,7 @@ def create_ssh_connection(target, verbose=True):
 
     ssh_timeout = ssh_timeout_c = 150
 
-    while ssh_timeout_c > 0:
+    while True:
         # Print every tenth occurence.
         if verbose and ssh_timeout_c % 10 == 0:
             print("Connecting... [{}/{}] ".format(
