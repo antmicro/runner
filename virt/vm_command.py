@@ -240,7 +240,7 @@ def get_available_zones():
                     next(
                         filter(
                             lambda s: s["name"].startswith(current_network),
-                            regions_with_subnets[split_zone[:-2]]["subnetworks"])
+                            regions_with_subnets[region["name"]]["subnetworks"])
                     ),
                 )
 
