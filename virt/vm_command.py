@@ -265,7 +265,7 @@ def get_secret(secret_name, namespace):
             print("Requested secret has not been made available to GHA runners.")
             sys.exit(1)
 
-        if labels.get("gha_runner_namespace") != namespace.lower():
+        if labels.get("gha_runner_namespace") != namespace.lower() and labels.get(namespace.lower()) is None:
             print("Requested secret does not belong to the current namespace.")
             sys.exit(1)
 
