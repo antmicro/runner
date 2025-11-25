@@ -188,15 +188,16 @@ namespace GitHub.Runner.GCP
             return string.IsNullOrEmpty(result) ? null : result;
         }
         
-        public static string GetGcpSecret(IHostContext hostContext, string secretName, string secretNamespace)
+        public static string GetGcpSecret(IHostContext hostContext, string secretName, string secretNamespace, string secretVersion = null)
         {
             var trace = hostContext.GetTrace(nameof(GCPCoordinator));
             var output = new StringBuilder();
             var virtDir = hostContext.GetDirectory(WellKnownDirectory.Virt);
+            var versionArg = secretVersion == null ? "" : $"--secret-version {secretVersion}";
 
             GCPCoordinator.RunProcess(
                     fileName: "python3",
-                    arguments: $"vm_command.py --mode get_secret --secret-name {secretName} --secret-namespace {secretNamespace}",
+                    arguments: $"vm_command.py --mode get_secret --secret-name {secretName} --secret-namespace {secretNamespace} {versionArg}",
                     workDirectory: virtDir,
                     outputDataReceivedFunc: (_, args) => { output.Append(args.Data ?? ""); },
                     errorDataReceivedFunc: (_, args) => trace.Error(args.Data ?? ""),

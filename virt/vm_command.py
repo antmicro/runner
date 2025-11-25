@@ -253,8 +253,7 @@ def get_available_zones():
 
     return OrderedDict(zones + aux_zones)
 
-
-def get_secret(secret_name, namespace):
+def get_secret(secret_name, namespace, version=None):
     base_url = f"https://secretmanager.googleapis.com/v1/projects/{PROJECT_ID}/secrets/{secret_name}"
 
     with AUTHED_SESSION.get(base_url) as r:
@@ -269,25 +268,23 @@ def get_secret(secret_name, namespace):
             print("Requested secret does not belong to the current namespace.")
             sys.exit(1)
 
-    # TODO: wrap in try-catch/check error.
-    with AUTHED_SESSION.get(
-        f"{base_url}/versions", params={"filter": "state:ENABLED"}
-    ) as r:
-        r.raise_for_status()
-        versions = r.json()["versions"]
+    if version is None:
+        # TODO: wrap in try-catch/check error.
+        with AUTHED_SESSION.get(
+            f"{base_url}/versions", params={"filter": "state:ENABLED"}
+        ) as r:
+            r.raise_for_status()
+            versions = r.json()["versions"]
 
-        if len(versions) > 1:
-            print("Requested secret has more than one enabled versions.")
-            sys.exit(1)
-
-        active_version = int(versions[0]["name"].split("/")[-1])
+            active_version = sorted(map(lambda v: int(v["name"].split("/")[-1]), versions))[-1]
+    else:
+        active_version = version
 
     with AUTHED_SESSION.get(f"{base_url}/versions/{active_version}:access") as r:
         r.raise_for_status()
         secret = r.json()["payload"]["data"]
 
     print(secret)
-
 
 def wait_for_gcp(link):
     for _ in range(0, 3):
@@ -1172,6 +1169,12 @@ def upload_multiple_object_to_bucket(
     default=None,
     multiple=False,
 )
+@click.option(
+    "--secret-version",
+    help="Version of the secret to show",
+    required=False,
+    default="latest",
+)
 def main(
     mode,
     instance_number,
@@ -1185,6 +1188,7 @@ def main(
     timeout_in_hours=0,
     secret_name=None,
     secret_namespace=None,
+    secret_version=None,
     zone=None,
     bucket_name=None,
     file_path=[],
@@ -1215,7 +1219,7 @@ def main(
     elif mode == "delete_stale_instances":
         delete_stale_instances()
     elif mode == "get_secret":
-        get_secret(secret_name, secret_namespace)
+        get_secret(secret_name, secret_namespace, secret_version)
     elif mode == "get_project_id":
         print(PROJECT, PROJECT_ID)
     elif mode == "get_zones":

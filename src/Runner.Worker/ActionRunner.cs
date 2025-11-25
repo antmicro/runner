@@ -193,18 +193,25 @@ namespace GitHub.Runner.Worker
             var inputs = templateEvaluator.EvaluateStepInputs(Action.Inputs, ExecutionContext.ExpressionValues, ExecutionContext.ExpressionFunctions);
 
             // Check if step is secret
-            string secret = null;
             if (inputs.ContainsKey("script") && inputs["script"].StartsWith(Constants.SecretScriptPrefix))
             {
                 Trace.Info("Looking for secret");
                 var repoFullName = ExecutionContext.GetGitHubContext("repository");
                 ArgUtil.NotNull(repoFullName, nameof(repoFullName));
-                var secret_script = GCPCoordinator.GetGcpSecret(HostContext, inputs["script"], repoFullName.Split('/')[^1]);
+                
+                var secretSplit = inputs["script"].Split(':');
+                var secretName = secretSplit[0];
+                var secretVersion = secretSplit.Length > 1 ? secretSplit[1] : null;
+                if (HostContext.HardenedRunner && (secretVersion == "latest" || secretVersion == null)) {
+                    ExecutionContext.Error("Step version undefined");
+                    ExecutionContext.Result = TaskResult.Failed;
+                    return;
+                }
+                var secret_script = GCPCoordinator.GetGcpSecret(HostContext, secretName, repoFullName.Split('/')[^1], secretVersion);
                 if (!string.IsNullOrEmpty(secret_script))
                 {
                     secret_script = Encoding.UTF8.GetString(Convert.FromBase64String(secret_script));
                     Trace.Info($"Secret found: {secret_script}");
-                    secret = inputs["script"];
                     inputs["script"] = $"({secret_script})"; 
                     ExecutionContext.Output("Output of this step is hidden");
                     if (string.IsNullOrEmpty(HostContext.BucketName))
