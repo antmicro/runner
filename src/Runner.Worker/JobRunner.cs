@@ -323,7 +323,9 @@ namespace GitHub.Runner.Worker
                 for (int i = 0; i < 5; i++) {
                     StringBuilder output_string = new StringBuilder();
                     vmExitCode = StartGcpMachine(spawnMachineArgs, virtDir, output_string, vmCtx, jobContext);
-                    if(vmExitCode > 0) {
+                    if (vmExitCode == 2) {
+                        break;
+                    } else if(vmExitCode > 0) {
                         RestartGcpMachine(vmExitCode, jobContext, message, vmSpecs, ref vmCtx);
                         continue;
                     }
