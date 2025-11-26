@@ -526,7 +526,7 @@ def get_gcp_disks(disk_name):
 def check_machine_type(machine_type):
     if machine_type is None:
         print("Machine type is None! Please check your configuration, exiting!")
-        sys.exit(1)
+        sys.exit(2)
     try:
         allow_list = CONFIG.gcp.allowed_machine_types
     except AttributeError:
@@ -537,7 +537,7 @@ def check_machine_type(machine_type):
         print(
             f"Requested machine type {machine_type} was not found in the allow list! Please use a different machine type. Exiting!"
         )
-        sys.exit(1)
+        sys.exit(2)
 
 
 def create_ssh_connection(target, verbose=True):
@@ -702,6 +702,13 @@ def create_vm(
     instance_name_prefix=None,
 ):
     print("Attempting to spawn a machine... (PID: {})".format(os.getpid()))
+
+    try:
+        if CONFIG.hardened and container_file not in CONFIG.containers:
+            print("Container image not allowed!")
+            sys.exit(2)
+    except AttributeError:
+        pass
 
     machine_type = machine_type or CONFIG.gcp.type
     check_machine_type(machine_type)
