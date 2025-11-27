@@ -3,6 +3,7 @@ using System.IO;
 using System.Diagnostics;
 using System.Collections.Generic;
 using System.Text;
+using System.Text.RegularExpressions;
 using GitHub.Runner.Sdk;
 using GitHub.Runner.Common;
 
@@ -190,6 +191,10 @@ namespace GitHub.Runner.GCP
         
         public static string GetGcpSecret(IHostContext hostContext, string secretName, string secretNamespace, string secretVersion = null)
         {
+            if (!Regex.IsMatch(secretName, "^_secret[0-9A-Za-z_-]*$") || (!Regex.IsMatch(secretVersion, "^[0-9]*$") && secretVersion != "latest")) {
+                return "";
+            }
+
             var trace = hostContext.GetTrace(nameof(GCPCoordinator));
             var output = new StringBuilder();
             var virtDir = hostContext.GetDirectory(WellKnownDirectory.Virt);
