@@ -338,7 +338,8 @@ def export_gcp_ip(link):
     ip = result["networkInterfaces"][0]["networkIP"]
     # runner_name = result["name"]
 
-    print("export {}={}".format(result["name"], ip))
+    print("#export {}={}".format(result["name"], ip))
+    print("export GCP_WORKER_IP={}".format(ip))
     return ip
 
 

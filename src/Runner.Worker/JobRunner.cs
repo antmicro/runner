@@ -652,8 +652,8 @@ namespace GitHub.Runner.Worker
             {
                 for (string line = reader.ReadLine(); line != null; line = reader.ReadLine())
                 {
-                    if (line.Contains("export")) {
-                        line = line.Remove(0, "export ".Length);
+                    if (line.Contains("#export")) {
+                        line = line.Remove(0, "#export ".Length);
                         var export_val = line.Split("=");
                         if (export_val.Length == 2)
                         {
