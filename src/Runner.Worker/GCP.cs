@@ -191,7 +191,7 @@ namespace GitHub.Runner.GCP
         
         public static string GetGcpSecret(IHostContext hostContext, string secretName, string secretNamespace, string secretVersion = null)
         {
-            if (!Regex.IsMatch(secretName, "^_secret[0-9A-Za-z_-]*$") || (!Regex.IsMatch(secretVersion, "^[0-9]*$") && secretVersion != "latest")) {
+            if (!Regex.IsMatch(secretName, "^_secret[0-9A-Za-z_-]*$") || (secretVersion != null && !Regex.IsMatch(secretVersion, "^[0-9]*$") && secretVersion != "latest")) {
                 return "";
             }
 
