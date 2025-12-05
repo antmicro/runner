@@ -22,6 +22,7 @@ After=network-online.target
 WorkingDirectory=$PWD
 Environment=SCALE=%i
 ExecStart=/usr/bin/supervisord -n -c $PWD/supervisord.conf
+ExecReload=/usr/bin/supervisorctl -c $PWD/supervisord.conf signal USR1 runner:*
 KillMode=process
 User=$SUDO_USER
 LimitAS=infinity
