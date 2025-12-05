@@ -22,30 +22,7 @@ DIR="$( cd -P "$( dirname "$SOURCE" )" && pwd )"
 # Run
 shopt -s nocasematch
 if [[ "$1" == "localRun" ]]; then
-    "$DIR"/bin/Runner.Listener $*
+    exec "$DIR"/bin/Runner.Listener $*
 else
-    "$DIR"/bin/Runner.Listener run $*
-
-# Return code 4 means the run once runner received an update message.
-# Sleep 5 seconds to wait for the update process finish and run the runner again.
-    returnCode=$?
-    if [[ $returnCode == 4 ]]; then
-        if [ ! -x "$(command -v sleep)" ]; then
-            if [ ! -x "$(command -v ping)" ]; then
-                COUNT="0"
-                while [[ $COUNT != 5000 ]]; do
-                    echo "SLEEP" >nul
-                    COUNT=$[$COUNT+1]
-                done
-            else
-                ping -n 5 127.0.0.1 >nul
-            fi
-        else
-            sleep 5 >nul
-        fi
-        
-        "$DIR"/bin/Runner.Listener run $*
-    else
-        exit $returnCode
-    fi
+    exec "$DIR"/bin/Runner.Listener run $*
 fi
