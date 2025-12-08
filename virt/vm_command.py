@@ -86,7 +86,7 @@ def load_coordinator_pid():
 
 USER = "scalerunner"
 PUBKEY = (
-    os.path.join(os.path.expanduser("~"), ".ssh/id_rsa.pub"),
+    os.path.join(os.path.expanduser("~"), ".ssh/id_ed25519.pub"),
     f"/home/{USER}/.ssh/authorized_keys",
 )
 GH_ENV_LIST = ["GITHUB_JOB_FULL", "GITHUB_SHA", "GITHUB_RUN_ID"]
@@ -413,7 +413,7 @@ def create_instance_call(
                 },
                 {
                     "key": "ssh-keys",
-                    "value": f"{USER}:{open('/home/runner/.ssh/id_rsa.pub').read().strip()}",
+                    "value": f"{USER}:{open('/home/runner/.ssh/id_ed25519.pub').read().strip()}",
                 },
             ],
         },
