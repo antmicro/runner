@@ -28,7 +28,7 @@ namespace GitHub.Runner.Listener
         void Run(Pipelines.AgentJobRequestMessage message, bool runOnce = false);
         bool Cancel(JobCancelMessage message);
         Task WaitAsync(CancellationToken token);
-        Task ShutdownAsync();
+        Task ShutdownAsync(bool cancel = true);
         event EventHandler<JobStatusEventArgs> JobStatus;
     }
 
@@ -198,7 +198,7 @@ namespace GitHub.Runner.Listener
             }
         }
 
-        public async Task ShutdownAsync()
+        public async Task ShutdownAsync(bool cancel = true)
         {
             Trace.Info($"Shutting down JobDispatcher. Make sure all WorkerDispatcher has finished.");
             WorkerDispatcher currentDispatch = null;
@@ -210,7 +210,7 @@ namespace GitHub.Runner.Listener
                     try
                     {
                         Trace.Info($"Ensure WorkerDispather for job {currentDispatch.JobId} run to finish, cancel any running job.");
-                        await EnsureDispatchFinished(currentDispatch, cancelRunningJob: true);
+                        await EnsureDispatchFinished(currentDispatch, cancelRunningJob: cancel);
                     }
                     catch (Exception ex)
                     {
@@ -232,7 +232,7 @@ namespace GitHub.Runner.Listener
 
         private async Task EnsureDispatchFinished(WorkerDispatcher jobDispatch, bool cancelRunningJob = false)
         {
-            if (!jobDispatch.WorkerDispatch.IsCompleted)
+            if (!jobDispatch.WorkerDispatch.IsCompleted && cancelRunningJob)
             {
                 if (cancelRunningJob)
                 {
