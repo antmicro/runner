@@ -12,6 +12,7 @@ using System.Reflection;
 using System.Runtime.CompilerServices;
 using GitHub.Runner.Common;
 using GitHub.Runner.Sdk;
+using System.Runtime.InteropServices;
 
 namespace GitHub.Runner.Listener
 {
@@ -32,6 +33,11 @@ namespace GitHub.Runner.Listener
         private int _returnCode = Constants.Runner.ReturnCode.Success;
         private CancellationTokenSource _messageQueueLoopTokenSource;
         private Task _deleteListenerSession;
+        private TaskCompletionSource<bool> _wounded = new TaskCompletionSource<bool>();
+        private delegate void SignalHandler(int signal);
+
+        [DllImport("libc")]
+        private static extern IntPtr signal(int signum, SignalHandler handler);
 
         public override void Initialize(IHostContext hostContext)
         {
@@ -281,6 +287,25 @@ namespace GitHub.Runner.Listener
             return HostContext.GetService<IMessageListener>();
         }
 
+        private void HandleSigUsr1(int signal)
+        {
+            try
+            {
+                Trace.Info("Wounding runner");
+                _wounded.SetResult(true);
+            }
+            catch (ObjectDisposedException)
+            {
+                Trace.Warning("Wound event disposed");
+            }
+            catch (InvalidOperationException)
+            {
+                if (_wounded.Task.IsCompleted)
+                    Trace.Info("Already wounded");
+                else
+                    Trace.Info($"Wound event in unexpected state: {_wounded.Task.Status}");
+            }
+        }
         //create worker manager, create message listener and start listening to the queue
         private async Task<int> RunAsync(RunnerSettings settings, bool runOnce = false)
         {
@@ -308,8 +333,9 @@ namespace GitHub.Runner.Listener
                     _jobDispatcher = HostContext.CreateService<IJobDispatcher>();
 
                     _jobDispatcher.JobStatus += _listener.OnJobStatus;
+                    signal(10, new SignalHandler(HandleSigUsr1));
 
-                    while (!HostContext.RunnerShutdownToken.IsCancellationRequested && !_exiting)
+                    while (!HostContext.RunnerShutdownToken.IsCancellationRequested && !_exiting && !_wounded.Task.IsCompleted)
                     {
                         TaskAgentMessage message = null;
                         bool skipMessageDeletion = false;
@@ -365,7 +391,16 @@ namespace GitHub.Runner.Listener
                             }
 
                             try {
-                                message = await getNextMessage; //get next message
+                                Task task = await Task.WhenAny(getNextMessage, _wounded.Task);
+                                if (task == _wounded.Task)
+                                {
+                                    await _wounded.Task; // on SIGUSR1, wait for the job to finish and exit
+                                    break;
+                                }
+                                else
+                                {
+                                    message = await getNextMessage; //get next message
+                                }
                             } catch (OperationCanceledException) {
                                 // getNextMessage was cancelled
                                 continue;
@@ -531,7 +566,7 @@ namespace GitHub.Runner.Listener
                     if (_jobDispatcher != null)
                     {
                         _jobDispatcher.JobStatus -= _listener.OnJobStatus;
-                        await _jobDispatcher.ShutdownAsync();
+                        await _jobDispatcher.ShutdownAsync(!_wounded.Task.IsCompleted && !_exiting);
 
                         try
                         {
