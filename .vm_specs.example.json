@@ -9,6 +9,7 @@
   },
   "machine": {
     "disk": 30,
+    "max_disk": 100,
     "preemptible": false
   },
   "hardened": true
