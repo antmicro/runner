@@ -160,6 +160,7 @@ namespace GitHub.Runner.Worker
                 var container = templateEval.EvaluateJobContainer(message.JobContainer, jobContext.ExpressionValues, jobContext.ExpressionFunctions);
 
                 // Interpret special variables.
+                var diskSizeGB = String.Empty;
                 var externalDisk = String.Empty;
                 var preemptibleOverride = String.Empty;
                 var machineType = String.Empty;
@@ -197,6 +198,11 @@ namespace GitHub.Runner.Worker
                                 Trace.Info("Machine type variable is present.");
 
                                 machineType = val;
+                                break;
+                            case "GHA_DISK_SIZE":
+                                Trace.Info("Disk size variable is present.");
+
+                                diskSizeGB = val;
                                 break;
                             case "GHA_SA":
                                 Trace.Info("SA variable is present.");
@@ -241,7 +247,7 @@ namespace GitHub.Runner.Worker
                     }
                 }
 
-                Trace.Info($"External disk: {externalDisk}; Preemptible override: {preemptibleOverride}; Machine type: {machineType}");
+                Trace.Info($"External disk: {externalDisk}; Preemptible override: {preemptibleOverride}; Machine type: {machineType}; Machine disk size: {diskSizeGB}");
 
                 if (!JobPassesSecurityRestrictions(jobContext))
                 {
@@ -277,6 +283,18 @@ namespace GitHub.Runner.Worker
                 if (!String.IsNullOrEmpty(machineType))
                 {
                     spawnMachineArgs += $" -m {machineType}";
+                }
+
+                if (!string.IsNullOrEmpty(diskSizeGB))
+                {
+                    if (uint.TryParse(diskSizeGB, out uint diskSizeGBUint))
+                    {
+                        spawnMachineArgs += $" -D {diskSizeGBUint}";
+                    }
+                    else
+                    {
+                        vmCtx.Output("Uint value expected for disk size.");
+                    }
                 }
 
                 if (!String.IsNullOrEmpty(serviceAccount))
