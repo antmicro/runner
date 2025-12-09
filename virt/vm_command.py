@@ -386,6 +386,7 @@ def create_instance_call(
     instance_number,
     instance_name,
     boot_disk_name,
+    boot_disk_size,
     external_disk_info,
     preemptible_machine,
     machine_type,
@@ -430,7 +431,7 @@ def create_instance_call(
                 "autoDelete": True,
                 "deviceName": f"{boot_disk_name}",
                 "initializeParams": {
-                    "diskSizeGb": f"{CONFIG.machine.disk}",
+                    "diskSizeGb": f"{boot_disk_size}",
                     "sourceImage": get_worker_image_name(architecture),
                     "diskType": f"zones/{zone}/diskTypes/{CONFIG.gcp.disk_type}",
                 },
@@ -452,6 +453,7 @@ def create_instance(
     instance_number,
     instance_name,
     boot_disk_name,
+    boot_disk_size,
     external_disk_info,
     preemptible_machine,
     machine_type,
@@ -477,6 +479,7 @@ def create_instance(
         instance_number,
         instance_name,
         boot_disk_name,
+        boot_disk_size,
         external_disk_info,
         preemptible_machine,
         machine_type,
@@ -696,9 +699,10 @@ def stop_and_print_ascii_graph(instance_number):
 def create_vm(
     instance_number,
     container_file,
-    disk_name=None,
+    ext_disk_name=None,
     preemptible_override=None,
     machine_type=None,
+    disk_size=None,
     service_account=None,
     ssh_tunnel_config=None,
     ssh_tunnel_key=None,
@@ -747,6 +751,14 @@ def create_vm(
     gcloud_start = time.time()
     boot_disk_name = "scalerunner-boot-disk"
 
+    boot_disk_size = disk_size or CONFIG.machine.disk
+    try:
+        max_disk_size = CONFIG.machine.max_disk
+        if boot_disk_size > max_disk_size:
+            raise ValueError("Boot disk size exceeds maximum allowed size") 
+    except AttributeError:
+        pass
+
     ssh_tunnel_cmd = "true"
 
     if ssh_tunnel_config and ssh_tunnel_key:
@@ -756,13 +768,13 @@ def create_vm(
     external_disk_cmd = "true"
 
     # Attach an external disk (if applicable)
-    if disk_name:
+    if ext_disk_name:
         # Obtain the main disk and zonal replicas.
-        available_external_disks = get_gcp_disks(disk_name)
+        available_external_disks = get_gcp_disks(ext_disk_name)
 
         # Bail if no disk and/or zonal replicas were found.
         if len(available_external_disks) == 0:
-            print(f"Disk named {disk_name} was not found!")
+            print(f"Disk named {ext_disk_name} was not found!")
             sys.exit(1)
 
         print(f"Requested external disk was found in {len(available_external_disks)} zone(s)")  # noqa: E501
@@ -793,7 +805,7 @@ def create_vm(
 
         external_disk_info = None
 
-        if disk_name:
+        if ext_disk_name:
             try:
                 external_disk_info = available_external_disks[zone]
             except KeyError:
@@ -805,6 +817,7 @@ def create_vm(
                 instance_number,
                 instance_name,
                 boot_disk_name,
+                boot_disk_size,
                 external_disk_info,
                 preemptible_machine,
                 machine_type,
@@ -1087,6 +1100,7 @@ def upload_multiple_object_to_bucket(
 @click.option("-s", "--container-file", help="Container file", required=False, default=None)
 @click.option("-d", "--disk-name", help="External disk name", required=False, default=None)
 @click.option("-m", "--machine-type", help="Machine type to use", required=False, default=None)
+@click.option("-D", "--disk-size", help="Machine disk size to use", required=False, default=None)
 @click.option("--secret-name", help="GCP Secret Manager secret name", required=False, default=None)
 @click.option("--zone", help="Google Cloud zone", required=False, default=None)
 @click.option(
@@ -1186,6 +1200,7 @@ def main(
     mode,
     instance_number,
     container_file=None,
+    disk_size=None,
     disk_name=None,
     preemptible_override=None,
     machine_type=None,
@@ -1213,6 +1228,7 @@ def main(
             disk_name,
             preemptible_override,
             machine_type,
+            disk_size,
             service_account,
             ssh_tunnel_config,
             ssh_tunnel_key,
