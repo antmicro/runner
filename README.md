@@ -242,6 +242,7 @@ The table below documents and describes their purpose.
 | `GHA_EXTERNAL_DISK`                 | string        | Name of an external Compute Engine disk                                                                                            |
 | `GHA_PREEMPTIBLE`                   | bool          | Set whether the machine should be preemptible.                                                                                     |
 | `GHA_MACHINE_TYPE`                  | string        | Compute Engine machine type                                                                                                        |
+| `GHA_DISK_SIZE`                     | uint          | Compute Engine machine disk size                                                                                                   |
 | `GHA_SA`                            | string        | Machine service account suffix                                                                                                     |
 | `GHA_SSH_TUNNEL_CONFIG`             | base64 string | OpenSSH configuration file for tunneling                                                                                           |
 | `GHA_SSH_TUNNEL_KEY`                | base64 string | OpenSSH private key file                                                                                                           |
