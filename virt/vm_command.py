@@ -723,9 +723,19 @@ def create_vm(
 
     instance_name = get_instance_name(instance_number, prefix=instance_name_prefix)
 
+    try:
+        boot_disk_size = disk_size or int(CONFIG.machine.disk)
+        max_disk_size = int(CONFIG.machine.max_disk)
+        if boot_disk_size > max_disk_size:
+            print("Boot disk size exceeds maximum allowed size!")
+            sys.exit(2)
+    except AttributeError:
+        pass
+
     print(f"Instance name:\t {instance_name}")
     print(f"Instance type:\t {machine_type}")
     print(f"Disk type:\t {CONFIG.gcp.disk_type}")
+    print(f"Disk size:\t {boot_disk_size}")
 
     github_job_name = (os.environ.get("GITHUB_JOB_FULL") or "unknown").lower()
 
@@ -750,15 +760,6 @@ def create_vm(
     # Create and start the virtual machine.
     gcloud_start = time.time()
     boot_disk_name = "scalerunner-boot-disk"
-
-    boot_disk_size = disk_size or CONFIG.machine.disk
-    try:
-        max_disk_size = CONFIG.machine.max_disk
-        if boot_disk_size > max_disk_size:
-            print("Boot disk size exceeds maximum allowed size!")
-            sys.exit(2)
-    except AttributeError:
-        pass
 
     ssh_tunnel_cmd = "true"
 
@@ -1101,7 +1102,7 @@ def upload_multiple_object_to_bucket(
 @click.option("-s", "--container-file", help="Container file", required=False, default=None)
 @click.option("-d", "--disk-name", help="External disk name", required=False, default=None)
 @click.option("-m", "--machine-type", help="Machine type to use", required=False, default=None)
-@click.option("-D", "--disk-size", help="Machine disk size to use", required=False, default=None)
+@click.option("-D", "--disk-size", help="Machine disk size to use", type=int, required=False, default=None)
 @click.option("--secret-name", help="GCP Secret Manager secret name", required=False, default=None)
 @click.option("--zone", help="Google Cloud zone", required=False, default=None)
 @click.option(
