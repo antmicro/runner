@@ -755,7 +755,8 @@ def create_vm(
     try:
         max_disk_size = CONFIG.machine.max_disk
         if boot_disk_size > max_disk_size:
-            raise ValueError("Boot disk size exceeds maximum allowed size") 
+            print("Boot disk size exceeds maximum allowed size!")
+            sys.exit(2)
     except AttributeError:
         pass
 
