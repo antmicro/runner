@@ -68,6 +68,12 @@ class METADATA(str, enum.Enum):
     BRV_URL = "BRV_URL"
     BRV_PUBLIC_URL = "BRV_PUBLIC_URL"
 
+    def __repr__(self):
+        return self.value
+
+    def __str__(self):
+        return self.value
+
 def load_boot_id():
     with open("/proc/sys/kernel/random/boot_id", "r") as f:
         line = f.readline().split('\n')[0]
