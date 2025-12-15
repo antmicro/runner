@@ -166,6 +166,11 @@ namespace GitHub.Runner.Worker.Handlers
 
             var tempDirectory = HostContext.GetDirectory(WellKnownDirectory.Temp);
 
+            var systemConnection = ExecutionContext.Global.Endpoints.Single(x => string.Equals(x.Name, WellKnownServiceEndpointNames.SystemVssConnection, StringComparison.OrdinalIgnoreCase));
+            Environment["ACTIONS_RUNTIME_TOKEN"] = systemConnection.Authorization.Parameters[EndpointAuthorizationParameters.AccessToken];
+            Environment["ACTIONS_RESULTS_URL"] = "https://results-receiver.actions.githubusercontent.com/";
+
+
             Inputs.TryGetValue("script", out var contents);
             contents = contents ?? string.Empty;
 
