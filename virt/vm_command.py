@@ -180,13 +180,15 @@ def get_available_subnetworks(network_name=None):
         r.raise_for_status()
         return r.json()["items"]
 
-def cache_zones():
+def cache_zones(network=None):
     # The operation of listing available regions in GCP is quite costly when it comes to quotas
     # Since this information does not change very often in the upstream, we cache it to avoid
     # hitting rate limits
     # https://cloud.google.com/compute/docs/api/compute-api-quota-metrics
-    LOCK_FILE = "/tmp/zones_cache.lock"
-    CACHE_FILE = "/tmp/available_zones_cache.json"
+
+    network_suffix = network or "default"
+    LOCK_FILE = f"/tmp/zones_cache_{network_suffix}.lock"
+    CACHE_FILE = f"/tmp/available_zones_cache_{network_suffix}.json"
     CACHE_RETENTION_SECS = 900
 
     try:
@@ -194,7 +196,7 @@ def cache_zones():
             fcntl.flock(lock.fileno(), fcntl.LOCK_EX) # The lock is released when the lock file is closed
             if not os.path.isfile(CACHE_FILE) or time.time() - os.path.getmtime(CACHE_FILE) > CACHE_RETENTION_SECS:
                 # Recreate cache if it does not exist or is older than CACHE_RETENTION_DAYS
-                zones = get_available_zones()
+                zones = get_available_zones(network=network)
                 with open(CACHE_FILE, "w") as f:
                     json.dump(zones, f)
                 return zones
@@ -204,8 +206,8 @@ def cache_zones():
     except Exception:
         sys.exit(1)
 
-def get_available_zones():
-    current_network = get_current_network()
+def get_available_zones(network=None):
+    current_network = network or get_current_network()
 
     # Get home zone.
     with requests.get(
@@ -708,6 +710,7 @@ def create_vm(
     ssh_tunnel_key=None,
     timeout_in_hours=0,
     instance_name_prefix=None,
+    external_network=None,
 ):
     print("Attempting to spawn a machine... (PID: {})".format(os.getpid()))
 
@@ -754,7 +757,7 @@ def create_vm(
     print(f"Preemptible: {preemptible_machine}")
 
     # First element is guaranteed to be the home zone (i.e. coordinator machine zone).
-    zones_and_subnets = cache_zones()
+    zones_and_subnets = cache_zones(network=external_network)
     # available_zones = list(zones_and_subnets.keys())
 
     # Create and start the virtual machine.
@@ -1198,6 +1201,13 @@ def upload_multiple_object_to_bucket(
     required=False,
     default="latest",
 )
+@click.option(
+    "--external-network",
+    help="Name of the alternative external network to use",
+    required=False,
+    default=None,
+    multiple=False,
+)
 def main(
     mode,
     instance_number,
@@ -1221,6 +1231,7 @@ def main(
     destination_file_name=None,
     remove_uploaded=False,
     instance_prefix=None,
+    external_network=None,
 ):
     check_mode_parameters(mode, instance_number, container_file)
     if mode == "create_vm":
@@ -1235,7 +1246,8 @@ def main(
             ssh_tunnel_config,
             ssh_tunnel_key,
             timeout_in_hours,
-            instance_prefix
+            instance_prefix,
+            external_network
         )
     elif mode == "delete_vm":
         delete_vm(instance_number, instance_prefix)
@@ -1248,7 +1260,7 @@ def main(
     elif mode == "get_project_id":
         print(PROJECT, PROJECT_ID)
     elif mode == "get_zones":
-        print(cache_zones())
+        print(cache_zones(network=external_network))
     elif mode == "get_vm":
         print(describe_valid_instance(get_instance_name(instance_number, instance_prefix)))
     elif mode == "get_vms":
