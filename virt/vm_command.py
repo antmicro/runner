@@ -269,11 +269,11 @@ def get_secret(secret_name, namespace, version=None):
         labels = r.json().get("labels") or dict()
 
         if not str2bool(labels.get("gha_runner_exposed") or ""):
-            print("Requested secret has not been made available to GHA runners.")
+            print("Requested secret has not been made available to GHA runners.", file=sys.stderr)
             sys.exit(1)
 
         if labels.get("gha_runner_namespace") != namespace.lower() and labels.get(namespace.lower()) is None:
-            print("Requested secret does not belong to the current namespace.")
+            print("Requested secret does not belong to the current namespace.", file=sys.stderr)
             sys.exit(1)
 
     if version is None:
@@ -325,7 +325,8 @@ def wait_for_gcp(link):
                 elif "reason" in result["error"]:
                     if result["error"]["reason"] == "RATE_LIMIT_EXCEEDED":
                         print(
-                            "Quota exceeded for API calls, will try again in one minute...")
+                            "Quota exceeded for API calls, will try again in one minute...",
+                            file=sys.stderr)
                         time.sleep(60)
                         continue
             else:
@@ -335,7 +336,7 @@ def wait_for_gcp(link):
             continue
     # Timeout while waiting for GCP
     # We don't want to exit here with exit code
-    print("Timeout while waiting for GCP to complete command!")
+    print("Timeout while waiting for GCP to complete command!", file=sys.stderr)
 
 
 def export_gcp_ip(link):
@@ -534,7 +535,7 @@ def get_gcp_disks(disk_name):
 
 def check_machine_type(machine_type):
     if machine_type is None:
-        print("Machine type is None! Please check your configuration, exiting!")
+        print("Machine type is None! Please check your configuration, exiting!", file=sys.stderr)
         sys.exit(2)
     try:
         allow_list = CONFIG.gcp.allowed_machine_types
@@ -544,7 +545,8 @@ def check_machine_type(machine_type):
 
     if machine_type not in allow_list:
         print(
-            f"Requested machine type {machine_type} was not found in the allow list! Please use a different machine type. Exiting!"
+            f"Requested machine type {machine_type} was not found in the allow list! Please use a different machine type. Exiting!",
+            file=sys.stderr
         )
         sys.exit(2)
 
@@ -564,7 +566,7 @@ def create_ssh_connection(target, verbose=True):
 
         # Timeout exceeded.
         if ssh_timeout_c == 0:
-            print("Timeout while waiting for connection!")
+            print("Timeout while waiting for connection!", file=sys.stderr)
             sys.exit(1)
 
         # Attempt to connect.
@@ -591,7 +593,7 @@ def create_ssh_connection(target, verbose=True):
             except paramiko.ssh_exception.BadAuthenticationType as e:
                 if "password" in e.allowed_types:
                     if verbose:
-                        print("Falling back to the old initial authentication method...")  # noqa: E501
+                        print("Falling back to the old initial authentication method...", file=sys.stderr)  # noqa: E501
                     try:
                         ssh.connect(target, username=USER, password=USER)
                         ssh_sftp = ssh.open_sftp()
@@ -599,10 +601,10 @@ def create_ssh_connection(target, verbose=True):
                         ssh_sftp.close()
                         ssh.close()
                     except Exception:
-                        print("Public key authentication failed and password auth is not available!")  # noqa: E501
+                        print("Public key authentication failed and password auth is not available!", file=sys.stderr)  # noqa: E501
                         sys.exit(1)
             except paramiko.ssh_exception.SSHException:
-                print("Error occured while detecting authentication methods!")
+                print("Error occured while detecting authentication methods!", file=sys.stderr)
                 sys.exit(1)
             finally:
                 t.close()
@@ -639,7 +641,7 @@ def execute_ssh_commands(ssh, commands):
             time.sleep(1)
 
         if stdout.channel.recv_exit_status() != 0:
-            print("Error while setting up machine! Exiting!")
+            print("Error while setting up machine! Exiting!", file=sys.stderr)
             sys.exit(1)
 
 
@@ -664,14 +666,14 @@ def delete_instance(instance_name):
             # Same UUID makes sure that we won't delete multiple VMs
             result = delete_instance_call(instance_name, request_uuid, zone)
             if "selfLink" not in result:
-                print("Unexpected output while processing response!")
+                print("Unexpected output while processing response!", file=sys.stderr)
                 continue
             selflinks.append(result["selfLink"])
             success = True
             break
 
         if success is False:
-            print(f"Couldn't delete instance: {instance_name} in zone {zone}!")
+            print(f"Couldn't delete instance: {instance_name} in zone {zone}!", file=sys.stderr)
 
     for link in selflinks:
         wait_for_gcp(link)
@@ -716,7 +718,7 @@ def create_vm(
 
     try:
         if CONFIG.hardened and container_file not in CONFIG.containers:
-            print("Container image not allowed!")
+            print("Container image not allowed!", file=sys.stderr)
             sys.exit(2)
     except AttributeError:
         pass
@@ -730,7 +732,7 @@ def create_vm(
         boot_disk_size = disk_size or int(CONFIG.machine.disk)
         max_disk_size = int(CONFIG.machine.max_disk)
         if boot_disk_size > max_disk_size:
-            print("Boot disk size exceeds maximum allowed size!")
+            print("Boot disk size exceeds maximum allowed size!", file=sys.stderr)
             sys.exit(2)
     except AttributeError:
         pass
@@ -779,7 +781,7 @@ def create_vm(
 
         # Bail if no disk and/or zonal replicas were found.
         if len(available_external_disks) == 0:
-            print(f"Disk named {ext_disk_name} was not found!")
+            print(f"Disk named {ext_disk_name} was not found!", file=sys.stderr)
             sys.exit(1)
 
         print(f"Requested external disk was found in {len(available_external_disks)} zone(s)")  # noqa: E501
@@ -790,7 +792,7 @@ def create_vm(
 
     if service_account:
         if "gh-sa-" not in service_account:
-            print("Used service account must have 'gh-sa-' in the name!")
+            print("Used service account must have 'gh-sa-' in the name!", file=sys.stderr)
             sys.exit(1)
         service_account_info = [
             {
@@ -806,7 +808,7 @@ def create_vm(
     successful_creation = False
 
     for zone, subnet in zones_and_subnets.items():
-        print(f"Attempting to spawn a machine in {zone}")
+        print(f"Attempting to spawn a machine in {zone}", file=sys.stderr)
 
         external_disk_info = None
 
@@ -814,7 +816,7 @@ def create_vm(
             try:
                 external_disk_info = available_external_disks[zone]
             except KeyError:
-                print(f"External disk or its replica is not available in {zone}, skipping it...")  # noqa: E501
+                print(f"External disk or its replica is not available in {zone}, skipping it...", file=sys.stderr)  # noqa: E501
                 continue
 
         try:
@@ -832,11 +834,11 @@ def create_vm(
                 timeout_in_hours,
             )
         except requests.exceptions.HTTPError as e:
-            print(e.response.text)
+            print(e.response.text, file=sys.stderr)
             sys.exit(1)
 
         if isinstance(create_result, dict):
-            print(f"Machine spawned in {elapsed(gcloud_start)} seconds.")
+            print(f"Machine spawned in {elapsed(gcloud_start)} seconds.", file=sys.stderr)
             successful_creation = True
             break
         elif isinstance(create_result, list):
@@ -844,10 +846,10 @@ def create_vm(
                 if (create_error.get("code") or "").startswith(
                     GCP_RESOURCE_EXHAUSTION_ERR
                 ):
-                    print(f"{GCP_RESOURCE_EXHAUSTION_ERR} in {zone}, will try another one...")  # noqa: E501
+                    print(f"{GCP_RESOURCE_EXHAUSTION_ERR} in {zone}, will try another one...", file=sys.stderr)  # noqa: E501
                     continue
                 else:
-                    print(f"Error occured while spawning the instance: {create_error}")  # noqa: E501
+                    print(f"Error occured while spawning the instance: {create_error}", file=sys.stderr)  # noqa: E501
                     sys.exit(1)
         else:
             # There is no need to wait until the deletion is complete, we must only ensure
@@ -855,7 +857,7 @@ def create_vm(
             delete_instance_call(instance_name, str(uuid.uuid4()), zone)
 
     if not successful_creation:
-        print("No defined zone is able to serve the request at the moment.")
+        print("No defined zone is able to serve the request at the moment.", file=sys.stderr)
         sys.exit(1)
 
     target = export_gcp_ip(create_result["targetLink"])
@@ -962,9 +964,9 @@ def delete_stale_instances():
     now = datetime.datetime.utcnow().replace(tzinfo=datetime.timezone.utc)
     for instance in list_auto_spawned_instances():
         if "creationTimestamp" not in instance or "name" not in instance:
-            print("Unexpected response while listing instances! Exiting!")
+            print("Unexpected response while listing instances! Exiting!", file=sys.stderr)
             sys.exit(1)
-        print(f"Checking {instance['name']}..")
+        print(f"Checking {instance['name']}..", file=sys.stderr)
         event_time = datetime.datetime.strptime(
             instance["creationTimestamp"], "%Y-%m-%dT%H:%M:%S.%f%z"
         )
@@ -984,13 +986,15 @@ def check_mode_parameters(mode, instance_number, container_file):
     if mode == "create_vm":
         if container_file is None or not container_file:
             print(
-                f"Required 'container_file' parameter in {mode} is missing or is empty!"
+                f"Required 'container_file' parameter in {mode} is missing or is empty!",
+                file=sys.stderr
             )
             sys.exit(1)
     if mode in ["create_vm", "delete_vm", "check_dmesg"]:
         if instance_number is None:
             print(
-                f"Required 'instance-number' parameter in {mode} is missing!")
+                f"Required 'instance-number' parameter in {mode} is missing!",
+                file=sys.stderr)
             sys.exit(1)
 
 
@@ -1281,7 +1285,7 @@ def main(
     elif mode == "get_brv_url":
         print(get_metadata(METADATA.BRV_URL))
     else:
-        print(f"Unknown mode: {mode}! Exiting!")
+        print(f"Unknown mode: {mode}! Exiting!", file=sys.stderr)
         sys.exit(1)
 
 
