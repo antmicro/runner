@@ -1,9 +1,8 @@
-image: debian:bullseye
+image: debian:trixie
 
 build_runner:
-    before_script:
-        - apt-get -qqy update > /dev/null
-        - apt-get -qqy install git curl wget libicu-dev > /dev/null
-    script:
-        - cd src
-        - ./dev.sh layout Debug
+  before_script:
+    - apt-get -qqy --update install git curl wget libicu-dev
+  script:
+    - cd src
+    - ./dev.sh layout Debug
